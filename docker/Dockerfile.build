@@ -1,0 +1,35 @@
+# Build environment for the Pi's C++ binaries.
+#
+# debian:trixie deliberately, because that is what the target runs. Matching
+# the distro means matching glibc (2.41) and the gcc major (14), so a binary
+# built here runs on the Pi by construction rather than by luck. Building
+# against a newer glibc than the target has is the classic way to produce a
+# binary that links fine and refuses to start.
+#
+# Always built for linux/arm64 -- see scripts/build_cpp.sh. On an Apple
+# Silicon Mac or an arm64 Linux box that is native speed; on x86_64 it is
+# emulated and slow but still correct.
+FROM debian:trixie
+
+# Versions here track what the Pi has: cmake 3.31.6, ninja 1.12.1, gcc 14.2.0.
+# apt pins are not used, because trixie is frozen and drift would show up as a
+# build failure rather than as a silently different binary.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        ninja-build \
+        git \
+        ca-certificates \
+        gdb \
+    && rm -rf /var/lib/apt/lists/*
+
+# gdb is here for CLion's Docker toolchain, which defaults its debugger to
+# /usr/bin/gdb. Without it the toolchain validates and builds fine and then
+# fails the moment you press Debug -- a confusing place to discover a missing
+# package. Unused by scripts/build_cpp.sh, which only ever compiles.
+
+WORKDIR /src
+
+# Nothing is COPYed in. The repository is bind-mounted at run time so the
+# container never holds a stale copy of the source, which is the same reason
+# deploy_pi.sh rsyncs rather than relying on what is already on the target.

@@ -1,0 +1,27 @@
+# SLAMTEC RPLIDAR A1M8.
+#
+# The sensor is attached through a Silicon Labs CP2102 USB-to-UART bridge
+# (10c4:ea60), so it enumerates as /dev/ttyUSB*. That name is assigned in
+# enumeration order and will change as soon as the Arduino motor controller
+# is attached alongside it. Code must open /dev/rplidar, never /dev/ttyUSB0.
+#
+# GOTCHA: the RPLIDAR's own serial number (reported by GET_INFO over the
+# protocol, e.g. 6946595DF298E6A5C998EAC093ED87C8) is NOT visible to udev.
+# udev only sees the USB descriptors of the CP2102 bridge, whose serial
+# string is the generic unprogrammed value "0001". It is matched anyway so
+# that a USB-serial device with a properly programmed serial cannot claim
+# this symlink, but it does NOT disambiguate a second unprogrammed CP2102.
+#
+# If a second CP2102 ever appears, match the physical USB port instead:
+#
+#   SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+#       KERNELS=="1-1.3", SYMLINK+="rplidar", MODE="0660", GROUP="dialout"
+#
+# Get the real KERNELS value from:
+#   udevadm info -a -n /dev/ttyUSB0 | grep KERNELS
+#
+# Check first whether it is even a problem. A genuine Arduino Uno R3 is
+# 2341:0043 with a unique serial; common clones are CH340 (1a86:7523, no
+# serial at all) or FTDI (0403:6001, unique serial). If the VID:PID differ,
+# the rule below is already unambiguous.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="0001", SYMLINK+="rplidar", MODE="0660", GROUP="dialout"

@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+trap 'echo "ERROR: Provisioning failed at line ${LINENO}."' ERR
+
+if [[ "${EUID}" -ne 0 ]]; then
+    echo "ERROR: This script must run as root."
+    exit 1
+fi
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 <target-user>"
+    exit 1
+fi
+
+TARGET_USER="$1"
+
+if ! id "${TARGET_USER}" >/dev/null 2>&1; then
+    echo "ERROR: Target user '${TARGET_USER}' does not exist."
+    exit 1
+fi
+
+# base.sh is staged on the target together with the rest of target/, because
+# provisioning installs data files (udev rules) that live beside it in the
+# repository rather than being embedded in this script.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+UDEV_RULES_DIR="${TARGET_ROOT}/udev"
+
+# Heron network model:
+#
+#   eth0  = local development / SSH network
+#   wlan0 = Internet/default route
+#
+# These can be overridden if a future target uses different interface names.
+ETH_DEV="${HERON_ETH_DEV:-eth0}"
+WIFI_DEV="${HERON_WIFI_DEV:-wlan0}"
+
+echo "========================================"
+echo " Heron Raspberry Pi Provisioning"
+echo "========================================"
+
+echo
+echo "Host:"
+hostname
+
+echo
+echo "OS:"
+cat /etc/os-release
+
+echo
+echo "Architecture:"
+uname -m
+
+echo
+echo "Kernel:"
+uname -r
+
+echo
+echo "Target user:"
+echo "${TARGET_USER}"
+
+echo
+echo "Current network interfaces:"
+ip -br addr
+
+echo
+echo "Current routing table:"
+ip route
+
+#
+# Network configuration
+#
+
+echo
+echo "Configuring Heron network policy..."
+
+if ! command -v nmcli >/dev/null 2>&1; then
+    echo "ERROR: NetworkManager/nmcli is required but was not found."
+    exit 1
+fi
+
+# If Wi-Fi already has a valid default route, remove the Ethernet
+# default route from the current runtime configuration.
+#
+# The directly-connected Ethernet subnet route remains in place,
+# so an SSH connection over eth0 is not disturbed.
+if ip route show default dev "${WIFI_DEV}" | grep -q '^default '; then
+    if ip route show default dev "${ETH_DEV}" | grep -q '^default '; then
+        echo "Removing runtime default route from ${ETH_DEV}..."
+        while ip route show default dev "${ETH_DEV}" | grep -q '^default '; do
+            ip route del default dev "${ETH_DEV}"
+        done
+    fi
+else
+    echo "ERROR: ${WIFI_DEV} does not currently have a default route."
+    echo
+    echo "Heron expects:"
+    echo "  ${ETH_DEV}  -> local development/SSH network"
+    echo "  ${WIFI_DEV} -> Internet/default route"
+    echo
+    echo "Connect Wi-Fi before provisioning."
+    exit 1
+fi
+
+echo
+echo "Routing table after runtime adjustment:"
+ip route
+
+#
+# Verify network connectivity before changing persistent configuration
+# or attempting apt operations.
+#
+
+echo
+echo "Checking Internet connectivity..."
+
+if ! ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1; then
+    echo "ERROR: Internet connectivity check failed."
+    echo "Unable to reach 1.1.1.1 through ${WIFI_DEV}."
+    exit 1
+fi
+
+echo "Internet connectivity OK."
+
+echo
+echo "Checking DNS..."
+
+if ! getent ahostsv4 deb.debian.org >/dev/null 2>&1; then
+    echo "ERROR: DNS resolution failed."
+    echo "Unable to resolve deb.debian.org."
+    exit 1
+fi
+
+echo "DNS resolution OK."
+
+#
+# Persist the network configuration.
+#
+
+ETH_CONNECTION="$(nmcli -g GENERAL.CONNECTION device show "${ETH_DEV}" \
+    2>/dev/null || true)"
+
+if [[ -n "${ETH_CONNECTION}" && "${ETH_CONNECTION}" != "--" ]]; then
+    echo
+    echo "Configuring Ethernet profile '${ETH_CONNECTION}' as local-only..."
+
+    nmcli connection modify "${ETH_CONNECTION}" \
+        ipv4.never-default yes \
+        ipv6.never-default yes \
+        ipv4.ignore-auto-dns yes \
+        ipv6.ignore-auto-dns yes
+else
+    echo
+    echo "WARNING: No active NetworkManager profile found for ${ETH_DEV}."
+fi
+
+WIFI_CONNECTION="$(nmcli -g GENERAL.CONNECTION device show "${WIFI_DEV}" \
+    2>/dev/null || true)"
+
+if [[ -n "${WIFI_CONNECTION}" && "${WIFI_CONNECTION}" != "--" ]]; then
+    echo
+    echo "Ensuring Wi-Fi profile '${WIFI_CONNECTION}' auto-connects..."
+
+    nmcli connection modify "${WIFI_CONNECTION}" \
+        connection.autoconnect yes
+else
+    echo
+    echo "WARNING: No active NetworkManager profile found for ${WIFI_DEV}."
+fi
+
+#
+# Package installation
+#
+
+echo
+echo "Updating package database..."
+
+# Unlike a plain apt-get update, this makes repository download failures
+# fatal instead of silently continuing with stale package indexes.
+apt-get update \
+    -o APT::Update::Error-Mode=any
+
+echo
+echo "Installing Heron baseline packages..."
+
+# python3-serial comes from apt rather than pip because Debian marks the
+# system interpreter EXTERNALLY-MANAGED (PEP 668), which blocks pip installs
+# into it by design. Trixie ships pyserial 3.5, which is the current upstream
+# release, so there is no version penalty and no venv is needed on the target.
+#
+# If a Python dependency is ever needed that Debian does not package, create a
+# venv that still inherits these apt packages rather than replacing them:
+#
+#   python3 -m venv --system-site-packages ~/heron/.venv
+apt-get install -y \
+    python3 \
+    python3-venv \
+    python3-pip \
+    python3-serial \
+    build-essential \
+    cmake \
+    ninja-build \
+    pkg-config \
+    rsync \
+    git
+
+#
+# Device access and stable device names
+#
+
+echo
+echo "Configuring serial-device access for ${TARGET_USER}..."
+
+usermod -aG dialout "${TARGET_USER}"
+
+echo
+echo "Installing udev rules..."
+
+if [[ ! -d "${UDEV_RULES_DIR}" ]]; then
+    echo "ERROR: udev rules directory not found:"
+    echo "  ${UDEV_RULES_DIR}"
+    echo
+    echo "Provisioning must stage the whole target/ directory, not just this"
+    echo "script. Use scripts/provision_pi.sh rather than copying base.sh."
+    exit 1
+fi
+
+# install overwrites in place, so re-provisioning is a no-op when the rules
+# have not changed.
+install -m 0644 "${UDEV_RULES_DIR}"/*.rules /etc/udev/rules.d/
+
+udevadm control --reload-rules
+
+# Re-trigger tty devices so the symlinks appear without unplugging anything.
+udevadm trigger --subsystem-match=tty --action=add
+
+echo
+echo "Final routing table:"
+ip route
+
+echo
+echo "Target user groups:"
+id "${TARGET_USER}"
+
+echo
+echo "Serial devices by id:"
+ls -l /dev/serial/by-id/ 2>/dev/null || echo "  (none attached)"
+
+echo
+echo "Heron device symlinks:"
+ls -l /dev/rplidar 2>/dev/null \
+    || echo "  /dev/rplidar not present (LiDAR not attached?)"
+
+echo
+echo "Power/throttling status:"
+
+# The RPLIDAR motor is a meaningful load on a Pi 3, and under-voltage corrupts
+# SD cards long before it produces an obvious symptom. Surface it here rather
+# than letting it be rediscovered later as flaky scan data.
+THROTTLED="$(vcgencmd get_throttled 2>/dev/null || true)"
+echo "  ${THROTTLED:-unavailable}"
+
+if [[ -n "${THROTTLED}" && "${THROTTLED}" != "throttled=0x0" ]]; then
+    THROTTLE_BITS="$(( ${THROTTLED#throttled=} ))"
+
+    echo
+    echo "WARNING: power/throttling flags are set."
+
+    # Only the bits actually set are reported. The low bits describe the
+    # current state; bits 16-19 are sticky and only say it happened at some
+    # point since boot, which is a much weaker claim.
+    #
+    # An if/fi is used rather than `(( bit )) && echo`, because a false
+    # arithmetic test leaves a non-zero status that would abort the script
+    # under `set -e` if it ever ended up as the last statement in a block.
+    report_bit() {
+        if (( THROTTLE_BITS & (1 << $1) )); then
+            echo "  $2"
+        fi
+    }
+
+    report_bit 0  "under-voltage detected RIGHT NOW"
+    report_bit 1  "ARM frequency capped RIGHT NOW"
+    report_bit 2  "currently throttled"
+    report_bit 3  "soft temperature limit active"
+    report_bit 16 "under-voltage has occurred since boot"
+    report_bit 17 "ARM frequency capping has occurred since boot"
+    report_bit 18 "throttling has occurred since boot"
+    report_bit 19 "soft temperature limit has occurred since boot"
+
+    echo
+    echo "The RPLIDAR motor draws from the same 5 V rail. Use a supply rated"
+    echo "for at least 2.5 A, and consider a powered USB hub for the LiDAR."
+fi
+
+echo
+echo "========================================"
+echo " Provisioning complete"
+echo "========================================"
+echo
+echo "NOTE:"
+echo "Group membership changes take effect on the user's next login."
+

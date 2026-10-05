@@ -1,0 +1,10 @@
+# Host-side offline analysis of captures fetched from the target.
+#
+# Deliberately NOT installed on the Pi: analysis happens on the host, and the
+# Pi 3 has 905 MiB of RAM. deploy_pi.sh syncs only python/, so a dependency
+# declared here at the repository root cannot leak onto the target.
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements-host.txt
+numpy
+matplotlib

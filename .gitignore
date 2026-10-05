@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# C/C++
+build/
+# build-host/ is the host-native build (macOS or Linux) used for tests that
+# need no hardware; build-pi/ holds the aarch64 binaries from the container.
+build-host/
+build-pi/
+cmake-build-*/
+compile_commands.json
+
+# IDEs
+.idea/
+.vscode/
+
+# Deployment/temp files
+.tmp/
+
+# Data captured from the target, and figures generated from it
+captures/
+reports/
+
+# Vendor documents fetched locally (see docs/lidar-references.md)
+docs/vendor/

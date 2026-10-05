@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "host",
+      "displayName": "host-native  --  runs HERE, not deployable",
+      "description": "Builds for this machine. Use for editing, debugging and tests that need no sensor. The binary will NOT run on the Pi. Generator is left unset so it works on any host.",
+      "binaryDir": "${sourceDir}/build-host",
+      "cacheVariables": {
+        "HERON_TARGET": "host",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "pi",
+      "displayName": "pi-aarch64  --  DEPLOYABLE (needs the container)",
+      "description": "Builds the aarch64 Linux binary that ships to the Pi. Requires a Debian trixie arm64 toolchain: either scripts/build_cpp.sh, or a CLion Docker toolchain using heron-build:trixie. Configuring this on macOS is refused rather than silently producing a Mach-O binary.",
+      "binaryDir": "${sourceDir}/build-pi",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "HERON_TARGET": "pi",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host",
+      "configurePreset": "host"
+    },
+    {
+      "name": "pi",
+      "configurePreset": "pi"
+    }
+  ]
+}
