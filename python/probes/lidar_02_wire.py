@@ -14,9 +14,9 @@ Questions answered
   * How do you recover byte alignment when there is no frame sync word?
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_02_wire.py
-  deploy_pi.sh cpane@<pi> probes/lidar_02_wire.py --nodes 24
-  deploy_pi.sh cpane@<pi> probes/lidar_02_wire.py --desync 1
+  deploy_pi.sh <user>@<pi> probes/lidar_02_wire.py
+  deploy_pi.sh <user>@<pi> probes/lidar_02_wire.py --nodes 24
+  deploy_pi.sh <user>@<pi> probes/lidar_02_wire.py --desync 1
 """
 
 from __future__ import annotations

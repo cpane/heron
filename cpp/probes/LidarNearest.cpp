@@ -7,8 +7,8 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_nearest
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_nearest --arc 90 --stop 0.4
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_nearest
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_nearest --arc 90 --stop 0.4
 //     build-host/bin/lidar_nearest --replay captures/<stem>.rpraw
 //
 // Ten times a second it asks checkSector() about the sector and shows one of:

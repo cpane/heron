@@ -13,9 +13,9 @@ Questions answered
   * What exactly happens on port open and close, given DTR controls the motor?
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_01_port.py
-  deploy_pi.sh cpane@<pi> probes/lidar_01_port.py --reset
-  deploy_pi.sh cpane@<pi> probes/lidar_01_port.py --no-motor-test
+  deploy_pi.sh <user>@<pi> probes/lidar_01_port.py
+  deploy_pi.sh <user>@<pi> probes/lidar_01_port.py --reset
+  deploy_pi.sh <user>@<pi> probes/lidar_01_port.py --no-motor-test
 """
 
 from __future__ import annotations

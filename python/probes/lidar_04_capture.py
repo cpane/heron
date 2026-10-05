@@ -23,8 +23,8 @@ What this probe teaches
   * Whether under-voltage or throttling correlates with any of it.
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_04_capture.py --seconds 60 --tag desk-open
-  deploy_pi.sh cpane@<pi> probes/lidar_04_capture.py --seconds 30 --tag wall-close \
+  deploy_pi.sh <user>@<pi> probes/lidar_04_capture.py --seconds 60 --tag desk-open
+  deploy_pi.sh <user>@<pi> probes/lidar_04_capture.py --seconds 30 --tag wall-close \
       --note "sensor 0.5 m from a wall"
 """
 
@@ -342,7 +342,7 @@ def main() -> int:
         print(f"  {jsonl_path}")
     print()
     print("  Fetch them to the host with:")
-    print("    scripts/fetch_captures.sh cpane@<pi>")
+    print("    scripts/fetch_captures.sh <user>@<pi>")
 
     return 0
 

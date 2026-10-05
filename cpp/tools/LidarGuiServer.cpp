@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_gui_server
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_gui_server
 //     .venv/bin/python python/tools/lidar_gui.py --host <pi> --connect
 //
 // Or entirely on the host, from a recording:

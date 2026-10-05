@@ -1,6 +1,6 @@
 """LiDAR server -- runs on the Pi, owns the sensor, serves one GUI client.
 
-    scripts/deploy_pi.sh cpane@<pi> server/lidar_server.py
+    scripts/deploy_pi.sh <user>@<pi> server/lidar_server.py
 
 Design notes, in the order they will bite you if ignored:
 

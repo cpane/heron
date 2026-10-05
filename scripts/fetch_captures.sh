@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <user@host>"
-    echo "Example: $0 cpane@<pi>"
+    echo "Example: $0 <user>@<pi>"
     exit 1
 fi
 
@@ -12,7 +12,7 @@ TARGET="$1"
 
 if [[ "${TARGET}" != *@* ]]; then
     echo "ERROR: Target must be specified as user@host."
-    echo "Example: $0 cpane@<pi>"
+    echo "Example: $0 <user>@<pi>"
     exit 1
 fi
 

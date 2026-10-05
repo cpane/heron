@@ -4,8 +4,8 @@ set -Eeuo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $0 <user@host> [python-file [args...]]"
-    echo "Example: $0 cpane@<pi>"
-    echo "Example: $0 cpane@<pi> probes/lidar_01_port.py"
+    echo "Example: $0 <user>@<pi>"
+    echo "Example: $0 <user>@<pi> probes/lidar_01_port.py"
     exit 1
 fi
 
@@ -14,7 +14,7 @@ shift
 
 if [[ "${TARGET}" != *@* ]]; then
     echo "ERROR: Target must be specified as user@host."
-    echo "Example: $0 cpane@<pi>"
+    echo "Example: $0 <user>@<pi>"
     exit 1
 fi
 

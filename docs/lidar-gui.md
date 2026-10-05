@@ -18,7 +18,7 @@ Two terminals. First, the server — it stays in the foreground so Ctrl-C
 reaches it and the motor stops:
 
 ```
-scripts/deploy_pi.sh cpane@<pi> server/lidar_server.py
+scripts/deploy_pi.sh <user>@<pi> server/lidar_server.py
 ```
 
 Then the GUI:
@@ -32,7 +32,7 @@ Then the GUI:
 To view the **C++ adapter** instead, start its server (same port, same GUI):
 
 ```
-scripts/deploy_cpp.sh cpane@<pi> lidar_gui_server
+scripts/deploy_cpp.sh <user>@<pi> lidar_gui_server
 ```
 
 Or with no Pi at all, from a recording, both on the host:

@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_record --mode 1 --scans 40 --tag desk
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_record --mode 1 --scans 40 --tag desk
 //     build-host/bin/lidar_record --replay captures/desk-sdk1_<stamp>.rpraw
 //
 // Live, the SDK talks to the sensor through a TapChannel, and every byte in

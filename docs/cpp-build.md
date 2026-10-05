@@ -14,7 +14,7 @@ Both are git-ignored.
 ```
 git submodule update --init --recursive      # once, after cloning
 scripts/build_cpp.sh                         # builds build-pi/
-scripts/deploy_cpp.sh cpane@<pi> lidar_info
+scripts/deploy_cpp.sh <user>@<pi> lidar_info
 ```
 
 Host-native, for anything that does not need the target:

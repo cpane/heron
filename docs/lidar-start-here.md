@@ -8,7 +8,7 @@ Work through it once with the sensor in front of you — about 40 minutes. The
 goal is that by the end you could write the driver yourself, in any language.
 
 Everything runs from the repository root on the host. Nothing is edited on the
-Pi. If a command prompts for a password, run `ssh-copy-id cpane@<pi>`
+Pi. If a command prompts for a password, run `ssh-copy-id <user>@<pi>`
 once and it will stop.
 
 ## What the files are
@@ -29,7 +29,7 @@ you learn, and the `.rpraw` capture files (see the last section).
 ## 1. How do I talk to it at all? — 3 minutes
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_01_port.py
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_01_port.py
 ```
 
 **Listen to the sensor.** It spins up for three seconds and stops. That is the
@@ -53,7 +53,7 @@ which is the kind of thing that wedges a read loop.
 This is the important one.
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_02_wire.py --nodes 6
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_02_wire.py --nodes 6
 ```
 
 It prints five raw bytes, then the exact shifts that turn them into an angle
@@ -166,7 +166,7 @@ size rather than an error.
 Then break it on purpose:
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_02_wire.py --nodes 2 --desync 1
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_02_wire.py --nodes 2 --desync 1
 ```
 
 One byte is discarded, so the stream starts mid-node. Watch the alignment
@@ -184,7 +184,7 @@ and why resynchronisation is the hardest part to get right in C++.
 ## 3. How do I get one 360° scan? — 10 minutes
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_03_revolution.py --revs 1 --table
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_03_revolution.py --revs 1 --table
 ```
 
 Read the `--table` output carefully. **The angles are not in ascending order.**
@@ -199,7 +199,7 @@ marks a *transmission* boundary, not an angular one.
 Then, with a box or a book in your hand:
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_03_revolution.py --bearing-test
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_03_revolution.py --bearing-test
 ```
 
 Move the object around the sensor and watch the bearing number. This is how
@@ -215,9 +215,9 @@ concept, not something the sensor hands you.
 ## 4. What does it do over a minute? — 5 minutes
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_04_capture.py \
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_04_capture.py \
     --seconds 60 --tag room --note "describe the scene here"
-scripts/fetch_captures.sh cpane@<pi>
+scripts/fetch_captures.sh <user>@<pi>
 .venv/bin/python python/tools/lidar_report.py captures/room_*.jsonl
 ```
 
@@ -241,7 +241,7 @@ rotation rate, and what fraction of your data is nothing at all.
 ## 5. Is there a faster mode? — 5 minutes
 
 ```
-scripts/deploy_pi.sh cpane@<pi> probes/lidar_05_express.py
+scripts/deploy_pi.sh <user>@<pi> probes/lidar_05_express.py
 ```
 
 Express mode packs 32 measurements into an 84-byte capsule and sends a start
@@ -264,7 +264,7 @@ The five lessons above print numbers. To *see* them, there is a viewer: a
 server on the Pi and a GUI on the host.
 
 ```
-scripts/deploy_pi.sh cpane@<pi> server/lidar_server.py
+scripts/deploy_pi.sh <user>@<pi> server/lidar_server.py
 .venv/bin/python python/tools/lidar_gui.py --host <pi> --connect
 ```
 

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_info
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_info
 //
 // The C++ counterpart of python/probes/lidar_01_port.py and the scan-mode
 // half of lidar_06_capabilities.py. It proved the toolchain end to end before

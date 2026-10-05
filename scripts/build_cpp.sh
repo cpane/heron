@@ -153,4 +153,4 @@ echo "===================================================="
 ls -la "${REPO_ROOT}/${BUILD_DIR}/bin"
 echo
 echo "Deploy and run on the Pi:"
-echo "  scripts/deploy_cpp.sh cpane@<pi> lidar_info"
+echo "  scripts/deploy_cpp.sh <user>@<pi> lidar_info"
