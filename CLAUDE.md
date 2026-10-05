@@ -72,9 +72,14 @@ from scripts in this repository.
 
 ## Hardware
 
-Pi 3B, user `cpane`. Commands write its address as `<pi>`: use the wired link
-(`eth0`), not the Wi-Fi one, which is what its mDNS name resolves to. The
-address itself is kept out of the repository. SSH key installed, so no
+Pi 3B, user `cpane`, hostname `heron`. Commands write its address as `<pi>`:
+use the wired link (`eth0`), not the Wi-Fi one, which is what its mDNS name
+(`heron.local`) resolves to. The address itself is kept out of the
+repository. Provisioning sets the hostname and **disables cloud-init**: on
+later boots it rebuilt `/etc/hosts` from its cached first-boot user-data,
+undoing a rename, and editing `/boot/firmware/user-data` does nothing after
+first boot. The network profiles are NetworkManager keyfiles and do not
+depend on it. Deployed code and binaries live under `~/heron` on the Pi. SSH key installed, so no
 password; `sudo` still prompts. Attached: the RPLIDAR A1M8 (USB). Planned, not yet
 attached or explored: an Arduino motor controller, I2C odometry, and a
 GPIO/UART remote control.
