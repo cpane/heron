@@ -20,9 +20,9 @@ What exists, and where it is written up:
 | Piece | Run it | Section |
 |---|---|---|
 | `Lidar` adapter (`Lidar.h`, `Scan.h`, `SectorCheck.h`) | linked as `heron_lidar` | 6 |
-| `lidar_nearest`: nearest obstacle in a sector | `scripts/deploy_cpp.sh cpane@<pi> lidar_nearest --arc 90` | 7 |
-| `lidar_gui_server` + the viewer | `scripts/deploy_cpp.sh cpane@<pi> lidar_gui_server`, then `.venv/bin/python python/tools/lidar_gui.py --host <pi> --connect` | 8, `lidar-gui.md` |
-| `lidar_adapter`: live health, once a second | `scripts/deploy_cpp.sh cpane@<pi> lidar_adapter 20` | 6 |
+| `lidar_nearest`: nearest obstacle in a sector | `scripts/deploy_cpp.sh <user>@<pi> lidar_nearest --arc 90` | 7 |
+| `lidar_gui_server` + the viewer | `scripts/deploy_cpp.sh <user>@<pi> lidar_gui_server`, then `.venv/bin/python python/tools/lidar_gui.py --host <pi> --connect` | 8, `lidar-gui.md` |
+| `lidar_adapter`: live health, once a second | `scripts/deploy_cpp.sh <user>@<pi> lidar_adapter 20` | 6 |
 | Record a session / replay it | `lidar_record --mode 1 --scans 40 --tag x` on the Pi; `--replay` on the host | 4b |
 
 Build first with `scripts/build_cpp.sh` (Pi) or `cmake --build --preset host`.
@@ -84,7 +84,7 @@ Two things to carry forward rather than treat as settled:
 Built and **verified against the sensor 2026-09-27**. Two terminals:
 
 ```
-scripts/deploy_pi.sh cpane@<pi> server/lidar_server.py
+scripts/deploy_pi.sh <user>@<pi> server/lidar_server.py
 .venv/bin/python python/tools/lidar_gui.py --host <pi> --connect
 ```
 
@@ -168,7 +168,7 @@ Full detail in [`cpp-build.md`](cpp-build.md). Summary:
 ```
 git submodule update --init --recursive     # once after cloning
 scripts/build_cpp.sh                        # aarch64, in a container
-scripts/deploy_cpp.sh cpane@<pi> lidar_info
+scripts/deploy_cpp.sh <user>@<pi> lidar_info
 ```
 
 - Vendor SDK is a **pinned git submodule** at `third_party/rplidar_sdk`
@@ -255,8 +255,8 @@ byte, every write that preceded it. Full detail and design in
 
 ```
 scripts/build_cpp.sh
-scripts/deploy_cpp.sh cpane@<pi> lidar_record --mode 1 --scans 40 --tag desk
-scripts/fetch_captures.sh cpane@<pi>
+scripts/deploy_cpp.sh <user>@<pi> lidar_record --mode 1 --scans 40 --tag desk
+scripts/fetch_captures.sh <user>@<pi>
 cmake --build --preset host
 build-host/bin/lidar_record --replay captures/desk-sdk1_<stamp>.rpraw
 python3 python/tools/lidar_sdkcheck.py captures/desk-sdk1_<stamp>.rpraw
@@ -430,7 +430,7 @@ lifecycle hardening (restart, unplug/replug, the slow `stop()`), then mode 3.
   scan age 23-123 ms. On the stall recording, each stall shows as UNKNOWN
   (stale scan) and recovers.
 
-    scripts/deploy_cpp.sh cpane@<pi> lidar_nearest --arc 90 --stop 0.4
+    scripts/deploy_cpp.sh <user>@<pi> lidar_nearest --arc 90 --stop 0.4
     build-host/bin/lidar_nearest --replay captures/<stem>.rpraw
 
 ## 8. DONE — a C++ backend for the GUI (2026-10-04)
@@ -481,8 +481,8 @@ only (section 4b).
 
 ## State of the hardware
 
-- Pi 3B at `<pi>` (wired link), user `cpane`. SSH key installed, no password
-  needed. `sudo` still prompts.
+- Pi 3B, hostname `heron`, reached at `<pi>` over its wired link. Access
+  details (user, SSH key, `sudo`) are per-developer: see `CLAUDE.local.md`.
 - LiDAR at `/dev/rplidar` (udev rule `99-heron-rplidar.rules`, installed by
   provisioning). Firmware 1.29, HW 7, health 0. Deployed code and binaries
   live under `~/heron` on the Pi.

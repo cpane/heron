@@ -4,7 +4,7 @@
 
 Start the server on the Pi first, in another terminal:
 
-    scripts/deploy_pi.sh cpane@<pi> server/lidar_server.py
+    scripts/deploy_pi.sh <user>@<pi> server/lidar_server.py
 
 Host-side only. Tkinter is in the standard library, so this adds nothing to
 requirements-host.txt, and it lives in tools/ rather than probes/ because it

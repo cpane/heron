@@ -36,8 +36,8 @@ Questions answered
   * What does the sensor report when it is not spinning?
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_06_capabilities.py
-  deploy_pi.sh cpane@<pi> probes/lidar_06_capabilities.py --skip-force-scan
+  deploy_pi.sh <user>@<pi> probes/lidar_06_capabilities.py
+  deploy_pi.sh <user>@<pi> probes/lidar_06_capabilities.py --skip-force-scan
 """
 
 from __future__ import annotations

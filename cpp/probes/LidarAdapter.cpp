@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-//     scripts/deploy_cpp.sh cpane@<pi> lidar_adapter 20
+//     scripts/deploy_cpp.sh <user>@<pi> lidar_adapter 20
 //
 // Uses only the public interface (Lidar.h, Scan.h), as robot code will, so it
 // also proves the boundary: this file sees no SDK type. Polls getLatest() at

@@ -7,16 +7,16 @@
 # directory of build artifacts would be a different and more destructive
 # operation than it looks.
 #
-#   scripts/deploy_cpp.sh cpane@<pi>
-#   scripts/deploy_cpp.sh cpane@<pi> lidar_info
-#   scripts/deploy_cpp.sh cpane@<pi> lidar_info /dev/rplidar
+#   scripts/deploy_cpp.sh <user>@<pi>
+#   scripts/deploy_cpp.sh <user>@<pi> lidar_info
+#   scripts/deploy_cpp.sh <user>@<pi> lidar_info /dev/rplidar
 
 set -Eeuo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: $0 <user@host> [binary [args...]]"
-    echo "Example: $0 cpane@<pi>"
-    echo "Example: $0 cpane@<pi> lidar_info"
+    echo "Example: $0 <user>@<pi>"
+    echo "Example: $0 <user>@<pi> lidar_info"
     exit 1
 fi
 
@@ -25,7 +25,7 @@ shift
 
 if [[ "${TARGET}" != *@* ]]; then
     echo "ERROR: Target must be specified as user@host."
-    echo "Example: $0 cpane@<pi>"
+    echo "Example: $0 <user>@<pi>"
     exit 1
 fi
 

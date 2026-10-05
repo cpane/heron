@@ -17,9 +17,9 @@ Questions answered
   * Is the S flag reliable for segmentation?
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_03_revolution.py
-  deploy_pi.sh cpane@<pi> probes/lidar_03_revolution.py --revs 3 --table
-  deploy_pi.sh cpane@<pi> probes/lidar_03_revolution.py --bearing-test
+  deploy_pi.sh <user>@<pi> probes/lidar_03_revolution.py
+  deploy_pi.sh <user>@<pi> probes/lidar_03_revolution.py --revs 3 --table
+  deploy_pi.sh <user>@<pi> probes/lidar_03_revolution.py --bearing-test
 """
 
 from __future__ import annotations

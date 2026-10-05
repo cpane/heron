@@ -17,8 +17,8 @@ Questions answered
   * Is the resolution gain worth the added decoder complexity?
 
 Usage
-  deploy_pi.sh cpane@<pi> probes/lidar_05_express.py
-  deploy_pi.sh cpane@<pi> probes/lidar_05_express.py --seconds 15
+  deploy_pi.sh <user>@<pi> probes/lidar_05_express.py
+  deploy_pi.sh <user>@<pi> probes/lidar_05_express.py --seconds 15
 """
 
 from __future__ import annotations
