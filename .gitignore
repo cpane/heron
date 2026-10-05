@@ -20,6 +20,11 @@ compile_commands.json
 .idea/
 .vscode/
 
+# Per-developer Claude Code instructions and settings; the shared ones are
+# CLAUDE.md and .claude/settings.json
+CLAUDE.local.md
+.claude/settings.local.json
+
 # Deployment/temp files
 .tmp/
 
