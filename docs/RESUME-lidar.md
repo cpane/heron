@@ -1,7 +1,9 @@
 # LiDAR workstream — resume point
 
-Last updated 2026-10-04. Branch **`develop`**, everything pushed
-(`feature/pi-provisioning` was merged to `main` via PR #1).
+Last updated 2026-10-04. Branch **`develop`**, everything pushed. The Pi
+was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
+re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
+live (section 6, "Re-verified").
 
 ## Read this first when resuming
 
@@ -24,6 +26,8 @@ What exists, and where it is written up:
 | Record a session / replay it | `lidar_record --mode 1 --scans 40 --tag x` on the Pi; `--replay` on the host | 4b |
 
 Build first with `scripts/build_cpp.sh` (Pi) or `cmake --build --preset host`.
+The viewer needs a `.venv` built on a Python that has Tkinter; the README's
+host setup says how, and why plain `python3` can pick one without it.
 Recordings are git-ignored and live in `captures/` on this host and the Pi.
 
 **Picking up: lifecycle hardening** (section 9): restart the same `Lidar`
@@ -372,6 +376,31 @@ that cannot be trusted. Both still advance `seq` and are counted in health.
   scans dropped, normal the next second. Ctrl-C: clean stop. Four CPU hogs: full
   rate, no skips, no drops.
 
+### Re-verified on the re-provisioned Pi (2026-10-04)
+
+After re-provisioning (new hostname, udev rule reinstalled, work tree now
+`~/heron` on the Pi), with the existing `build-pi` binaries redeployed:
+
+- `/dev/rplidar` resolves through the reinstalled rule. Probe 1 and
+  `lidar_info` both read firmware 1.29, HW 7, health Good, and the same serial.
+- **Unit tests on the Pi:** `scan_test` 35, `replay_test` 17,
+  `scan_builder_test` 33, `sector_check_test` 14 — 99 checks, 0 failures.
+- **Recording checks run on the Pi itself**, the Python tools included (they
+  need only the standard library), against the 9 recordings that have an
+  `.sdkdump`: gap check PASS on all 7 legacy/express, worst 0.0052°;
+  `lidar_replay_check` OK on all 9; every published scan matches the Python
+  decoder in all 7 (406 scans).
+- **The Pi build publishes exactly what the host build does:** its
+  `.adapter.dump` files are identical to the host's in every scan and point.
+  Only the last field of each `scan` line differs, `ageAtSight`, which is
+  wall-clock timing.
+- `lidar_gui_server` with the viewer, live: works, and SIGINT stops it with
+  the sensor idle.
+
+To run the checks on the Pi, copy each recording's `.rpraw` and `.sdkdump` to
+a directory outside `~/heron/captures` (`/tmp/heron-checks` was used), so that
+`fetch_captures.sh` cannot bring the Pi's dumps back over the host's.
+
 ### Open from the adapter
 
 - **`stop()` takes ~1 s.** Likely the SDK's receive thread waiting out its 1 s
@@ -454,7 +483,9 @@ only (section 4b).
 
 - Pi 3B at `<pi>` (wired link), user `cpane`. SSH key installed, no password
   needed. `sudo` still prompts.
-- LiDAR at `/dev/rplidar` (udev rule installed). Firmware 1.29, HW 7, health 0.
+- LiDAR at `/dev/rplidar` (udev rule `99-heron-rplidar.rules`, installed by
+  provisioning). Firmware 1.29, HW 7, health 0. Deployed code and binaries
+  live under `~/heron` on the Pi.
 - **Power issue resolved.** New supply, `throttled=0x0` idle, while scanning,
   and under CPU load. The old `0x50000` readings are historical.
 
