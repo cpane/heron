@@ -12,6 +12,9 @@ development workstation.
 Target configuration and dependencies must be reproducible from scripts
 contained in this repository.
 
+Changes follow gitflow: work on a `feature/` or `bugfix/` branch from
+`develop`, merged by pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Languages
 
 - Python — hardware bring-up, diagnostics, experimentation
