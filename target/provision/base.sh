@@ -207,6 +207,38 @@ apt-get install -y \
     git
 
 #
+# Hostname
+#
+
+TARGET_HOSTNAME="${HERON_HOSTNAME:-heron}"
+
+echo
+echo "Setting hostname to '${TARGET_HOSTNAME}'..."
+
+# The image is set up on first boot by cloud-init, from the user-data that
+# Raspberry Pi Imager writes to the boot partition. On every later boot
+# cloud-init still regenerates /etc/hosts (manage_etc_hosts), but from its
+# cached copy of the first-boot user-data, not the boot partition: editing
+# that file was measured to have no effect. So a rename would be undone in
+# /etc/hosts on each boot. Its first-boot work is done by the time this
+# script runs, and the network profiles it created are persistent
+# NetworkManager keyfiles, so it is disabled and the hostname is owned here.
+if [[ -d /etc/cloud ]]; then
+    touch /etc/cloud/cloud-init.disabled
+fi
+
+# /etc/hosts is updated before the hostname itself, so that sudo and other
+# tools never see a hostname that does not resolve.
+if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+    sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1 ${TARGET_HOSTNAME} ${TARGET_HOSTNAME}/" \
+        /etc/hosts
+else
+    echo "127.0.1.1 ${TARGET_HOSTNAME} ${TARGET_HOSTNAME}" >> /etc/hosts
+fi
+
+hostnamectl set-hostname "${TARGET_HOSTNAME}"
+
+#
 # Device access and stable device names
 #
 
