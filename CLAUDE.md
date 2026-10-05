@@ -72,27 +72,29 @@ from scripts in this repository.
 
 ## Hardware
 
-Pi 3B, user `cpane`, hostname `heron`. Commands write its address as `<pi>`:
+A Raspberry Pi 3B, hostname `heron`. Commands write its address as `<pi>`:
 use the wired link (`eth0`), not the Wi-Fi one, which is what its mDNS name
-(`heron.local`) resolves to. The address itself is kept out of the
-repository. Provisioning sets the hostname and **disables cloud-init**: on
-later boots it rebuilt `/etc/hosts` from its cached first-boot user-data,
-undoing a rename, and editing `/boot/firmware/user-data` does nothing after
-first boot. The network profiles are NetworkManager keyfiles and do not
-depend on it. Deployed code and binaries live under `~/heron` on the Pi. SSH key installed, so no
-password; `sudo` still prompts. Attached: the RPLIDAR A1M8 (USB). Planned, not yet
-attached or explored: an Arduino motor controller, I2C odometry, and a
-GPIO/UART remote control.
+(`heron.local`) resolves to. Addresses, user names and access details are
+per-developer and stay out of the repository (see "Personal setup" below).
+Provisioning sets the hostname and **disables cloud-init**: on later boots it
+rebuilt `/etc/hosts` from its cached first-boot user-data, undoing a rename,
+and editing `/boot/firmware/user-data` does nothing after first boot. The
+network profiles are NetworkManager keyfiles and do not depend on it.
+Deployed code and binaries live under `~/heron` on the Pi; provisioning and
+deploy scripts need SSH to it, and provisioning needs `sudo` there.
+
+Attached: the RPLIDAR A1M8 (USB). Planned, not yet attached or explored: an
+Arduino motor controller, I2C odometry, and a GPIO/UART remote control.
 
 ## Common commands
 
 ```
-scripts/provision_pi.sh    cpane@<pi>          # rarely
-scripts/deploy_pi.sh       cpane@<pi>          # rsync python/
-scripts/deploy_pi.sh       cpane@<pi> probes/lidar_01_port.py
+scripts/provision_pi.sh    <user>@<pi>         # rarely
+scripts/deploy_pi.sh       <user>@<pi>         # rsync python/
+scripts/deploy_pi.sh       <user>@<pi> probes/lidar_01_port.py
 scripts/build_cpp.sh                                    # C++ for the Pi, in a container
-scripts/deploy_cpp.sh      cpane@<pi> <binary> [args]
-scripts/fetch_captures.sh  cpane@<pi>          # pull captures back
+scripts/deploy_cpp.sh      <user>@<pi> <binary> [args]
+scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
 ```
 
 `deploy_pi.sh` and `deploy_cpp.sh` with extra arguments deploy *and* run, so
@@ -132,9 +134,17 @@ root, never under `python/`, so `deploy_pi.sh` cannot leak them onto the Pi.
 branched from `develop`, merged by pull request; never commit
 directly to `develop` or `main` (releases only). Short imperative subjects,
 capitalized, no ticket refs. Commit in logical groups rather than one lump.
-Author is `cpane <cpane@icloud.com>`.
+Commit as the developer you are working for, never as anyone else.
 
 **Captures and reports are git-ignored.** So is `docs/vendor/`.
+
+## Personal setup
+
+This file is shared and public. Anything specific to one developer — git
+identity, the Pi's address and user, host quirks, how they open pull
+requests — goes in `CLAUDE.local.md` at the repository root, which Claude
+Code also loads and which is git-ignored. Never put addresses or credentials
+in this file.
 
 ## Working style
 
