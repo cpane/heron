@@ -122,8 +122,9 @@ If a dependency is ever needed that Debian does not package, use
 Host-only dependencies belong in `requirements-host.txt` at the repository
 root, never under `python/`, so `deploy_pi.sh` cannot leak them onto the Pi.
 
-**Git** — gitflow, per `CONTRIBUTING.md`. Work on `feature/<name>` or
-`bugfix/<issue>` branched from `develop`, merged by pull request; never commit
+**Git** — gitflow, per `CONTRIBUTING.md`. Work on `feature/<name>`,
+`bugfix/<issue>` or `chore/<name>` (docs, tooling, upkeep; no issue needed)
+branched from `develop`, merged by pull request; never commit
 directly to `develop` or `main` (releases only). Short imperative subjects,
 capitalized, no ticket refs. Commit in logical groups rather than one lump.
 Author is `cpane <cpane@icloud.com>`.
