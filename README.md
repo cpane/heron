@@ -48,6 +48,10 @@ The code is MIT-licensed; see [`LICENSE`](LICENSE).
 The Pi is an execution target. Code is edited on the host, pushed with rsync,
 and run over SSH. Nothing is authored on the Pi.
 
+In the commands below, `<user>` is your account on the Pi and `<pi>` its
+address. Use the address of its wired link if it has one: its mDNS name
+(`heron.local`) can resolve to the Wi-Fi address instead.
+
 ### One-time host setup
 
 Fetch the vendored SDK (a plain clone leaves it empty):
@@ -58,7 +62,7 @@ Install an SSH key on the target so deployment does not prompt for a password
 on every connection (each deploy opens two or three):
 
     ssh-keygen -t ed25519        # skip if you already have a key
-    ssh-copy-id cpane@<pi>
+    ssh-copy-id <user>@<pi>
 
 Install host-side analysis dependencies, into a venv built on a Python that
 has Tkinter (the live viewer needs it). Homebrew ships Tk separately from
@@ -72,15 +76,15 @@ Homebrew last installed, so name the version explicitly:
 
 ### Provision the target (rarely)
 
-    scripts/provision_pi.sh cpane@<pi>
+    scripts/provision_pi.sh <user>@<pi>
 
 Installs packages, network policy, and the udev rules in `target/udev/`.
 Log out and back in afterwards for `dialout` membership to take effect.
 
 ### Deploy and run (constantly)
 
-    scripts/deploy_pi.sh cpane@<pi>
-    scripts/deploy_pi.sh cpane@<pi> probes/lidar_01_port.py
+    scripts/deploy_pi.sh <user>@<pi>
+    scripts/deploy_pi.sh <user>@<pi> probes/lidar_01_port.py
 
 `python/` is mirrored to `~/heron/python` on the target. The mirror is
 exact: anything deleted from the repository is deleted from the target.
@@ -88,7 +92,7 @@ exact: anything deleted from the repository is deleted from the target.
 ### Build and run the C++ (see `docs/cpp-build.md`)
 
     scripts/build_cpp.sh                                    # aarch64, in a container
-    scripts/deploy_cpp.sh cpane@<pi> lidar_info
+    scripts/deploy_cpp.sh <user>@<pi> lidar_info
 
 `build_cpp.sh` builds inside a Debian trixie arm64 container so the binary
 matches the Pi's glibc and gcc. Requires Docker. For tests that need no
@@ -99,7 +103,7 @@ hardware, build natively and run the test suites:
 
 ### Retrieve captured data
 
-    scripts/fetch_captures.sh cpane@<pi>
+    scripts/fetch_captures.sh <user>@<pi>
 
 Probes write to `~/heron/captures` on the target (exported as
 `HERON_CAPTURE_DIR`); this pulls them into `captures/`, which Git ignores.
@@ -132,11 +136,11 @@ detection, and is verified point for point against the Python decoder.
 
 | Program | What it does | Run it |
 |---|---|---|
-| `lidar_nearest` | nearest obstacle in a sector: CLEAR, STOP or UNKNOWN with the reason | `scripts/deploy_cpp.sh cpane@<pi> lidar_nearest --arc 90` |
-| `lidar_gui_server` | serves the library's scans to the viewer below | `scripts/deploy_cpp.sh cpane@<pi> lidar_gui_server` |
-| `lidar_adapter` | the library's health, once a second | `scripts/deploy_cpp.sh cpane@<pi> lidar_adapter 20` |
-| `lidar_record` | records an SDK session to `.rpraw`, or replays one with `--replay` | `scripts/deploy_cpp.sh cpane@<pi> lidar_record --mode 1 --scans 40 --tag desk` |
-| `lidar_info` | device identity, health and scan modes, motor off | `scripts/deploy_cpp.sh cpane@<pi> lidar_info` |
+| `lidar_nearest` | nearest obstacle in a sector: CLEAR, STOP or UNKNOWN with the reason | `scripts/deploy_cpp.sh <user>@<pi> lidar_nearest --arc 90` |
+| `lidar_gui_server` | serves the library's scans to the viewer below | `scripts/deploy_cpp.sh <user>@<pi> lidar_gui_server` |
+| `lidar_adapter` | the library's health, once a second | `scripts/deploy_cpp.sh <user>@<pi> lidar_adapter 20` |
+| `lidar_record` | records an SDK session to `.rpraw`, or replays one with `--replay` | `scripts/deploy_cpp.sh <user>@<pi> lidar_record --mode 1 --scans 40 --tag desk` |
+| `lidar_info` | device identity, health and scan modes, motor off | `scripts/deploy_cpp.sh <user>@<pi> lidar_info` |
 
 `lidar_nearest`, `lidar_gui_server` and `lidar_record` also run on the host against a
 recording, with `--replay` (build with `cmake --preset host`, binaries in `build-host/bin`).
@@ -162,7 +166,7 @@ the sensor's behaviour before the C++ library was written, and remain the
 quickest way to look at the wire. Measured results, and the protocol traps they
 uncovered, are in [`docs/rplidar-a1m8-findings.md`](docs/rplidar-a1m8-findings.md).
 
-Run each with `scripts/deploy_pi.sh cpane@<pi> probes/<name>.py`.
+Run each with `scripts/deploy_pi.sh <user>@<pi> probes/<name>.py`.
 
 | Probe | What it shows |
 |---|---|
