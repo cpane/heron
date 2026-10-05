@@ -12,7 +12,7 @@ development workstation.
 Target configuration and dependencies must be reproducible from scripts
 contained in this repository.
 
-Changes follow gitflow: work on a `feature/` or `bugfix/` branch from
+Changes follow gitflow: work on a `feature/`, `bugfix/` or `chore/` branch from
 `develop`, merged by pull request. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Languages
@@ -60,9 +60,14 @@ on every connection (each deploy opens two or three):
     ssh-keygen -t ed25519        # skip if you already have a key
     ssh-copy-id cpane@<pi>
 
-Install host-side analysis dependencies:
+Install host-side analysis dependencies, into a venv built on a Python that
+has Tkinter (the live viewer needs it). Homebrew ships Tk separately from
+Python, as `python-tk@<version>`, and `python3` follows whichever Python
+Homebrew last installed, so name the version explicitly:
 
-    python3 -m venv .venv
+    brew install python@3.13 python-tk@3.13
+    python3.13 -c 'import tkinter'          # must print nothing
+    python3.13 -m venv .venv
     .venv/bin/pip install -r requirements-host.txt
 
 ### Provision the target (rarely)
@@ -177,7 +182,9 @@ Host-side, under `python/tools/` (needs `requirements-host.txt`):
 `lidar_gui.py` is the live viewer. Start a server on the Pi first, either
 `server/lidar_server.py` or the C++ `lidar_gui_server` — see
 [`docs/lidar-gui.md`](docs/lidar-gui.md). It needs no host
-dependencies beyond the standard library; Tkinter ships with Python.
+dependencies beyond the standard library, but it does need Tkinter, which
+Homebrew's Python lacks until its `python-tk` formula is installed (see the
+venv setup above).
 
 `lidar_report.py` writes polar, coverage, rate, quality and range figures to
 `reports/<capture_id>/`. `lidar_rawcat.py --verify` re-decodes the raw wire log

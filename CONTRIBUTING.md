@@ -17,6 +17,7 @@ pull request.
 | `main` | Releases only. Every commit on it is a tagged release. | — | — |
 | `feature/<name>` | New work | `develop` | `develop` |
 | `bugfix/<issue>` | A fix for something on `develop` | `develop` | `develop` |
+| `chore/<name>` | Upkeep that changes no behaviour: docs, build and tooling setup, dependency bumps, cleanups | `develop` | `develop` |
 | `release/<version>` | Preparing a release | `develop` | `main` and `develop` |
 | `hotfix/<issue>` | An urgent fix to a release | `main` | `main` and `develop` |
 
@@ -27,7 +28,10 @@ through a pull request from one of the branches above.
 
 - Lowercase, words separated by hyphens: `feature/wheel-odometry`, not
   `feature/WheelOdometry` or `feature/wheel_odometry`.
-- `feature/` is singular.
+- `feature/` and `chore/` are singular.
+- `chore/` names the change, like `feature/`, and needs no issue:
+  `chore/update-doc-to-fix-venv`. If the change fixes behaviour, it is a
+  `bugfix/` instead, even when it is small.
 - `bugfix/` and `hotfix/` start with the GitHub issue number, optionally
   followed by a short description: `bugfix/12` or `bugfix/12-gui-reconnect`.
   Open an issue first if there is none.
@@ -38,7 +42,7 @@ through a pull request from one of the branches above.
 ```
 git switch develop
 git pull
-git switch -c feature/wheel-odometry      # or bugfix/12-gui-reconnect
+git switch -c feature/wheel-odometry      # or bugfix/12-gui-reconnect, chore/...
 
 # ... work, committing as you go ...
 
