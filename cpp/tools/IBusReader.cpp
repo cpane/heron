@@ -76,6 +76,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "\n"
                "Commands:\n"
                "  monitor        live display of all 14 channels (r: reset min/max, q: quit)\n"
+               "  dump           each raw packet as hex plus its decoded channels\n"
                "\n"
                "Options:\n"
                "  --device PATH  serial device (default /dev/serial0)\n"
@@ -83,6 +84,8 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  --stop-bits N  1 or 2 (default 1; see docs/remote-ibus-protocol.md §2)\n"
                "  --baud N       baud rate (default 115200)\n"
                "  --seconds S    stop after S seconds\n"
+               "  --count N      dump: stop after printing N packets\n"
+               "  --decimate N   dump: print every Nth packet\n"
                "  -h, --help     this text\n");
   std::exit(status);
 }
@@ -132,6 +135,10 @@ Options parse(int argc, char **argv) {
       options.staleAfter = milliseconds(toInt(arg, value()));
     } else if (arg == "--stop-bits") {
       options.serial.stopBits = static_cast<std::uint8_t>(toInt(arg, value()));
+    } else if (arg == "--count") {
+      options.count = toInt(arg, value());
+    } else if (arg == "--decimate") {
+      options.decimate = toInt(arg, value());
     } else if (arg == "--seconds") {
       options.seconds = toDouble(arg, value());
     } else if (arg == "--baud") {
@@ -144,6 +151,10 @@ Options parse(int argc, char **argv) {
     }
   }
   if (options.command.empty()) {
+    usage(2);
+  }
+  if (options.count < 0 || options.decimate < 1) {
+    std::fprintf(stderr, "ERROR: --count cannot be negative and --decimate must be at least 1\n");
     usage(2);
   }
   if (options.seconds < 0.0) {
@@ -457,6 +468,64 @@ int runMonitor(const Options &options) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// dump
+
+/** Totals for the line-mode commands, on stderr so stdout stays data. */
+void printSummary(const Receiver &rx, const char *what) {
+  const IBusStats &s = rx.getStats();
+  std::fprintf(stderr,
+               "%s: %llu frames decoded, %llu checksum errors, %llu bytes discarded in "
+               "%llu resyncs\n",
+               what, static_cast<unsigned long long>(s.framesDecoded),
+               static_cast<unsigned long long>(s.checksumErrors),
+               static_cast<unsigned long long>(s.discardedBytes),
+               static_cast<unsigned long long>(s.resyncs));
+}
+
+int runDump(const Options &options) {
+  Receiver rx(options);
+  NoDataWatch noData;
+  const TimePoint start = Clock::now();
+  std::int64_t seen = 0;
+  std::int64_t printed = 0;
+
+  std::printf("# t_ms: since start. hex: the 32 bytes as received (20 40, 14 channels LE, "
+              "checksum LE).\n# Then CH1..CH14 decoded, raw 16-bit.\n");
+  std::printf("#     t_ms  ");
+  for (std::size_t i = 0; i < kIBusFrameLen; ++i) {
+    std::printf("%02zu ", i);
+  }
+  std::printf("|");
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    std::printf(" CH%-3zu", i + 1);
+  }
+  std::printf("\n");
+
+  while (s_stopRequested == 0 && !timeUp(options, start, Clock::now()) &&
+         (options.count == 0 || printed < options.count)) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      if (seen++ % options.decimate != 0 || (options.count != 0 && printed >= options.count)) {
+        return;
+      }
+      ++printed;
+      std::printf("%10.3f  ", toMs(f.stamp - start));
+      for (const std::uint8_t b : f.bytes) {
+        std::printf("%02X ", b);
+      }
+      std::printf("|");
+      for (const std::uint16_t v : f.channels) {
+        std::printf(" %5u", v);
+      }
+      std::printf("\n");
+    });
+    std::fflush(stdout);
+    noData.check(rx, Clock::now());
+  }
+  printSummary(rx, "dump");
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -467,6 +536,9 @@ int main(int argc, char **argv) {
   try {
     if (options.command == "monitor") {
       return runMonitor(options);
+    }
+    if (options.command == "dump") {
+      return runDump(options);
     }
     std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
     usage(2);
