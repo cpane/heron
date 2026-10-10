@@ -4,7 +4,7 @@ Robot platform on a Raspberry Pi 3, in hardware bring-up. Each sensor or
 subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR workstream has a working C++ library and is
-paused; odometry and the remote control are next to be explored.
+paused; the remote control is being explored, and odometry is next.
 
 ## Workstreams
 
@@ -53,6 +53,28 @@ LiDAR-only facts:
   robot. Robot-level design (motion arbiter, motor link, shutdown path,
   deskewing, mounting offset) waits.
 
+### Remote control — FlySky FS-i6X / FS-iA6B over iBUS (active)
+
+Read before doing remote-control work:
+
+- **`docs/RESUME-remote.md`** — where the work stands and what is next.
+- `docs/remote-ibus-protocol.md` — the protocol reference. FlySky publishes
+  no spec; every fact there is tagged [ours], [community] or [unverified].
+  Do not state community facts as measured, and do not fill gaps from
+  general knowledge. **§5 (failsafe) is unverified until a hardware run**,
+  and the robot's stop logic depends on it.
+- `docs/remote-ibus-reader.md` — the `ibus_reader` tool and its subcommands.
+
+Remote-only facts:
+
+- The receiver's iBUS SERVO output is on GPIO15 (RXD), `/dev/serial0`
+  (-> `ttyAMA0`, the PL011, freed from Bluetooth by provisioning).
+  **Receive-only:** nothing writes to that port.
+- `heron_ibus` (parser, stats, `LinkMonitor`, normalization) is pure and
+  reusable by the robot; `heron_ibus_port` is the termios port.
+- No code from the iBUS sources may be copied; IBusBM and Betaflight are
+  copyleft. The license table is in the protocol doc, §8.
+
 ## Development model
 
 Code is written on the host (macOS) and stored in git. **The Pi is a
@@ -83,8 +105,9 @@ network profiles are NetworkManager keyfiles and do not depend on it.
 Deployed code and binaries live under `~/heron` on the Pi; provisioning and
 deploy scripts need SSH to it, and provisioning needs `sudo` there.
 
-Attached: the RPLIDAR A1M8 (USB). Planned, not yet attached or explored: an
-Arduino motor controller, I2C odometry, and a GPIO/UART remote control.
+Attached: the RPLIDAR A1M8 (USB), and a FlySky FS-iA6B receiver (iBUS on the
+GPIO UART) for the FS-i6X remote. Planned, not yet attached or explored: an
+Arduino motor controller and I2C odometry.
 
 ## Common commands
 
