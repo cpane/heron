@@ -84,6 +84,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  dump           each raw packet as hex plus its decoded channels\n"
                "  identify       guided discovery of which control drives which channel\n"
                "  record         write every valid frame to CSV (default captures/ibus-<time>.csv)\n"
+               "  stats          run quietly for --seconds (default 10), then summarize\n"
                "\n"
                "Options:\n"
                "  --device PATH  serial device (default /dev/serial0)\n"
@@ -845,6 +846,102 @@ int runRecord(const Options &options) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// stats
+
+int runStats(const Options &options) {
+  constexpr double kDefaultSeconds = 10.0;
+  constexpr std::size_t kBins = 20;  // 1 ms each; the last also holds anything longer
+  Options timed = options;
+  if (timed.seconds == 0.0) {
+    timed.seconds = kDefaultSeconds;
+  }
+
+  Receiver rx(timed);
+  NoDataWatch noData;
+  std::array<std::uint64_t, kBins> histogram{};
+  std::array<std::uint64_t, kIBusChannelCount> nibbleFrames{};
+  std::uint64_t staleEvents = 0;
+  LinkState previous = LinkState::NoSignal;
+  TimePoint lastStamp{};
+  bool haveLast = false;
+
+  std::fprintf(stderr, "stats: collecting for %g s on %s...\n", timed.seconds,
+               rx.getConfig().device.c_str());
+  const TimePoint start = Clock::now();
+  while (s_stopRequested == 0 && !timeUp(timed, start, Clock::now())) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      if (haveLast) {
+        const auto bin = static_cast<std::size_t>(toMs(f.stamp - lastStamp));
+        ++histogram[std::min(bin, kBins - 1)];
+      }
+      lastStamp = f.stamp;
+      haveLast = true;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        if (channelHighNibble(f.channels[i]) != 0) {
+          ++nibbleFrames[i];
+        }
+      }
+    });
+    const TimePoint now = Clock::now();
+    const LinkState state = rx.getLink().getState(now);
+    if (state == LinkState::Stale && previous == LinkState::Ok) {
+      ++staleEvents;
+    }
+    previous = state;
+    noData.check(rx, now);
+  }
+  const double elapsed = std::chrono::duration<double>(Clock::now() - start).count();
+
+  const IBusStats &s = rx.getStats();
+  std::printf("iBUS statistics: %s, %u baud, %u stop bit(s), %.1f s\n",
+              rx.getConfig().device.c_str(), rx.getConfig().baud, rx.getConfig().stopBits,
+              elapsed);
+  std::printf("  bytes received     %llu\n", static_cast<unsigned long long>(s.bytesReceived));
+  std::printf("  frames decoded     %llu   (%.1f Hz)\n",
+              static_cast<unsigned long long>(s.framesDecoded), s.frameRateHz());
+  if (s.intervalCount() > 0) {
+    std::printf("  frame interval     min %.2f   mean %.2f   max %.2f   std dev %.2f ms\n",
+                toMs(s.minInterval), toMs(s.meanInterval()), toMs(s.maxInterval),
+                toMs(s.intervalStdDev()));
+    std::printf("  interval histogram, 1 ms bins (read-time stamps; protocol doc §2)\n");
+    const std::uint64_t peak = *std::max_element(histogram.begin(), histogram.end());
+    for (std::size_t b = 0; b < kBins; ++b) {
+      if (histogram[b] == 0) {
+        continue;
+      }
+      const auto width = static_cast<std::size_t>(40 * histogram[b] / peak);
+      char label[16];
+      if (b + 1 == kBins) {
+        std::snprintf(label, sizeof label, "%zu+", b);
+      } else {
+        std::snprintf(label, sizeof label, "%zu-%zu", b, b + 1);
+      }
+      std::printf("    %6s ms  %7llu  %s\n", label, static_cast<unsigned long long>(histogram[b]),
+                  std::string(std::max<std::size_t>(width, 1), '#').c_str());
+    }
+  }
+  std::printf("  checksum errors    %llu\n", static_cast<unsigned long long>(s.checksumErrors));
+  std::printf("  discarded bytes    %llu   in %llu resync(s)\n",
+              static_cast<unsigned long long>(s.discardedBytes),
+              static_cast<unsigned long long>(s.resyncs));
+  std::printf("  stale events       %llu   (stale after %.0f ms)\n",
+              static_cast<unsigned long long>(staleEvents), toMs(rx.getLink().getStaleAfter()));
+  std::string nibbles;
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (nibbleFrames[i] > 0) {
+      nibbles += " CH" + std::to_string(i + 1) + " (" + std::to_string(nibbleFrames[i]) +
+                 " frames)";
+    }
+  }
+  std::printf("  high nibble set    %s\n", nibbles.empty() ? "never" : nibbles.c_str());
+  if (s.framesDecoded == 0) {
+    printNoDataHint(rx);
+    return 1;
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -864,6 +961,9 @@ int main(int argc, char **argv) {
     }
     if (options.command == "record") {
       return runRecord(options);
+    }
+    if (options.command == "stats") {
+      return runStats(options);
     }
     std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
     usage(2);
