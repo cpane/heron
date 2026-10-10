@@ -122,7 +122,8 @@ int main() {
     check("knob: clamps below", normalizeKnob(0) == 0);
     check("knob: clamps above", normalizeKnob(0xFFFF) == 1000);
     check("knob: custom range", normalizeKnob(1550, 1100, 2000) == 500);
-    check("knob: empty range rejected", throwsInvalid([] { (void)normalizeKnob(1500, 1500, 1500); }));
+    check("knob: empty range rejected",
+          throwsInvalid([] { (void)normalizeKnob(1500, 1500, 1500); }));
   }
 
   std::printf("Switch\n");
