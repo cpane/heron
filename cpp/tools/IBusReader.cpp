@@ -67,6 +67,7 @@ struct Options {
   double seconds{0.0};        // 0 = until stopped (stats: 10)
   double windowS{4.0};        // identify: how long to move each control
   std::string out;            // identify, record: output file
+  double watchS{10.0};        // failsafe-test: how long to watch after the loss
 };
 
 /** Applies --seconds: true once it has elapsed since start. */
@@ -85,6 +86,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  identify       guided discovery of which control drives which channel\n"
                "  record         write every valid frame to CSV (default captures/ibus-<time>.csv)\n"
                "  stats          run quietly for --seconds (default 10), then summarize\n"
+               "  failsafe-test  guided test of what the link does when the transmitter is lost\n"
                "\n"
                "Options:\n"
                "  --device PATH  serial device (default /dev/serial0)\n"
@@ -96,6 +98,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  --decimate N   dump: print every Nth packet\n"
                "  --window S     identify: seconds to move each control (default 4)\n"
                "  --out FILE     identify: save the map to FILE; record: the CSV path\n"
+               "  --watch S      failsafe-test: seconds to watch after the loss (default 10)\n"
                "  -h, --help     this text\n");
   std::exit(status);
 }
@@ -151,6 +154,8 @@ Options parse(int argc, char **argv) {
       options.decimate = toInt(arg, value());
     } else if (arg == "--window") {
       options.windowS = toDouble(arg, value());
+    } else if (arg == "--watch") {
+      options.watchS = toDouble(arg, value());
     } else if (arg == "--out") {
       options.out = value();
     } else if (arg == "--seconds") {
@@ -169,6 +174,10 @@ Options parse(int argc, char **argv) {
   }
   if (options.count < 0 || options.decimate < 1) {
     std::fprintf(stderr, "ERROR: --count cannot be negative and --decimate must be at least 1\n");
+    usage(2);
+  }
+  if (options.watchS <= 0.0) {
+    std::fprintf(stderr, "ERROR: --watch must be positive\n");
     usage(2);
   }
   if (options.windowS <= 0.0) {
@@ -942,6 +951,311 @@ int runStats(const Options &options) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// failsafe-test
+
+/** Beyond the resting range by more than this counts as a change. */
+constexpr std::int32_t kChangeThreshold = 20;
+/** A stream silent this long has clearly stopped; no need to watch further. */
+constexpr auto kStoppedLongEnough = std::chrono::seconds(3);
+
+std::string describeValue(std::uint16_t raw) {
+  char text[64];
+  if (channelHighNibble(raw) != 0) {
+    std::snprintf(text, sizeof text, "0x%04X (%u, nibble 0x%X)", raw, channelValue(raw),
+                  channelHighNibble(raw));
+  } else {
+    std::snprintf(text, sizeof text, "%u", raw);
+  }
+  return text;
+}
+
+std::string localTimestamp() {
+  const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm local{};
+  localtime_r(&now, &local);
+  char text[32];
+  std::strftime(text, sizeof text, "%Y-%m-%d %H:%M", &local);
+  return text;
+}
+
+/** What happened in the watch window after the user said the link was going. */
+struct LossWatch {
+  std::uint64_t frames{0};
+  TimePoint lastFrame{};
+  bool wentStale{false};
+  TimePoint staleAt{};
+  TimePoint lastFrameBeforeStale{};
+  bool resumedAfterStale{false};
+  std::array<bool, kIBusChannelCount> changed{};
+  std::array<TimePoint, kIBusChannelCount> changedAt{};
+  IBusFrame final;
+};
+
+int runFailsafeTest(const Options &options) {
+  Receiver rx(options);
+  LineInput input;
+  std::printf(
+      "failsafe-test: what does the link do when the transmitter goes away?\n"
+      "\n"
+      "Before starting:\n"
+      "  1. Set the transmitter failsafe you want to test (FS-i6X: Functions setup >\n"
+      "     Failsafe). Run once with every channel Off, and once with a value set.\n"
+      "  2. Flip a switch away from its usual position and turn a knob off-centre, so\n"
+      "     'holds the last values' can be told apart from 'goes to failsafe values'.\n"
+      "  3. Then leave the controls alone until the test says otherwise.\n\n");
+  if (!waitForLink(rx)) {
+    return 0;
+  }
+  std::printf("Link OK.\n\n");
+
+  std::string setting;
+  std::string method;
+  std::printf("Transmitter failsafe setting being tested (e.g. 'all Off', 'CH3 -100%%'):\n> ");
+  std::fflush(stdout);
+  if (!waitForLine(rx, input, setting)) {
+    return 0;
+  }
+  std::printf("How will the link be lost? o = switch the transmitter off, r = carry it out\n"
+              "of range [o]:\n> ");
+  std::fflush(stdout);
+  if (!waitForLine(rx, input, method)) {
+    return 0;
+  }
+  const bool byRange = method == "r" || method == "R";
+
+  // Baseline: the resting range of every channel, and the frame rate.
+  std::printf("\nMeasuring the link at rest for 2 s; leave the controls alone...\n");
+  std::array<std::uint16_t, kIBusChannelCount> baseLo{};
+  std::array<std::uint16_t, kIBusChannelCount> baseHi{};
+  baseLo.fill(0xFFFF);
+  IBusFrame baseline;
+  rx.resetStats();
+  const TimePoint baseStart = Clock::now();
+  while (s_stopRequested == 0 && Clock::now() - baseStart < std::chrono::seconds(2)) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      baseline = f;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        baseLo[i] = std::min(baseLo[i], f.channels[i]);
+        baseHi[i] = std::max(baseHi[i], f.channels[i]);
+      }
+    });
+  }
+  const double baseHz = rx.getStats().frameRateHz();
+  if (s_stopRequested != 0 || !rx.getLink().isOk(Clock::now())) {
+    std::printf("The link was not steady during the baseline; start again.\n");
+    return 1;
+  }
+  std::printf("At rest: %.1f Hz. CH1-CH14:", baseHz);
+  for (const std::uint16_t v : baseline.channels) {
+    std::printf(" %u", v);
+  }
+  std::printf("\n\n");
+
+  if (byRange) {
+    std::printf("Press Enter as you start carrying the transmitter away, and keep going\n"
+                "until it is out of range. Watching for %g s after Enter.\n> ",
+                options.watchS);
+  } else {
+    std::printf("Press Enter and switch the transmitter OFF at the same moment.\n"
+                "Watching for %g s after Enter.\n> ",
+                options.watchS);
+  }
+  std::fflush(stdout);
+  std::string ignored;
+  if (!waitForLine(rx, input, ignored)) {
+    return 0;
+  }
+
+  LossWatch w;
+  const TimePoint t0 = Clock::now();
+  const auto watch = std::chrono::duration<double>(options.watchS);
+  rx.resetStats();
+  while (s_stopRequested == 0 && Clock::now() - t0 < watch) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      ++w.frames;
+      w.lastFrame = f.stamp;
+      w.final = f;
+      if (w.wentStale) {
+        w.resumedAfterStale = true;
+      }
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        const std::int32_t v = f.channels[i];
+        const bool outside = v < baseLo[i] - kChangeThreshold || v > baseHi[i] + kChangeThreshold;
+        if (!w.changed[i] && outside) {
+          w.changed[i] = true;
+          w.changedAt[i] = f.stamp;
+        }
+      }
+    });
+    const TimePoint now = Clock::now();
+    if (!w.wentStale && rx.getLink().getState(now) == LinkState::Stale) {
+      w.wentStale = true;
+      w.staleAt = now;
+      w.lastFrameBeforeStale = rx.getLink().getLastFrame();
+    }
+    if (w.wentStale && !w.resumedAfterStale && now - w.staleAt > kStoppedLongEnough) {
+      break;
+    }
+  }
+  if (s_stopRequested != 0) {
+    return 0;
+  }
+  const double watchedS = std::chrono::duration<double>(Clock::now() - t0).count();
+  const IBusStats lossStats = rx.getStats();
+
+  const bool anyChanged = std::any_of(w.changed.begin(), w.changed.end(), [](bool c) { return c; });
+  TimePoint firstChange = TimePoint::max();
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (w.changed[i]) {
+      firstChange = std::min(firstChange, w.changedAt[i]);
+    }
+  }
+  const bool somethingHappened = w.wentStale || anyChanged;
+
+  // Recovery, if there is anything to recover from.
+  std::printf("\nNow switch the transmitter back ON (or bring it back in range).\n%s",
+              somethingHappened ? "Watching for up to 20 s...\n" : "");
+  const TimePoint t1 = Clock::now();
+  bool resumed = false;
+  TimePoint resumedAt{};
+  bool restored = false;
+  TimePoint restoredAt{};
+  const std::uint64_t framesBefore = rx.getStats().framesDecoded;
+  while (somethingHappened && s_stopRequested == 0 &&
+         Clock::now() - t1 < std::chrono::seconds(20) && !restored) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      bool atRest = true;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        const std::int32_t v = f.channels[i];
+        atRest = atRest && v >= baseLo[i] - kChangeThreshold && v <= baseHi[i] + kChangeThreshold;
+      }
+      if (!resumed && rx.getStats().framesDecoded > framesBefore && w.wentStale) {
+        resumed = true;
+        resumedAt = f.stamp;
+      }
+      if (atRest) {
+        restored = true;
+        restoredAt = f.stamp;
+      }
+    });
+  }
+
+  // Classify and report.
+  bool anyNibble = false;
+  std::string valuesWhileLost;
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (channelHighNibble(w.final.channels[i]) != 0) {
+      anyNibble = true;
+    }
+    if (w.changed[i]) {
+      char row[160];
+      std::snprintf(row, sizeof row, "%sCH%zu %u -> %s (+%.0f ms)",
+                    valuesWhileLost.empty() ? "" : "; ", i + 1, baseline.channels[i],
+                    describeValue(w.final.channels[i]).c_str(), toMs(w.changedAt[i] - t0));
+      valuesWhileLost += row;
+    }
+  }
+  const double staleMs = toMs(rx.getLink().getStaleAfter());
+
+  std::string framesAfter;
+  std::string detect;
+  std::string verdict;
+  char text[256];
+  if (w.wentStale && !w.resumedAfterStale) {
+    const double lastMs = toMs(w.lastFrameBeforeStale - t0);
+    std::snprintf(text, sizeof text, "**stopped**: last frame %.0f ms after Enter", lastMs);
+    framesAfter = text;
+    std::snprintf(text, sizeof text, "stale rule (%.0f ms) fired %.0f ms after Enter", staleMs,
+                  toMs(w.staleAt - t0));
+    detect = text;
+    verdict = "STOPS. The stream stops, so the stale-link rule detects the loss.";
+  } else if (w.wentStale) {
+    std::snprintf(text, sizeof text,
+                  "**stopped, then resumed** within the watch: silent from %.0f ms after Enter",
+                  toMs(w.lastFrameBeforeStale - t0));
+    framesAfter = text;
+    std::snprintf(text, sizeof text, "stale rule (%.0f ms) fired %.0f ms after Enter", staleMs,
+                  toMs(w.staleAt - t0));
+    detect = text;
+    verdict = anyChanged ? "STOPS, THEN RESUMES WITH CHANGED VALUES. Look at the values below."
+                         : "STOPS, THEN RESUMES WITH THE SAME VALUES. Check the transmitter "
+                           "really stayed off.";
+  } else {
+    std::snprintf(text, sizeof text, "**continued**: %llu frames in %.1f s (%.1f Hz)",
+                  static_cast<unsigned long long>(w.frames), watchedS, lossStats.frameRateHz());
+    framesAfter = text;
+    if (anyChanged) {
+      std::snprintf(text, sizeof text,
+                    "**not by the stale rule**; values changed from %.0f ms after Enter",
+                    toMs(firstChange - t0));
+      detect = text;
+      verdict = anyNibble
+                    ? "CONTINUES WITH FAILSAFE VALUES, FLAGGED IN THE HIGH NIBBLE. The stale "
+                      "rule cannot see this; the values or the flag can."
+                    : "CONTINUES WITH FAILSAFE VALUES. The stale rule cannot see this; only "
+                      "recognising the failsafe values can.";
+    } else {
+      detect = "**not detectable**: frames and values carried on unchanged";
+      verdict = "CONTINUES WITH THE LAST VALUES (FROZEN). The stale rule cannot see this, and "
+                "nothing in the data shows it. Unsafe for robot control as configured. If the "
+                "transmitter was really off, set a failsafe value and test again.";
+    }
+  }
+  if (valuesWhileLost.empty()) {
+    valuesWhileLost = w.frames > 0 ? "unchanged from rest" : "none received";
+  }
+  if (anyNibble) {
+    valuesWhileLost += "; high nibble set";
+  }
+
+  std::string recovery;
+  if (restored) {
+    std::snprintf(text, sizeof text, "values back to rest %.1f s after the switch-on prompt",
+                  std::chrono::duration<double>(restoredAt - t1).count());
+    recovery = text;
+    if (resumed) {
+      std::snprintf(text, sizeof text, "; frames resumed after %.1f s",
+                    std::chrono::duration<double>(resumedAt - t1).count());
+      recovery += text;
+    }
+  } else if (resumed) {
+    std::snprintf(text, sizeof text,
+                  "frames resumed %.1f s after the prompt, values not back to rest within 20 s",
+                  std::chrono::duration<double>(resumedAt - t1).count());
+    recovery = text;
+  } else if (somethingHappened) {
+    recovery = "not within 20 s of the switch-on prompt";
+  } else {
+    recovery = "nothing to recover from";
+  }
+
+  std::printf("\nResult: %s\n", verdict.c_str());
+  std::printf("\n----- paste into docs/remote-ibus-protocol.md §5 -----\n\n");
+  std::printf("#### failsafe-test, %s\n\n", localTimestamp().c_str());
+  std::printf("| Item | Result |\n|---|---|\n");
+  std::printf("| Transmitter failsafe setting | %s |\n",
+              setting.empty() ? "(not given)" : setting.c_str());
+  std::printf("| Link lost by | %s |\n", byRange ? "carrying the transmitter out of range"
+                                                  : "switching the transmitter off");
+  std::printf("| Before the loss | %.1f Hz; CH1-14:", baseHz);
+  for (const std::uint16_t v : baseline.channels) {
+    std::printf(" %u", v);
+  }
+  std::printf(" |\n");
+  std::printf("| Frames after the loss | %s |\n", framesAfter.c_str());
+  std::printf("| Values while lost | %s |\n", valuesWhileLost.c_str());
+  std::printf("| Detecting the loss | %s |\n", detect.c_str());
+  std::printf("| Recovery | %s |\n", recovery.c_str());
+  std::printf("| Verdict | %s |\n", verdict.c_str());
+  std::printf("\nTimes are from pressing Enter, which was matched to the %s by hand: allow a\n"
+              "few hundred ms. Checksum errors during the watch: %llu.\n",
+              byRange ? "start of the walk" : "switch-off",
+              static_cast<unsigned long long>(lossStats.checksumErrors));
+  std::printf("\n----- end -----\n");
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -964,6 +1278,9 @@ int main(int argc, char **argv) {
     }
     if (options.command == "stats") {
       return runStats(options);
+    }
+    if (options.command == "failsafe-test") {
+      return runFailsafeTest(options);
     }
     std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
     usage(2);
