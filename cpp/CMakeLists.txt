@@ -77,7 +77,17 @@ target_link_libraries(heron_ibus PRIVATE heron_warnings)
 
 add_library(heron_ibus_port STATIC src/remote/IBusPort.cpp)
 target_include_directories(heron_ibus_port PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(heron_ibus_port PRIVATE heron_warnings)
+# PUBLIC heron_ibus: IBusReceiver.h (header-only, here) combines the port with
+# the parser and the link rule.
+target_link_libraries(heron_ibus_port PUBLIC heron_ibus PRIVATE heron_warnings)
+
+# What robot code links: RemoteControl, a reader thread publishing the newest
+# frame and link state, shaped like heron_lidar. docs/remote-cpp-design.md.
+find_package(Threads REQUIRED)
+add_library(heron_remote STATIC src/remote/RemoteControl.cpp)
+target_link_libraries(heron_remote
+    PUBLIC heron_ibus_port
+    PRIVATE Threads::Threads heron_warnings)
 
 # -- tests -------------------------------------------------------------------
 
@@ -88,6 +98,10 @@ add_test(NAME ibus_parser_test COMMAND ibus_parser_test)
 add_executable(normalize_test tests/NormalizeTest.cpp)
 target_link_libraries(normalize_test PRIVATE heron_ibus heron_warnings)
 add_test(NAME normalize_test COMMAND normalize_test)
+
+add_executable(remote_control_test tests/RemoteControlTest.cpp)
+target_link_libraries(remote_control_test PRIVATE heron_remote Threads::Threads heron_warnings)
+add_test(NAME remote_control_test COMMAND remote_control_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -139,6 +153,11 @@ target_link_libraries(lidar_adapter PRIVATE heron_lidar heron_warnings)
 add_executable(lidar_nearest probes/LidarNearest.cpp)
 target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 
+# RemoteControl, live: what a 50 Hz robot loop sees. Links only heron_remote,
+# like robot code, so it also proves that library stands on its own.
+add_executable(remote_adapter probes/RemoteAdapter.cpp)
+target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
+
 # -- tools -----------------------------------------------------------------------
 #
 # Programs for working with the LiDAR from the host. The viewer server serves
@@ -150,4 +169,4 @@ target_link_libraries(lidar_gui_server PRIVATE heron_lidar heron_warnings)
 # FlySky iBUS reader: learning and debugging the remote control link from the
 # Pi's UART. Links the two iBUS libraries above, as robot code would.
 add_executable(ibus_reader tools/IBusReader.cpp)
-target_link_libraries(ibus_reader PRIVATE heron_ibus heron_ibus_port heron_warnings)
+target_link_libraries(ibus_reader PRIVATE heron_ibus_port heron_warnings)
