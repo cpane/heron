@@ -123,6 +123,13 @@ std::size_t IBusPort::read(std::span<std::uint8_t> buffer, std::chrono::millisec
     }
     throwErrno("read() : read failed on " + m_config.device);
   }
+  if (n == 0) {
+    // poll() said readable and there was nothing: end of file, which is how
+    // a vanished device (a hung-up pty, an unplugged USB adapter) shows up.
+    // Returning 0 here would turn the caller's loop into a busy loop.
+    errno = EIO;
+    throwErrno("read() : device hung up: " + m_config.device);
+  }
   return static_cast<std::size_t>(n);
 }
 
