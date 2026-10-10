@@ -62,7 +62,32 @@ target_link_libraries(heron_lidar
     PUBLIC heron_lidar_types
     PRIVATE heron_scan_builder heron_lidar_channels heron_warnings)
 
+# -- remote control: FlySky iBUS ----------------------------------------------
+#
+# Independent of everything above. heron_ibus is pure -- frame parser, stats,
+# the stale-link rule, normalization -- and does no I/O, so the tests drive it
+# with bytes. heron_ibus_port is the receive-only termios port. They are
+# separate so a consumer, or a test, can take the parser without the port.
+# See docs/remote-ibus-protocol.md.
+add_library(heron_ibus STATIC
+    src/remote/IBusParser.cpp
+    src/remote/Normalize.cpp)
+target_include_directories(heron_ibus PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_ibus PRIVATE heron_warnings)
+
+add_library(heron_ibus_port STATIC src/remote/IBusPort.cpp)
+target_include_directories(heron_ibus_port PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_ibus_port PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
+
+add_executable(ibus_parser_test tests/IBusParserTest.cpp)
+target_link_libraries(ibus_parser_test PRIVATE heron_ibus heron_warnings)
+add_test(NAME ibus_parser_test COMMAND ibus_parser_test)
+
+add_executable(normalize_test tests/NormalizeTest.cpp)
+target_link_libraries(normalize_test PRIVATE heron_ibus heron_warnings)
+add_test(NAME normalize_test COMMAND normalize_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -122,7 +147,7 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 add_executable(lidar_gui_server tools/LidarGuiServer.cpp)
 target_link_libraries(lidar_gui_server PRIVATE heron_lidar heron_warnings)
 
-# FlySky iBUS reader: prints the remote control receiver's channels from the
-# Pi's UART. A hardware check, standard library and POSIX only, no LiDAR.
+# FlySky iBUS reader: learning and debugging the remote control link from the
+# Pi's UART. Links the two iBUS libraries above, as robot code would.
 add_executable(ibus_reader tools/IBusReader.cpp)
-target_link_libraries(ibus_reader PRIVATE heron_warnings)
+target_link_libraries(ibus_reader PRIVATE heron_ibus heron_ibus_port heron_warnings)
