@@ -11,7 +11,9 @@
 //     build-host/bin/ibus_reader monitor --device /tmp/ibus   (with ibus_fake.py)
 //
 // A bench tool, so it prints; the reusable parts (port, parser, stats, link
-// rule, normalization) are in heron_ibus and heron_ibus_port and do not.
+// rule, normalization, IBusReceiver) are in heron_ibus and heron_ibus_port
+// and do not. It reads synchronously because dump, record and stats need
+// every frame; robot code uses RemoteControl instead.
 // Receive-only: the port is opened read-only. Subcommands and their output
 // are described in docs/remote-ibus-reader.md, the protocol in
 // docs/remote-ibus-protocol.md.
@@ -37,7 +39,7 @@
 #include <unistd.h>
 
 #include "heron/remote/IBusParser.h"
-#include "heron/remote/IBusPort.h"
+#include "heron/remote/IBusReceiver.h"
 #include "heron/remote/LinkMonitor.h"
 
 namespace {
@@ -197,46 +199,17 @@ Options parse(int argc, char **argv) {
 }
 
 // ---------------------------------------------------------------------------
-// The receiver: port, parser and link rule, as every command uses them
+// The receiver
 
-class Receiver {
-  public:
-    explicit Receiver(const Options &options)
-        : m_port(options.serial), m_link(options.staleAfter) {}
-
-    /**
-     * Waits up to timeout for bytes and decodes them.
-     * @return Frames decoded
-     */
-    std::size_t pump(milliseconds timeout, const IBusParser::FrameHandler &onFrame = {}) {
-      const std::size_t n = m_port.read(m_buf, timeout);
-      if (n > 0) {
-        m_sawBytes = true;
-      }
-      return m_parser.feed(std::span(m_buf.data(), n), Clock::now(), [&](const IBusFrame &f) {
-        m_link.onFrame(f.stamp);
-        if (onFrame) {
-          onFrame(f);
-        }
-      });
-    }
-
-    [[nodiscard]] const IBusStats &getStats() const noexcept { return m_parser.getStats(); }
-    void resetStats() noexcept { m_parser.resetStats(); }
-    [[nodiscard]] const LinkMonitor &getLink() const noexcept { return m_link; }
-    [[nodiscard]] bool sawBytes() const noexcept { return m_sawBytes; }
-    [[nodiscard]] const SerialConfig &getConfig() const noexcept { return m_port.getConfig(); }
-
-  private:
-    IBusPort m_port;
-    IBusParser m_parser;
-    LinkMonitor m_link;
-    std::array<std::uint8_t, 256> m_buf{};
-    bool m_sawBytes{false};
-};
+ReceiverConfig receiverConfig(const Options &options) {
+  ReceiverConfig config;
+  config.serial = options.serial;
+  config.staleAfter = options.staleAfter;
+  return config;
+}
 
 /** The likely causes when no valid frame arrives, depending on whether any bytes did. */
-void printNoDataHint(const Receiver &rx) {
+void printNoDataHint(const IBusReceiver &rx) {
   const char *device = rx.getConfig().device.c_str();
   if (!rx.sawBytes()) {
     std::fprintf(stderr,
@@ -263,7 +236,7 @@ void printNoDataHint(const Receiver &rx) {
 /** Says so, once, when no frame has arrived kNoDataHintAfter after start. */
 class NoDataWatch {
   public:
-    void check(const Receiver &rx, TimePoint now) {
+    void check(const IBusReceiver &rx, TimePoint now) {
       if (!m_hinted && !rx.getLink().hasFrame() && now - m_start > kNoDataHintAfter) {
         printNoDataHint(rx);
         m_hinted = true;
@@ -399,7 +372,7 @@ class LineInput {
  * Keeps the receiver running until a line is typed.
  * @return false if stdin closed or a signal asked to stop
  */
-bool waitForLine(Receiver &rx, LineInput &input, std::string &line) {
+bool waitForLine(IBusReceiver &rx, LineInput &input, std::string &line) {
   while (s_stopRequested == 0) {
     if (input.poll(line)) {
       return true;
@@ -416,7 +389,7 @@ bool waitForLine(Receiver &rx, LineInput &input, std::string &line) {
  * Waits for the link to come up, saying what to check if it does not.
  * @return false if a signal asked to stop first
  */
-bool waitForLink(Receiver &rx) {
+bool waitForLink(IBusReceiver &rx) {
   NoDataWatch noData;
   const TimePoint start = Clock::now();
   bool told = false;
@@ -468,7 +441,7 @@ std::string bar(std::uint16_t raw) {
 }
 
 int runMonitor(const Options &options) {
-  Receiver rx(options);
+  IBusReceiver rx(receiverConfig(options));
   KeyMode keys;
   FullScreen screen;
   const bool color = isatty(STDOUT_FILENO) != 0;
@@ -590,7 +563,7 @@ int runMonitor(const Options &options) {
 // dump
 
 /** Totals for the line-mode commands, on stderr so stdout stays data. */
-void printSummary(const Receiver &rx, const char *what) {
+void printSummary(const IBusReceiver &rx, const char *what) {
   const IBusStats &s = rx.getStats();
   std::fprintf(stderr,
                "%s: %llu frames decoded, %llu checksum errors, %llu bytes discarded in "
@@ -602,7 +575,7 @@ void printSummary(const Receiver &rx, const char *what) {
 }
 
 int runDump(const Options &options) {
-  Receiver rx(options);
+  IBusReceiver rx(receiverConfig(options));
   NoDataWatch noData;
   const TimePoint start = Clock::now();
   std::int64_t seen = 0;
@@ -672,7 +645,7 @@ std::string mapTable(const std::vector<MapEntry> &entries) {
 }
 
 int runIdentify(const Options &options) {
-  Receiver rx(options);
+  IBusReceiver rx(receiverConfig(options));
   LineInput input;
   std::printf("identify: find which channel each transmitter control drives.\n"
               "For each control: type a name for it, press Enter, then move that ONE\n"
@@ -804,7 +777,7 @@ int runRecord(const Options &options) {
   if (!parent.empty()) {
     std::filesystem::create_directories(parent);
   }
-  Receiver rx(options);  // open the port first: no empty file if it fails
+  IBusReceiver rx(receiverConfig(options));  // opened first: no empty file if it fails
   std::FILE *file = std::fopen(path.c_str(), "w");
   if (file == nullptr) {
     std::fprintf(stderr, "ERROR: cannot write %s\n", path.c_str());
@@ -867,7 +840,7 @@ int runStats(const Options &options) {
     timed.seconds = kDefaultSeconds;
   }
 
-  Receiver rx(timed);
+  IBusReceiver rx(receiverConfig(timed));
   NoDataWatch noData;
   std::array<std::uint64_t, kBins> histogram{};
   std::array<std::uint64_t, kIBusChannelCount> nibbleFrames{};
@@ -994,7 +967,7 @@ struct LossWatch {
 };
 
 int runFailsafeTest(const Options &options) {
-  Receiver rx(options);
+  IBusReceiver rx(receiverConfig(options));
   LineInput input;
   std::printf(
       "failsafe-test: what does the link do when the transmitter goes away?\n"
