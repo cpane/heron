@@ -121,3 +121,8 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 # heron_lidar, like robot code.
 add_executable(lidar_gui_server tools/LidarGuiServer.cpp)
 target_link_libraries(lidar_gui_server PRIVATE heron_lidar heron_warnings)
+
+# FlySky iBUS reader: prints the remote control receiver's channels from the
+# Pi's UART. A hardware check, standard library and POSIX only, no LiDAR.
+add_executable(ibus_reader tools/IBusReader.cpp)
+target_link_libraries(ibus_reader PRIVATE heron_warnings)

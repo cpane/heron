@@ -189,6 +189,7 @@ include path. The boundary is enforced by the build. Rationale in
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
 | `lidar_info`, `lidar_record`, `lidar_adapter`, `lidar_nearest` | `cpp/probes/` | on-target programs |
 | `lidar_gui_server` | `cpp/tools/` | serves the library to the viewer |
+| `ibus_reader` | `cpp/tools/` | prints FlySky iBUS channels from the Pi's UART; a remote-control hardware check |
 
 ## Two things the first hardware run established
 
