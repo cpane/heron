@@ -55,7 +55,7 @@ Wiring: the receiver's iBUS SERVO signal goes to GPIO15 (RXD, physical pin
 | Data bits / parity | 8, none | **[community]**; **[ours]** consistent with the checksum passing |
 | Stop bits | **1 (8N1)** | **[community]** see below; **[ours]** 8N1 decodes |
 | Frame length | 32 bytes | **[community]**; **[ours]** |
-| Frame interval | **about 7.7 ms** (about 130 frames/s) | **[ours]** `monitor` showed 129.9 Hz and `dump --decimate 50` 385 ms per 50 frames, on the Pi; **[community]** basejunction also measured about 7.7 ms; other sources say "about 7 ms" |
+| Frame interval | **7.70 ms** (129.9 frames/s), very regular | **[ours]** `stats`, below; **[community]** basejunction also measured about 7.7 ms; other sources say "about 7 ms", possibly describing the SENS port's poll cycle |
 | Byte time | about 87 µs at 8N1; a frame is about 2.8 ms on the wire | arithmetic |
 
 **Stop bits: 8N1 or 8N2.** 8N2 is sometimes quoted for iBUS, but **none of
@@ -76,6 +76,21 @@ measurement of the gap between bytes settles it.
 **Timing at the Pi.** Frame stamps are taken when `read()` returns, so the
 interval statistics include the Pi's scheduling jitter as well as the
 receiver's own timing.
+
+**Measured 2026-10-10** with `ibus_reader stats --seconds 30` on the Pi,
+transmitter on, controls at rest **[ours]**:
+
+| Measure | Value |
+|---|---|
+| Frames | 3896 in 30.0 s, **129.9 Hz** |
+| Interval | min 7.66, **mean 7.70**, max 7.73 ms, std dev 0.01 ms |
+| Checksum errors | 0 |
+| Discarded bytes | 20, in 1 resync: the partial frame in flight when the port opened |
+| Bytes received | 124692 = 3896 × 32 + 20, so **the SERVO line carries nothing but channel frames** |
+| High nibble | never set |
+
+Even with read-time stamps the interval spread is only ±0.04 ms, so the
+receiver's frame clock is very regular, and an idle Pi adds little jitter.
 
 ## 3. Packet layout
 
@@ -336,8 +351,9 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
    transmitter's failsafe Off and with a value set? Does bit `0x2000` appear?
 2. **Stop bits:** a scope measurement of the gap between bytes would show
    whether the receiver sends one stop bit or two.
-3. **Frame interval jitter** at the Pi (`stats`). The mean is about 7.7 ms
-   **[ours]**.
+3. **Interval under load:** 7.70 ms ± 0.04 ms on an idle Pi **[ours]**. How
+   much does it spread with the LiDAR and the robot running?
 4. **The channel map (§4)**, and whether the i6X should be set to 10
    channels.
-5. **The high nibble:** is it ever non-zero on our receiver outside failsafe?
+5. **The high nibble:** never set in 3896 frames at rest **[ours]**. Does it
+   appear in failsafe?
