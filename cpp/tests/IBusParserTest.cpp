@@ -87,11 +87,25 @@ int main() {
   std::printf("iBUS parser\n");
 
   {
-    // Synthetic. A frame captured from the real receiver joins this test once
-    // `ibus_reader dump` has been run on the Pi (docs/RESUME-remote.md).
     const Bytes f = makeFrame(ramp());
     check("checksum: matches an independent computation",
           IBusParser::checksum(f) == static_cast<std::uint16_t>(f[30] | (f[31] << 8)));
+  }
+
+  {
+    // Captured from our FS-iA6B with `ibus_reader dump` on the Pi, 2026-10-10:
+    // the worked example in docs/remote-ibus-protocol.md §3.
+    const Bytes real = {0x20, 0x40, 0xDE, 0x05, 0xDC, 0x05, 0x7E, 0x04, 0xDC, 0x05, 0x93,
+                        0x07, 0x7D, 0x07, 0xDC, 0x05, 0xDC, 0x05, 0xDC, 0x05, 0xDC, 0x05,
+                        0xDC, 0x05, 0xDC, 0x05, 0xDC, 0x05, 0xDC, 0x05, 0x52, 0xF4};
+    IBusParser p;
+    Collector c;
+    p.feed(real, kT0, c.handler());
+    const Channels expected = {1502, 1500, 1150, 1500, 1939, 1917, 1500,
+                               1500, 1500, 1500, 1500, 1500, 1500, 1500};
+    check("real frame: checksum is 0xF452", IBusParser::checksum(real) == 0xF452);
+    check("real frame: decodes to the captured channels",
+          c.frames.size() == 1 && c.frames[0].channels == expected);
   }
 
   {

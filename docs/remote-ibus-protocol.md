@@ -55,7 +55,7 @@ Wiring: the receiver's iBUS SERVO signal goes to GPIO15 (RXD, physical pin
 | Data bits / parity | 8, none | **[community]**; **[ours]** consistent with the checksum passing |
 | Stop bits | **1 (8N1)** | **[community]** see below; **[ours]** 8N1 decodes |
 | Frame length | 32 bytes | **[community]**; **[ours]** |
-| Frame interval | about 7–7.7 ms | **[community]**; **[ours]** to be measured with `stats` |
+| Frame interval | **about 7.7 ms** (about 130 frames/s) | **[ours]** `monitor` showed 129.9 Hz and `dump --decimate 50` 385 ms per 50 frames, on the Pi; **[community]** basejunction also measured about 7.7 ms; other sources say "about 7 ms" |
 | Byte time | about 87 µs at 8N1; a frame is about 2.8 ms on the wire | arithmetic |
 
 **Stop bits: 8N1 or 8N2.** 8N2 is sometimes quoted for iBUS, but **none of
@@ -101,9 +101,34 @@ false starts while resyncing.
 
 ### Checksum, worked example
 
-> **Pending.** This example will use a real frame captured from our receiver
-> with `ibus_reader dump`, so the arithmetic below can be checked against the
-> bytes the Pi actually received.
+A frame captured from our receiver with `ibus_reader dump` on 2026-10-10,
+transmitter on, controls at rest **[ours]**:
+
+```
+20 40 DE 05 DC 05 7E 04 DC 05 93 07 7D 07 DC 05 DC 05 DC 05 DC 05 DC 05 DC 05 DC 05 DC 05 52 F4
+```
+
+| Bytes | Hex | Meaning |
+|---|---|---|
+| 0–1 | `20 40` | header |
+| 2–3 | `DE 05` | CH1 = `0x05DE` = 1502 |
+| 4–5 | `DC 05` | CH2 = 1500 |
+| 6–7 | `7E 04` | CH3 = `0x047E` = 1150 |
+| 8–9 | `DC 05` | CH4 = 1500 |
+| 10–11 | `93 07` | CH5 = `0x0793` = 1939 |
+| 12–13 | `7D 07` | CH6 = `0x077D` = 1917 |
+| 14–29 | `DC 05` × 8 | CH7–CH14 = 1500 (unused) |
+| 30–31 | `52 F4` | checksum = `0xF452` |
+
+The checksum, step by step:
+
+1. Sum bytes 0–29 as unsigned bytes: `0x20 + 0x40` = 96 for the header, plus
+   2893 for the 28 channel bytes, gives **2989** (`0x0BAD`).
+2. Subtract from `0xFFFF`: `0xFFFF − 0x0BAD` = **`0xF452`**.
+3. It is sent low byte first: `52 F4`. That matches bytes 30–31.
+
+Equivalently, the sum of bytes 0–29 plus the 16-bit checksum is `0xFFFF`.
+`IBusParserTest` decodes this exact frame.
 
 ### How a reader resyncs
 
@@ -311,8 +336,8 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
    transmitter's failsafe Off and with a value set? Does bit `0x2000` appear?
 2. **Stop bits:** a scope measurement of the gap between bytes would show
    whether the receiver sends one stop bit or two.
-3. **Frame interval:** 7.0 or 7.7 ms, and how much jitter there is at the Pi
-   (`stats`).
+3. **Frame interval jitter** at the Pi (`stats`). The mean is about 7.7 ms
+   **[ours]**.
 4. **The channel map (§4)**, and whether the i6X should be set to 10
    channels.
 5. **The high nibble:** is it ever non-zero on our receiver outside failsafe?
