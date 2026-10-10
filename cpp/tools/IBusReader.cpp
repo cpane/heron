@@ -28,6 +28,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include <poll.h>
 #include <termios.h>
@@ -62,6 +63,8 @@ struct Options {
   std::int64_t count{0};      // dump: frames to print, 0 = unlimited
   std::int64_t decimate{1};   // dump: print every Nth frame
   double seconds{0.0};        // 0 = until stopped (stats: 10)
+  double windowS{4.0};        // identify: how long to move each control
+  std::string out;            // identify, record: output file
 };
 
 /** Applies --seconds: true once it has elapsed since start. */
@@ -77,6 +80,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "Commands:\n"
                "  monitor        live display of all 14 channels (r: reset min/max, q: quit)\n"
                "  dump           each raw packet as hex plus its decoded channels\n"
+               "  identify       guided discovery of which control drives which channel\n"
                "\n"
                "Options:\n"
                "  --device PATH  serial device (default /dev/serial0)\n"
@@ -86,6 +90,8 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  --seconds S    stop after S seconds\n"
                "  --count N      dump: stop after printing N packets\n"
                "  --decimate N   dump: print every Nth packet\n"
+               "  --window S     identify: seconds to move each control (default 4)\n"
+               "  --out FILE     identify: also save the map to FILE\n"
                "  -h, --help     this text\n");
   std::exit(status);
 }
@@ -139,6 +145,10 @@ Options parse(int argc, char **argv) {
       options.count = toInt(arg, value());
     } else if (arg == "--decimate") {
       options.decimate = toInt(arg, value());
+    } else if (arg == "--window") {
+      options.windowS = toDouble(arg, value());
+    } else if (arg == "--out") {
+      options.out = value();
     } else if (arg == "--seconds") {
       options.seconds = toDouble(arg, value());
     } else if (arg == "--baud") {
@@ -155,6 +165,10 @@ Options parse(int argc, char **argv) {
   }
   if (options.count < 0 || options.decimate < 1) {
     std::fprintf(stderr, "ERROR: --count cannot be negative and --decimate must be at least 1\n");
+    usage(2);
+  }
+  if (options.windowS <= 0.0) {
+    std::fprintf(stderr, "ERROR: --window must be positive\n");
     usage(2);
   }
   if (options.seconds < 0.0) {
@@ -317,6 +331,96 @@ class FullScreen {
   private:
     bool m_active;
 };
+
+/**
+ * Lines typed on stdin, read without blocking so the caller can keep reading
+ * the receiver while it waits. Works on a terminal or a pipe.
+ */
+class LineInput {
+  public:
+    /**
+     * @param line Set to the next complete line, without its newline
+     * @return true if a line was available
+     */
+    bool poll(std::string &line) {
+      for (;;) {
+        const std::size_t nl = m_pending.find('\n');
+        if (nl != std::string::npos) {
+          line = m_pending.substr(0, nl);
+          m_pending.erase(0, nl + 1);
+          if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+          }
+          return true;
+        }
+        if (m_eof) {
+          return false;
+        }
+        pollfd pfd{STDIN_FILENO, POLLIN, 0};
+        if (::poll(&pfd, 1, 0) <= 0) {
+          return false;
+        }
+        char chunk[256];
+        const ssize_t n = ::read(STDIN_FILENO, chunk, sizeof chunk);
+        if (n <= 0) {
+          m_eof = true;  // treat a closed stdin as "finish"
+          if (!m_pending.empty()) {
+            m_pending.push_back('\n');
+            continue;
+          }
+          return false;
+        }
+        m_pending.append(chunk, static_cast<std::size_t>(n));
+      }
+    }
+
+    [[nodiscard]] bool isClosed() const noexcept { return m_eof && m_pending.empty(); }
+
+  private:
+    std::string m_pending;
+    bool m_eof{false};
+};
+
+/**
+ * Keeps the receiver running until a line is typed.
+ * @return false if stdin closed or a signal asked to stop
+ */
+bool waitForLine(Receiver &rx, LineInput &input, std::string &line) {
+  while (s_stopRequested == 0) {
+    if (input.poll(line)) {
+      return true;
+    }
+    if (input.isClosed()) {
+      return false;
+    }
+    rx.pump(kPumpTimeout);
+  }
+  return false;
+}
+
+/**
+ * Waits for the link to come up, saying what to check if it does not.
+ * @return false if a signal asked to stop first
+ */
+bool waitForLink(Receiver &rx) {
+  NoDataWatch noData;
+  const TimePoint start = Clock::now();
+  bool told = false;
+  while (s_stopRequested == 0) {
+    rx.pump(kPumpTimeout);
+    const TimePoint now = Clock::now();
+    if (rx.getLink().isOk(now)) {
+      return true;
+    }
+    if (!told && now - start > milliseconds(500)) {
+      std::printf("Waiting for the receiver (switch the transmitter on)...\n");
+      std::fflush(stdout);
+      told = true;
+    }
+    noData.check(rx, now);
+  }
+  return false;
+}
 
 double toMs(Duration d) {
   return std::chrono::duration<double, std::milli>(d).count();
@@ -526,6 +630,146 @@ int runDump(const Options &options) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// identify
+
+/** A channel must swing at least this far to count as moved: well above the
+ *  one or two counts of jitter a resting control shows. */
+constexpr std::int32_t kMinMoveSpan = 100;
+
+struct MapEntry {
+  std::string control;
+  std::size_t channel{0};  // 0-based
+  std::uint16_t lo{0};
+  std::uint16_t hi{0};
+  std::string notes;
+};
+
+std::string mapTable(const std::vector<MapEntry> &entries) {
+  std::string out = "| Control on the FS-i6X | Channel | Range seen | Notes |\n"
+                    "|---|---|---|---|\n";
+  char row[256];
+  for (const MapEntry &e : entries) {
+    std::snprintf(row, sizeof row, "| %s | CH%zu | %u..%u | %s |\n", e.control.c_str(),
+                  e.channel + 1, e.lo, e.hi, e.notes.c_str());
+    out += row;
+  }
+  return out;
+}
+
+int runIdentify(const Options &options) {
+  Receiver rx(options);
+  LineInput input;
+  std::printf("identify: find which channel each transmitter control drives.\n"
+              "For each control: type a name for it, press Enter, then move that ONE\n"
+              "control end to end a few times within %g s. Leave the others alone.\n\n",
+              options.windowS);
+  if (!waitForLink(rx)) {
+    return 0;
+  }
+  std::printf("Link OK.\n");
+
+  std::vector<MapEntry> entries;
+  std::string line;
+  for (;;) {
+    std::printf("\nControl %zu: name it (e.g. 'right stick left-right', 'SwA', 'VrB') and\n"
+                "press Enter; an empty name numbers it; q finishes.\n> ",
+                entries.size() + 1);
+    std::fflush(stdout);
+    if (!waitForLine(rx, input, line) || line == "q" || line == "Q") {
+      break;
+    }
+    MapEntry entry;
+    entry.control = line.empty() ? "control " + std::to_string(entries.size() + 1) : line;
+
+    std::array<std::uint16_t, kIBusChannelCount> lo{};
+    std::array<std::uint16_t, kIBusChannelCount> hi{};
+    lo.fill(0xFFFF);
+    std::uint64_t frames = 0;
+    bool wentStale = false;
+    const TimePoint begin = Clock::now();
+    const auto window = std::chrono::duration<double>(options.windowS);
+    std::int64_t lastShown = -1;
+    std::printf("Move '%s' now: ", entry.control.c_str());
+    while (s_stopRequested == 0 && Clock::now() - begin < window) {
+      rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+        ++frames;
+        for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+          lo[i] = std::min(lo[i], f.channels[i]);
+          hi[i] = std::max(hi[i], f.channels[i]);
+        }
+      });
+      const TimePoint now = Clock::now();
+      wentStale = wentStale || !rx.getLink().isOk(now);
+      const auto left = static_cast<std::int64_t>(
+          std::chrono::duration<double>(window - (now - begin)).count() + 0.999);
+      if (left != lastShown && left > 0) {
+        std::printf("%lld ", static_cast<long long>(left));
+        std::fflush(stdout);
+        lastShown = left;
+      }
+    }
+    std::printf("\n");
+    if (s_stopRequested != 0) {
+      break;
+    }
+    if (wentStale || frames == 0) {
+      std::printf("The link dropped during the window; try that control again.\n");
+      continue;
+    }
+
+    std::array<std::size_t, kIBusChannelCount> order{};
+    for (std::size_t i = 0; i < order.size(); ++i) {
+      order[i] = i;
+    }
+    auto span = [&](std::size_t i) { return static_cast<std::int32_t>(hi[i]) - lo[i]; };
+    std::sort(order.begin(), order.end(),
+              [&](std::size_t a, std::size_t b) { return span(a) > span(b); });
+    if (span(order[0]) < kMinMoveSpan) {
+      std::printf("No channel moved more than %d counts; try that control again.\n",
+                  kMinMoveSpan);
+      continue;
+    }
+
+    entry.channel = order[0];
+    entry.lo = lo[order[0]];
+    entry.hi = hi[order[0]];
+    std::printf("CH%zu moved (%u..%u)\n", entry.channel + 1, entry.lo, entry.hi);
+    for (std::size_t k = 1; k < order.size() && span(order[k]) >= kMinMoveSpan; ++k) {
+      char also[64];
+      std::snprintf(also, sizeof also, "also CH%zu (%u..%u)", order[k] + 1, lo[order[k]],
+                    hi[order[k]]);
+      std::printf("  %s -- a mix, or more than one control moved\n", also);
+      entry.notes += entry.notes.empty() ? also : std::string("; ") + also;
+    }
+    for (const MapEntry &e : entries) {
+      if (e.channel == entry.channel) {
+        std::printf("  note: CH%zu was already found for '%s'\n", entry.channel + 1,
+                    e.control.c_str());
+      }
+    }
+    entries.push_back(entry);
+  }
+
+  if (entries.empty()) {
+    std::printf("\nNo controls identified.\n");
+    return 0;
+  }
+  const std::string table = mapTable(entries);
+  std::printf("\nChannel map -- for docs/remote-ibus-protocol.md §4:\n\n%s", table.c_str());
+  if (!options.out.empty()) {
+    std::FILE *file = std::fopen(options.out.c_str(), "w");
+    if (file == nullptr) {
+      std::fprintf(stderr, "ERROR: cannot write %s\n", options.out.c_str());
+      return 1;
+    }
+    std::fputs(table.c_str(), file);
+    std::fclose(file);
+    std::printf("\nSaved to %s\n", options.out.c_str());
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -539,6 +783,9 @@ int main(int argc, char **argv) {
     }
     if (options.command == "dump") {
       return runDump(options);
+    }
+    if (options.command == "identify") {
+      return runIdentify(options);
     }
     std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
     usage(2);
