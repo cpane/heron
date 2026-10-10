@@ -268,6 +268,54 @@ udevadm control --reload-rules
 # Re-trigger tty devices so the symlinks appear without unplugging anything.
 udevadm trigger --subsystem-match=tty --action=add
 
+#
+# GPIO UART for the remote control receiver
+#
+
+echo
+echo "Configuring the GPIO UART (/dev/serial0) for the iBUS receiver..."
+
+BOOT_DIR="/boot/firmware"
+BOOT_CONFIG="${BOOT_DIR}/config.txt"
+BOOT_CMDLINE="${BOOT_DIR}/cmdline.txt"
+UART_MARKER="# heron: GPIO UART for the iBUS receiver"
+REBOOT_NEEDED=0
+
+# On a stock image the GPIO UART is unusable: enable_uart is unset, so the
+# mini UART is off (8250.nr_uarts=0), and the Pi 3's PL011 is claimed by the
+# Bluetooth chip through serdev, which exposes no tty at all. /dev/serial0
+# did not exist (measured 2026-10-10). Heron has no use for Bluetooth, so
+# disable-bt gives the PL011 to GPIO14/15 as ttyAMA0, and serial0 points at
+# it. That is the better UART: miniuart-bt would keep Bluetooth, but the mini
+# UART's baud rate follows the core clock.
+#
+# [all] is repeated because the stock file ends in a model filter section,
+# and anything appended after one applies to that model only.
+if ! grep -qF "${UART_MARKER}" "${BOOT_CONFIG}"; then
+    {
+        echo
+        echo "${UART_MARKER}"
+        echo "[all]"
+        echo "enable_uart=1"
+        echo "dtoverlay=disable-bt"
+    } >> "${BOOT_CONFIG}"
+    REBOOT_NEEDED=1
+fi
+
+# The image puts the kernel console on serial0, which once enabled would put
+# boot messages on the receiver's line and a login prompt behind it. Only the
+# serial consoles are removed; console=tty1 stays.
+if grep -qE 'console=(serial0|ttyAMA0|ttyS0),[0-9]+' "${BOOT_CMDLINE}"; then
+    sed -i -E 's/console=(serial0|ttyAMA0|ttyS0),[0-9]+ ?//g' "${BOOT_CMDLINE}"
+    REBOOT_NEEDED=1
+fi
+
+# With the controller's UART taken away, the Bluetooth service has nothing
+# to drive.
+if systemctl is-enabled --quiet bluetooth.service 2>/dev/null; then
+    systemctl disable --now bluetooth.service
+fi
+
 echo
 echo "Final routing table:"
 ip route
@@ -334,4 +382,10 @@ echo "========================================"
 echo
 echo "NOTE:"
 echo "Group membership changes take effect on the user's next login."
+
+if [[ "${REBOOT_NEEDED}" -eq 1 ]]; then
+    echo
+    echo "REBOOT REQUIRED: the boot configuration changed (GPIO UART)."
+    echo "  sudo reboot"
+fi
 
