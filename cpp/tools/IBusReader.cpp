@@ -23,7 +23,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <exception>
+#include <filesystem>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -81,6 +83,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  monitor        live display of all 14 channels (r: reset min/max, q: quit)\n"
                "  dump           each raw packet as hex plus its decoded channels\n"
                "  identify       guided discovery of which control drives which channel\n"
+               "  record         write every valid frame to CSV (default captures/ibus-<time>.csv)\n"
                "\n"
                "Options:\n"
                "  --device PATH  serial device (default /dev/serial0)\n"
@@ -91,7 +94,7 @@ bool timeUp(const Options &options, TimePoint start, TimePoint now) {
                "  --count N      dump: stop after printing N packets\n"
                "  --decimate N   dump: print every Nth packet\n"
                "  --window S     identify: seconds to move each control (default 4)\n"
-               "  --out FILE     identify: also save the map to FILE\n"
+               "  --out FILE     identify: save the map to FILE; record: the CSV path\n"
                "  -h, --help     this text\n");
   std::exit(status);
 }
@@ -770,6 +773,78 @@ int runIdentify(const Options &options) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// record
+
+/** captures/ibus-YYYYmmdd-HHMMSS.csv, relative to the working directory:
+ *  ~/heron on the Pi when run by deploy_cpp.sh, where fetch_captures.sh looks. */
+std::string defaultCapturePath() {
+  const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm local{};
+  localtime_r(&now, &local);
+  char name[64];
+  std::strftime(name, sizeof name, "captures/ibus-%Y%m%d-%H%M%S.csv", &local);
+  return name;
+}
+
+int runRecord(const Options &options) {
+  const std::string path = options.out.empty() ? defaultCapturePath() : options.out;
+  const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+  if (!parent.empty()) {
+    std::filesystem::create_directories(parent);
+  }
+  Receiver rx(options);  // open the port first: no empty file if it fails
+  std::FILE *file = std::fopen(path.c_str(), "w");
+  if (file == nullptr) {
+    std::fprintf(stderr, "ERROR: cannot write %s\n", path.c_str());
+    return 1;
+  }
+  std::fputs("t_ms", file);
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    std::fprintf(file, ",ch%zu", i + 1);
+  }
+  std::fputs("\n", file);
+
+  char forHow[48] = "";
+  if (options.seconds > 0.0) {
+    std::snprintf(forHow, sizeof forHow, " for %g s", options.seconds);
+  }
+  std::fprintf(stderr, "record: writing %s%s; Ctrl-C to stop\n", path.c_str(), forHow);
+  NoDataWatch noData;
+  const bool progress = isatty(STDERR_FILENO) != 0;
+  const TimePoint start = Clock::now();
+  TimePoint nextProgress = start + std::chrono::seconds(1);
+  std::uint64_t written = 0;
+  while (s_stopRequested == 0 && !timeUp(options, start, Clock::now())) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      std::fprintf(file, "%.3f", toMs(f.stamp - start));
+      for (const std::uint16_t v : f.channels) {
+        std::fprintf(file, ",%u", v);
+      }
+      std::fputs("\n", file);
+      ++written;
+    });
+    const TimePoint now = Clock::now();
+    noData.check(rx, now);
+    if (progress && now >= nextProgress) {
+      std::fprintf(stderr, "\r  %6.0f s  %llu frames  link %s\033[K",
+                   std::chrono::duration<double>(now - start).count(),
+                   static_cast<unsigned long long>(written), toString(rx.getLink().getState(now)));
+      nextProgress += std::chrono::seconds(1);
+    }
+  }
+  const bool ok = std::fclose(file) == 0;
+  std::fprintf(stderr, "%s", progress ? "\n" : "");
+  printSummary(rx, "record");
+  std::fprintf(stderr, "record: %llu frames written to %s\n",
+               static_cast<unsigned long long>(written), path.c_str());
+  if (!ok) {
+    std::fprintf(stderr, "ERROR: writing %s failed\n", path.c_str());
+    return 1;
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -786,6 +861,9 @@ int main(int argc, char **argv) {
     }
     if (options.command == "identify") {
       return runIdentify(options);
+    }
+    if (options.command == "record") {
+      return runRecord(options);
     }
     std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
     usage(2);
