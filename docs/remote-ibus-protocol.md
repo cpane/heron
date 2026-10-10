@@ -282,7 +282,9 @@ calculation, not re-checked).
 **The stale-link rule.** The link is lost when **no valid frame has arrived
 for 100 ms**, about 14 frames. Frames that fail the checksum do not count.
 One implementation, `Heron::Remote::LinkMonitor`, is used by every program,
-configurable with `--stale-ms`. On loss the robot stops. **This catches a dead
+configurable with `--stale-ms`. Robot code reads it through
+`RemoteControl::getLatest()`, which judges the link when called
+([`remote-cpp-design.md`](remote-cpp-design.md)). On loss the robot stops. **This catches a dead
 wire or receiver. Whether it catches radio loss depends on §5.**
 
 **Normalization** (`heron/remote/Normalize.h`, pure functions, unit tested):

@@ -13,7 +13,8 @@ reusable reader, as the LiDAR workstream did. It is not robot control yet.
 |---|---|---|
 | Protocol reference | [`remote-ibus-protocol.md`](remote-ibus-protocol.md) | sourced and cross-checked; timing measured; **§4 map and §5 failsafe await hardware runs** |
 | `heron_ibus`: parser, stats, `LinkMonitor`, normalization | `cpp/include/heron/remote/`, `cpp/src/remote/` | unit tested; decodes live frames on the Pi |
-| `heron_ibus_port`: receive-only termios port | same | verified on the Pi |
+| `heron_ibus_port`: receive-only termios port, `IBusReceiver` | same | verified on the Pi |
+| **`heron_remote`: `RemoteControl`**, what robot code links | same; [`remote-cpp-design.md`](remote-cpp-design.md) | pty test on host and Pi; `remote_adapter` live on the Pi |
 | `ibus_reader`: monitor, dump, identify, record, failsafe-test, stats | `cpp/tools/IBusReader.cpp`; [`remote-ibus-reader.md`](remote-ibus-reader.md) | all six tested against the fake; monitor, dump, record and stats also run live on the Pi |
 | `ibus_fake.py`: fake receiver on a pty | `python/tools/` | host testing |
 
@@ -35,8 +36,10 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
    switches, VrA and VrB). Paste the table into protocol §4. Decide whether
    to set the i6X to 10 channels.
 
-After those: settle §7's control assignment (drive, turn, speed ceiling, arm,
-mode) from the map, and tune the deadband from `monitor`'s resting jitter.
+Then add failsafe detection to the library as `remote-cpp-design.md` §5
+describes, shaped by what the test showed. After that, settle §7's control
+assignment (drive, turn, speed ceiling, arm, mode) from the map, and tune the
+deadband from `monitor`'s resting jitter.
 
 ## Verified so far
 
@@ -50,6 +53,9 @@ All on 2026-10-10, on the Pi with the live receiver:
   0.01), 0 checksum errors. Every byte is accounted for by channel frames
   (protocol §2).
 - `monitor` and `record` run against the live receiver.
+- `RemoteControl` (`remote_adapter 5`): 250 polls at 50 Hz, link OK at every
+  one, 130 frames/s, no checksum errors. `remote_control_test` passes on the
+  Pi.
 
 **Not verified:** failsafe behaviour (§5), the channel map (§4), 8N1 vs 8N2
 on the wire (§2, needs a scope), and the high nibble outside rest.

@@ -63,6 +63,7 @@ Read before doing remote-control work:
   Do not state community facts as measured, and do not fill gaps from
   general knowledge. **§5 (failsafe) is unverified until a hardware run**,
   and the robot's stop logic depends on it.
+- `docs/remote-cpp-design.md` — the library layers and how the robot uses them.
 - `docs/remote-ibus-reader.md` — the `ibus_reader` tool and its subcommands.
 
 Remote-only facts:
@@ -70,8 +71,10 @@ Remote-only facts:
 - The receiver's iBUS SERVO output is on GPIO15 (RXD), `/dev/serial0`
   (-> `ttyAMA0`, the PL011, freed from Bluetooth by provisioning).
   **Receive-only:** nothing writes to that port.
-- `heron_ibus` (parser, stats, `LinkMonitor`, normalization) is pure and
-  reusable by the robot; `heron_ibus_port` is the termios port.
+- Robot code links **`heron_remote`** (`RemoteControl`: reader thread,
+  `getLatest()`, shaped like `Lidar`). Below it, `heron_ibus_port` (port,
+  `IBusReceiver`) and the pure `heron_ibus`. Read `docs/remote-cpp-design.md`
+  before changing them.
 - No code from the iBUS sources may be copied; IBusBM and Betaflight are
   copyleft. The license table is in the protocol doc, §8.
 
