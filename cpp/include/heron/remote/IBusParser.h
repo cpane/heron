@@ -24,8 +24,10 @@
 #ifndef HERON_REMOTE_IBUS_PARSER_H
 #define HERON_REMOTE_IBUS_PARSER_H
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -93,6 +95,7 @@ struct IBusStats {
   Duration minInterval{Duration::max()};
   Duration maxInterval{Duration::zero()};
   Duration totalInterval{Duration::zero()};  // sum, for the mean
+  double totalIntervalSquaredS2{0.0};       // sum of squares in seconds², for the spread
 
   /** @return Intervals measured so far: one fewer than the frames */
   [[nodiscard]] std::uint64_t intervalCount() const noexcept {
@@ -103,6 +106,20 @@ struct IBusStats {
   [[nodiscard]] Duration meanInterval() const noexcept {
     const std::uint64_t n = intervalCount();
     return n > 0 ? totalInterval / static_cast<Duration::rep>(n) : Duration::zero();
+  }
+
+  /** @return Standard deviation of the intervals (population); zero until
+   *  two intervals have been measured */
+  [[nodiscard]] Duration intervalStdDev() const noexcept {
+    const std::uint64_t n = intervalCount();
+    if (n < 2) {
+      return Duration::zero();
+    }
+    const double count = static_cast<double>(n);
+    const double mean = std::chrono::duration<double>(totalInterval).count() / count;
+    const double variance = std::max(0.0, totalIntervalSquaredS2 / count - mean * mean);
+    const std::chrono::duration<double> sd(std::sqrt(variance));
+    return std::chrono::duration_cast<Duration>(sd);
   }
 
   /** @return Frames per second over the span from first to last frame; zero

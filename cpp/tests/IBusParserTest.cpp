@@ -225,6 +225,9 @@ int main() {
     check("stats: min interval 6 ms", s.minInterval == milliseconds(6));
     check("stats: max interval 8 ms", s.maxInterval == milliseconds(8));
     check("stats: mean interval 7 ms", s.meanInterval() == milliseconds(7));
+    // Intervals 7, 8, 6: mean 7, population variance 2/3 ms², sd 0.8165 ms.
+    const double sdMs = std::chrono::duration<double, std::milli>(s.intervalStdDev()).count();
+    check("stats: interval std dev 0.816 ms", sdMs > 0.816 && sdMs < 0.817);
     check("stats: rate 3 intervals / 21 ms", s.frameRateHz() > 142.8 && s.frameRateHz() < 142.9);
     p.resetStats();
     check("stats: reset clears counts", p.getStats().framesDecoded == 0 &&

@@ -90,6 +90,8 @@ void IBusParser::decodeFrame(TimePoint stamp, const FrameHandler &onFrame) {
     m_stats.minInterval = std::min(m_stats.minInterval, interval);
     m_stats.maxInterval = std::max(m_stats.maxInterval, interval);
     m_stats.totalInterval += interval;
+    const double seconds = std::chrono::duration<double>(interval).count();
+    m_stats.totalIntervalSquaredS2 += seconds * seconds;
   }
   m_stats.lastFrame = stamp;
   ++m_stats.framesDecoded;
