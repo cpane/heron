@@ -204,6 +204,14 @@ int main() {
   }
 
   {
+    check("high nibble: plain value has none", channelHighNibble(1500) == 0);
+    check("high nibble: 0x23E8 splits into 0x2 and 1000",
+          channelHighNibble(0x23E8) == 0x2 && channelValue(0x23E8) == 1000);
+    check("high nibble: 0xFFFF splits into 0xF and 0xFFF",
+          channelHighNibble(0xFFFF) == 0xF && channelValue(0xFFFF) == 0x0FFF);
+  }
+
+  {
     // Stats: intervals and rate from the stamps given to feed().
     IBusParser p;
     Collector c;

@@ -44,6 +44,25 @@ inline constexpr std::uint8_t kIBusHeader1 = 0x40;  // the "servo data" command
 inline constexpr std::size_t kIBusChecksumOffset = 30;
 
 /**
+ * The low 12 bits of a channel word carry the value. Community sources
+ * disagree about the top 4 bits (docs/remote-ibus-protocol.md §4): Betaflight
+ * reads them as extra channels 15-18 on newer receivers, and one user report
+ * says failsafe sets bit 0x2000. Neither is verified on our receiver, so the
+ * parser keeps the whole word and these helpers separate the two halves.
+ */
+inline constexpr std::uint16_t kIBusValueMask = 0x0FFF;
+
+/** @return The low 12 bits of a channel word: the value proper */
+[[nodiscard]] constexpr std::uint16_t channelValue(std::uint16_t raw) noexcept {
+  return static_cast<std::uint16_t>(raw & kIBusValueMask);
+}
+
+/** @return The top 4 bits of a channel word, shifted down; 0 on a plain value */
+[[nodiscard]] constexpr std::uint8_t channelHighNibble(std::uint16_t raw) noexcept {
+  return static_cast<std::uint8_t>(raw >> 12);
+}
+
+/**
  * One valid frame.
  */
 struct IBusFrame {
