@@ -66,5 +66,5 @@ All on 2026-10-10, on the Pi with the live receiver:
 - `identify`: the sticks and knobs on CH1–CH6, SwA–SwD on CH7–CH10 once
   the i6X is set to 10 channels (protocol §4).
 
-**Not verified:** failsafe out of range (§5), SwC's middle value (§4), 8N1 vs 8N2
+**Not verified:** failsafe out of range (§5), 8N1 vs 8N2
 on the wire (§2, needs a scope), and the high nibble outside rest.
