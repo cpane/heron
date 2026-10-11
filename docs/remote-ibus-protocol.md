@@ -251,9 +251,10 @@ SwA reads **1000 up, 2000 down**, and SwC reads **1500 in the middle**
 > and the loss is invisible. With a failsafe value set, that channel moves
 > to it about 1 s after the loss, with no flag in the top bits. Radio loss
 > is therefore only detectable through a failsafe value the robot
-> recognizes. **But run 3, after the i6X was set to 10 channels, applied
-> no failsafe value at all:** cause not yet known. Out of range is still to
-> test.
+> recognizes. The arm switch (SwA, CH7) set to fail to disarmed does
+> this: it goes to disarmed in the same frame (run 4). Run 3 applied
+> nothing because the settings had been lost on the transmitter. Out of
+> range and the recovery time are still to test.
 
 **What the sources say [community, not verified by us]:**
 
@@ -349,18 +350,48 @@ Notes on that run [ours]:
 Times are from pressing Enter, which was matched to the switch-off by hand: allow a
 few hundred ms. Checksum errors during the watch: 0.
 
-**Unexplained [ours]:** in this run **neither failsafe value was applied**,
-not even CH3's, which run 2 applied after about 1 s. Between the two runs
-the i6X went from 6 to 10 channels and CH7's failsafe was set. The cause is
-not known yet; until it is, a failsafe value set on the transmitter cannot
-be relied on.
+**Why nothing moved [ours]:** after this run the transmitter's Failsafe
+menu showed both CH3 and CH7 **Off**, so no failsafe was set when the link
+was lost. How the settings were lost is not certain. Once set again and
+saved with a held CANCEL, they survived a power cycle, and run 4 below
+applied them. **Check the Failsafe menu before relying on it.**
+
+#### failsafe-test, 2026-10-11 18:27
+
+| Item | Result |
+|---|---|
+| Transmitter failsafe setting | CH7 SwA up (disarm), CH3 -100% |
+| Link lost by | switching the transmitter off |
+| Before the loss | 129.9 Hz; CH1-14: 1502 1500 1572 1500 1164 1884 2000 1000 1000 1000 1500 1500 1500 1500 |
+| Frames after the loss | **continued**: 1299 frames in 10.0 s (129.9 Hz) |
+| Values while lost | CH3 1572 -> 1002 (+1027 ms); CH7 2000 -> 1000 (+1027 ms) |
+| Detecting the loss | **not by the stale rule**; values changed from 1027 ms after Enter |
+| Recovery | not within 20 s of the switch-on prompt |
+| Verdict | CONTINUES WITH FAILSAFE VALUES. The stale rule cannot see this; only recognising the failsafe values can. |
+
+Times are from pressing Enter, which was matched to the switch-off by hand: allow a
+few hundred ms. Checksum errors during the watch: 0.
+
+Notes on run 4 [ours]:
+
+- **The arm switch's failsafe works at 10 channels.** CH7 (SwA) went from
+  armed (2000) to disarmed (1000) about 1 s after the loss, in the same
+  frame as CH3. Failsafe values are not limited to CH1–CH6.
+- **The delay repeats:** 1027 ms here, 1028 ms in run 2.
+- **"Recovery: not within 20 s" is again the test's limit.** It counted
+  recovery only when every channel was back within 20 counts of rest,
+  which a throttle placed by hand never is. The tool now counts recovery
+  when a value that moved during the loss leaves its failsafe value (for
+  example SwA flipped back down). Recovery time is still unmeasured.
 
 **Still to run:**
 
 | Run | State |
 |---|---|
 | Failsafe all Off, transmitter off | done, FROZEN (above) |
-| Failsafe value set on a channel, transmitter off | done, FAILSAFE VALUES after about 1 s, no flag (above) |
+| Failsafe value set on a channel, transmitter off | done, FAILSAFE VALUES after about 1 s, no flag (run 2) |
+| Arm switch (CH7) failsafe to disarmed, 10 channels | done, works, same 1 s (run 4) |
+| Recovery time | to do, with the fixed test |
 | Out of range instead of off | to do |
 
 ## 6. Telemetry (SENS port): not used by this project

@@ -1090,10 +1090,10 @@ int runFailsafeTest(const Options &options) {
   // Recovery, if there is anything to recover from.
   std::printf("\nNow switch the transmitter back ON (or bring it back in range).\n%s",
               somethingHappened
-                  ? "Then put the controls back where they were: recovery is when the values\n"
-                    "return to rest. (If the FS-i6X beeps a throttle warning, it will not\n"
-                    "transmit until the throttle stick is down; lower it, then move it back.)\n"
-                    "Watching for up to 20 s...\n"
+                  ? "Then move a control that changed during the loss (flip the switch back):\n"
+                    "recovery is when a value leaves the one it took while the link was lost.\n"
+                    "(If the FS-i6X beeps a throttle warning, it will not transmit until the\n"
+                    "throttle stick is down.) Watching for up to 20 s...\n"
                                 : "Nothing changed during the loss, so there is no recovery to "
                                   "measure.\n");
   const TimePoint t1 = Clock::now();
@@ -1105,16 +1105,24 @@ int runFailsafeTest(const Options &options) {
   while (somethingHappened && s_stopRequested == 0 &&
          Clock::now() - t1 < std::chrono::seconds(20) && !restored) {
     rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
-      bool atRest = true;
+      // Values that moved during the loss: live input again once any of them
+      // leaves the value it took then. Putting every control back within a
+      // few counts of rest by hand is not possible, so rest is no test.
+      // Frames that only stopped: back at rest is enough.
+      bool live = !anyChanged;
       for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
         const std::int32_t v = f.channels[i];
-        atRest = atRest && v >= baseLo[i] - kChangeThreshold && v <= baseHi[i] + kChangeThreshold;
+        if (anyChanged) {
+          live = live || (w.changed[i] && std::abs(v - w.final.channels[i]) > kChangeThreshold);
+        } else {
+          live = live && v >= baseLo[i] - kChangeThreshold && v <= baseHi[i] + kChangeThreshold;
+        }
       }
       if (!resumed && rx.getStats().framesDecoded > framesBefore && w.wentStale) {
         resumed = true;
         resumedAt = f.stamp;
       }
-      if (atRest) {
+      if (live) {
         restored = true;
         restoredAt = f.stamp;
       }
@@ -1191,7 +1199,7 @@ int runFailsafeTest(const Options &options) {
 
   std::string recovery;
   if (restored) {
-    std::snprintf(text, sizeof text, "values back to rest %.1f s after the switch-on prompt",
+    std::snprintf(text, sizeof text, "live values %.1f s after the switch-on prompt",
                   std::chrono::duration<double>(restoredAt - t1).count());
     recovery = text;
     if (resumed) {
@@ -1201,7 +1209,7 @@ int runFailsafeTest(const Options &options) {
     }
   } else if (resumed) {
     std::snprintf(text, sizeof text,
-                  "frames resumed %.1f s after the prompt, values not back to rest within 20 s",
+                  "frames resumed %.1f s after the prompt, values not live within 20 s",
                   std::chrono::duration<double>(resumedAt - t1).count());
     recovery = text;
   } else if (somethingHappened) {

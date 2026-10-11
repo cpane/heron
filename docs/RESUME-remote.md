@@ -25,15 +25,17 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
 
 ## Picking up: two hardware runs, with someone at the transmitter
 
-1. **`failsafe-test`**: two runs done on 2026-10-11, transmitter off
-   (protocol §5). **The frames never stop.** Failsafe Off: the values
-   freeze. CH3 set to −100%: CH3 goes to 1001 about 1 s after the loss, no
-   flag. So `LinkMonitor` alone cannot detect radio loss, and a failsafe
-   value a control can also produce is ambiguous. **Next decision:** which
-   channel and value mark a failsafe (e.g. the arm switch failsafing to
-   disarmed). Still to run: out of range (`r`). FS-i6X: System setup › RX
-   setup › Failsafe; *hold* CANCEL to save. On switch-on it will not
-   transmit until the throttle is down.
+1. **`failsafe-test`**: four runs on 2026-10-11, transmitter off (protocol
+   §5). **The frames never stop.** Failsafe Off: the values freeze. With
+   failsafe values set, those channels move to them about 1 s after the
+   loss, no flag. **SwA (CH7) is the arm switch, failsafe to disarmed
+   (1000), confirmed in run 4**; CH3 is −100%. So radio loss is detected
+   as "disarmed". Run 3 applied nothing: the settings had been lost on the
+   transmitter, so check its Failsafe menu. Still to run: recovery time
+   (the test's recovery check is now fixed) and out of range (`r`).
+   FS-i6X: System setup › RX setup › Failsafe; UP/DOWN turns a channel
+   on, *hold* CANCEL to save. On switch-on it will not transmit until the
+   throttle is down.
 2. **`identify`**: done (2026-10-11, protocol §4). CH1–CH4 the sticks,
    CH5 VrA, CH6 VrB, and, with the i6X set to 10 channels, SwA–SwD on
    CH7–CH10. Next: pick the arm switch and set its failsafe to disarmed,
@@ -62,7 +64,7 @@ All on 2026-10-10, on the Pi with the live receiver:
 
 - `failsafe-test`, transmitter off: with failsafe all Off, frames and values
   continued unchanged; with CH3 −100%, CH3 went to 1001 after about 1 s,
-  no flag (protocol §5).
+  no flag; SwA on CH7 failing to disarmed works (protocol §5).
 - `identify`: the sticks and knobs on CH1–CH6, SwA–SwD on CH7–CH10 once
   the i6X is set to 10 channels (protocol §4).
 
