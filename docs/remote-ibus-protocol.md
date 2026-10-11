@@ -213,11 +213,12 @@ as 9192 and clamp to full scale.
 
 ## 5. Failsafe behaviour of our FS-iA6B
 
-> ⚠️ **PARTLY VERIFIED.** One hardware run so far: every channel's failsafe
-> Off, transmitter switched off. **The frames did not stop and the values
-> did not change** [ours]: the loss is invisible to the stale rule and in
-> the data. The run with a failsafe value set, and the out-of-range case,
-> are still to do. Until then, nothing here says how to detect radio loss.
+> ⚠️ **PARTLY VERIFIED.** Two hardware runs, transmitter switched off
+> [ours]. **The frames never stop.** With failsafe Off, the values freeze
+> and the loss is invisible. With a failsafe value set, that channel moves
+> to it about 1 s after the loss, with no flag in the top bits. Radio loss
+> is therefore only detectable through a failsafe value the robot
+> recognizes. Out of range is still to test.
 
 **What the sources say [community, not verified by us]:**
 
@@ -263,12 +264,46 @@ Set-up for that run: CH3 (the throttle stick, by its value) and CH5, CH6
 other values would have shown. None changed. The rate did not even shift:
 129.9 Hz before and after.
 
+#### failsafe-test, 2026-10-11 13:30
+
+| Item | Result |
+|---|---|
+| Transmitter failsafe setting | CH3 -100% |
+| Link lost by | switching the transmitter off |
+| Before the loss | 129.9 Hz; CH1-14: 1502 1500 1623 1501 1563 1561 1500 1500 1500 1500 1500 1500 1500 1500 |
+| Frames after the loss | **continued**: 1299 frames in 10.0 s (129.9 Hz) |
+| Values while lost | CH3 1623 -> 1001 (+1028 ms) |
+| Detecting the loss | **not by the stale rule**; values changed from 1028 ms after Enter |
+| Recovery | not within 20 s of the switch-on prompt |
+| Verdict | CONTINUES WITH FAILSAFE VALUES. The stale rule cannot see this; only recognising the failsafe values can. |
+
+Times are from pressing Enter, which was matched to the switch-off by hand: allow a
+few hundred ms. Checksum errors during the watch: 0.
+
+Notes on that run [ours]:
+
+- **About 1 s from loss to failsafe.** Until then the receiver sends the
+  last values, exactly as in run 1. The robot keeps acting on the last
+  stick positions for that long whatever it does.
+- **No flag.** The verdict would have said FLAGGED had any channel's top 4
+  bits been set. The `0x2000` report (IBusBM #24) does not hold for ours,
+  at least in this configuration.
+- **Only the channel with a value moved.** The other five, failsafe Off,
+  held their last values.
+- **"Recovery: not within 20 s" is the test's limit, not the receiver's.**
+  On switch-on the FS-i6X beeped a throttle warning and would not transmit
+  until the throttle stick was lowered. Lowered, the stick reads about
+  1000, which is the failsafe value itself, and the test counts recovery
+  only when the values return to rest. The tool now asks for the controls
+  to be put back. It also shows a limit of the approach: **a failsafe value
+  that a control can also produce cannot be told from that control.**
+
 **Still to run:**
 
 | Run | State |
 |---|---|
 | Failsafe all Off, transmitter off | done, FROZEN (above) |
-| Failsafe value set on a channel, transmitter off | to do |
+| Failsafe value set on a channel, transmitter off | done, FAILSAFE VALUES after about 1 s, no flag (above) |
 | Out of range instead of off | to do |
 
 ## 6. Telemetry (SENS port): not used by this project
@@ -367,15 +402,16 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
 
 ## 9. Open questions
 
-1. **Failsafe (§5):** with every channel Off, our iA6B keeps sending the last
-   values when the transmitter is switched off **[ours]**. Still open: what
-   it sends with a failsafe value set, whether bit `0x2000` appears, and
-   whether out of range behaves the same as off.
+1. **Failsafe (§5):** our iA6B never stops sending on radio loss; it holds
+   the last values, then about 1 s later applies any failsafe values, with
+   no flag **[ours]**. Still open: whether out of range behaves the same as
+   off, and which channel and value make a failsafe the robot can tell from
+   a real control.
 2. **Stop bits:** a scope measurement of the gap between bytes would show
    whether the receiver sends one stop bit or two.
 3. **Interval under load:** 7.70 ms ± 0.04 ms on an idle Pi **[ours]**. How
    much does it spread with the LiDAR and the robot running?
 4. **The channel map (§4)**, and whether the i6X should be set to 10
    channels.
-5. **The high nibble:** never set in 3896 frames at rest **[ours]**. Does it
-   appear in failsafe?
+5. **The high nibble:** never set in 3896 frames at rest, and not set in
+   failsafe either (§5) **[ours]**. Its meaning stays as in §4.

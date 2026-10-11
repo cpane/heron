@@ -25,13 +25,15 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
 
 ## Picking up: two hardware runs, with someone at the transmitter
 
-1. **`failsafe-test`**: run 1 is done (2026-10-11, every channel Off,
-   transmitter off): **FROZEN**. Frames kept coming at 129.9 Hz with the
-   last values, so `LinkMonitor` alone **cannot** detect radio loss. Still
-   to run: a failsafe value set on a channel (FS-i6X: System setup › RX
-   setup › Failsafe; set the value, then *hold* CANCEL to save, a short
-   press discards it), and out of range (`r`). Paste each block into
-   protocol §5.
+1. **`failsafe-test`**: two runs done on 2026-10-11, transmitter off
+   (protocol §5). **The frames never stop.** Failsafe Off: the values
+   freeze. CH3 set to −100%: CH3 goes to 1001 about 1 s after the loss, no
+   flag. So `LinkMonitor` alone cannot detect radio loss, and a failsafe
+   value a control can also produce is ambiguous. **Next decision:** which
+   channel and value mark a failsafe (e.g. the arm switch failsafing to
+   disarmed). Still to run: out of range (`r`). FS-i6X: System setup › RX
+   setup › Failsafe; *hold* CANCEL to save. On switch-on it will not
+   transmit until the throttle is down.
 2. **`identify`**, every control on the i6X (both sticks on both axes, the
    switches, VrA and VrB). Paste the table into protocol §4. Decide whether
    to set the i6X to 10 channels.
@@ -57,8 +59,9 @@ All on 2026-10-10, on the Pi with the live receiver:
   one, 130 frames/s, no checksum errors. `remote_control_test` passes on the
   Pi.
 
-- `failsafe-test` run 1, failsafe all Off, transmitter off: frames and
-  values continued unchanged (protocol §5).
+- `failsafe-test`, transmitter off: with failsafe all Off, frames and values
+  continued unchanged; with CH3 −100%, CH3 went to 1001 after about 1 s,
+  no flag (protocol §5).
 
-**Not verified:** failsafe with a value set and out of range (§5), the channel map (§4), 8N1 vs 8N2
+**Not verified:** failsafe out of range (§5), the channel map (§4), 8N1 vs 8N2
 on the wire (§2, needs a scope), and the high nibble outside rest.

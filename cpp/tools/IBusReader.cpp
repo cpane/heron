@@ -1089,7 +1089,11 @@ int runFailsafeTest(const Options &options) {
 
   // Recovery, if there is anything to recover from.
   std::printf("\nNow switch the transmitter back ON (or bring it back in range).\n%s",
-              somethingHappened ? "Watching for up to 20 s...\n"
+              somethingHappened
+                  ? "Then put the controls back where they were: recovery is when the values\n"
+                    "return to rest. (If the FS-i6X beeps a throttle warning, it will not\n"
+                    "transmit until the throttle stick is down; lower it, then move it back.)\n"
+                    "Watching for up to 20 s...\n"
                                 : "Nothing changed during the loss, so there is no recovery to "
                                   "measure.\n");
   const TimePoint t1 = Clock::now();
