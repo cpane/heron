@@ -194,7 +194,7 @@ include path. The boundary is enforced by the build. Rationale in
 | Target | Source | Kind |
 |---|---|---|
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
-| `ibus_parser_test`, `normalize_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, `RemoteControl` over a pty), run by `ctest` |
+| `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
 | `lidar_info`, `lidar_record`, `lidar_adapter`, `lidar_nearest` | `cpp/probes/` | on-target programs |
 | `lidar_gui_server` | `cpp/tools/` | serves the library to the viewer |

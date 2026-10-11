@@ -11,10 +11,10 @@
 // without waiting, and every program applies it identically. Stale is judged
 // on valid frames only; bytes that fail the checksum do not keep a link alive.
 //
-// Whether the receiver keeps sending frames after the transmitter is lost is
-// a property of the receiver, recorded (once measured) in
-// docs/remote-ibus-protocol.md §5. This rule alone is only sufficient if it
-// stops sending; if it repeats values instead, a stale check cannot see it.
+// This rule sees a broken wire, a dead receiver or a stopped reader, but not
+// radio loss: our FS-iA6B keeps sending frames after the transmitter is lost
+// (docs/remote-ibus-protocol.md §5, measured). Radio loss is detected from a
+// failsafe value instead, by isFailsafe() in Failsafe.h.
 
 #ifndef HERON_REMOTE_LINK_MONITOR_H
 #define HERON_REMOTE_LINK_MONITOR_H
