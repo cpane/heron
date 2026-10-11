@@ -170,7 +170,7 @@ possible byte boundary, and back-to-back frames.
 | Nominal range | 1000–2000 | **[community]**; **[ours]** the first live run read 1039 and 2000 on two channels |
 | Center | 1500 | **[community]**; **[ours]** two sticks read 1500 and 1502 at rest |
 | Channel slots | 14, always present | **[community]** |
-| Channels the i6X sends | 6 by default, configurable to 10 (System › Aux Switches) | **[community]** FS-i6X manual |
+| Channels the i6X sends | 6 by default, configurable to 10 (System › Aux Switches) | **[community]** FS-i6X manual; **[ours]** 6 at the defaults, switches on none |
 | Unused slots | read 1500 | **[community]** |
 
 **What the transmitter does to the values** (FS-i6X manual, **[community]**,
@@ -205,11 +205,28 @@ as 9192 and clamp to full scale.
 
 ### Our i6X channel map
 
-> **To be filled in from `ibus_reader identify`.**
+Measured with `ibus_reader identify` on 2026-10-11 **[ours]**, transmitter
+at its defaults (6 channels, mode 2), 4 s per control:
 
 | Control on the FS-i6X | Channel | Range seen | Notes |
 |---|---|---|---|
-| | | | |
+| right stick left-right | CH1 | 1016..2000 | also CH2 (1481..1581) |
+| right stick up-down | CH2 | 1010..2000 |  |
+| left stick up-down | CH3 | 1003..1996 |  |
+| left stick left-right | CH4 | 1002..1999 |  |
+| VrA | CH5 | 1000..1745 |  |
+| VrB | CH6 | 1000..2000 |  |
+
+- **The switches SwA–SwD are on no channel** at the defaults: moving each
+  one moved nothing. CH7–CH14 read 1500 throughout.
+- The "also CH2" on CH1 is about 100 counts, most likely the stick moved a
+  little off-axis by hand rather than a mix. No mix is configured.
+- Ranges short of 1000 or 2000 (CH1 1016, CH2 1010, VrA 1745) are probably
+  travel not reached by hand within the window, not end points. Not yet
+  checked.
+- The roles match the manual's mode 2 layout: right stick roll and pitch,
+  left stick throttle and yaw **[community]**. The throttle stick stays
+  where it is left (it held mid-travel through the §5 runs) **[ours]**.
 
 ## 5. Failsafe behaviour of our FS-iA6B
 
@@ -411,7 +428,7 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
    whether the receiver sends one stop bit or two.
 3. **Interval under load:** 7.70 ms ± 0.04 ms on an idle Pi **[ours]**. How
    much does it spread with the LiDAR and the robot running?
-4. **The channel map (§4)**, and whether the i6X should be set to 10
-   channels.
+4. **The channel map (§4)** is measured at the defaults. Open: setting the
+   i6X to 10 channels to put the switches on CH7–CH10, and an arm switch.
 5. **The high nibble:** never set in 3896 frames at rest, and not set in
    failsafe either (§5) **[ours]**. Its meaning stays as in §4.
