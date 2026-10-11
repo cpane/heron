@@ -46,8 +46,10 @@ struct RemoteControl::Impl {
   LinkMonitor m_link{m_config.staleAfter};
   IBusFrame m_latest{};
   std::uint64_t m_seq{0};
+  bool m_latestFailsafe{false};  // isFailsafe() of m_latest, judged on arrival
   IBusStats m_stats{};
   std::uint64_t m_staleEvents{0};
+  std::uint64_t m_failsafeEvents{0};
   RemoteState m_state{RemoteState::Stopped};
   std::string m_lastError;
 
@@ -62,8 +64,15 @@ void RemoteControl::Impl::run(std::stop_token stop) {
   try {
     while (!stop.stop_requested()) {
       m_receiver->pump(kReadTimeout, [this](const IBusFrame &frame) {
+        // A pure function of the frame, so judging it here, once, gives what
+        // getLatest() would compute, and lets the entries be counted.
+        const bool failsafe = m_config.failsafe && isFailsafe(frame, *m_config.failsafe);
         const std::lock_guard<std::mutex> lock(m_mutex);
+        if (failsafe && !m_latestFailsafe) {
+          ++m_failsafeEvents;
+        }
         m_latest = frame;
+        m_latestFailsafe = failsafe;
         ++m_seq;
         m_link.onFrame(frame.stamp);
       });
@@ -116,8 +125,10 @@ bool RemoteControl::start() {
     impl.m_link = LinkMonitor(impl.m_config.staleAfter);
     impl.m_latest = IBusFrame{};
     impl.m_seq = 0;
+    impl.m_latestFailsafe = false;
     impl.m_stats = IBusStats{};
     impl.m_staleEvents = 0;
+    impl.m_failsafeEvents = 0;
     impl.m_lastError.clear();
     impl.m_state = RemoteState::Running;
   }
@@ -150,6 +161,7 @@ RemoteSnapshot RemoteControl::getLatest(TimePoint now) const {
   snapshot.frame = m_impl->m_latest;
   snapshot.seq = m_impl->m_seq;
   snapshot.age = m_impl->m_link.sinceLastFrame(now);
+  snapshot.failsafe = m_impl->m_latestFailsafe;
   return snapshot;
 }
 
@@ -159,6 +171,7 @@ RemoteHealth RemoteControl::getHealth() const {
   health.state = m_impl->m_state;
   health.stats = m_impl->m_stats;
   health.staleEvents = m_impl->m_staleEvents;
+  health.failsafeEvents = m_impl->m_failsafeEvents;
   health.lastError = m_impl->m_lastError;
   return health;
 }

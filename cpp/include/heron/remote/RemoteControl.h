@@ -11,10 +11,12 @@
 // latest-wins publication, a health snapshot. Design and intended use:
 // docs/remote-cpp-design.md.
 //
-// What this does NOT decide yet: whether a frame is a failsafe frame. Every
-// source says the FS-iA6B keeps sending on radio loss, so the stale rule
-// alone may not see it (docs/remote-ibus-protocol.md §5, unverified). The
-// snapshot carries the raw frame so that check can be added once measured.
+// Two ways the link can be unusable, and isOk() covers both. STALE: no
+// frames, so a wire, the receiver or the reader is gone. FAILSAFE: frames
+// keep coming but the configured channel reads its failsafe value, which is
+// the only sign of radio loss on our FS-iA6B, since it never stops sending
+// (docs/remote-ibus-protocol.md §5, measured). Failsafe is only detected when
+// ReceiverConfig::failsafe is set.
 
 #ifndef HERON_REMOTE_REMOTE_CONTROL_H
 #define HERON_REMOTE_REMOTE_CONTROL_H
@@ -23,6 +25,7 @@
 #include <memory>
 #include <string>
 
+#include "heron/remote/Failsafe.h"
 #include "heron/remote/IBusParser.h"
 #include "heron/remote/IBusReceiver.h"
 #include "heron/remote/LinkMonitor.h"
@@ -52,10 +55,14 @@ struct RemoteSnapshot {
   std::uint64_t seq{0};
   /** Time from the newest frame to the call; zero before the first. */
   Duration age{};
+  /** The newest frame shows the failsafe value on the configured channel
+   *  (isFailsafe()). False before the first frame, and always false when
+   *  ReceiverConfig::failsafe is empty. A deliberate disarm reads the same. */
+  bool failsafe{false};
 
-  /** @return true only when the link is OK: the one test for "may I act on
-   *  these channels" until failsafe detection exists */
-  [[nodiscard]] bool isOk() const noexcept { return link == LinkState::Ok; }
+  /** @return true only when the link is OK and not in failsafe: the one test
+   *  for "may I act on these channels" */
+  [[nodiscard]] bool isOk() const noexcept { return link == LinkState::Ok && !failsafe; }
 };
 
 /**
@@ -66,6 +73,9 @@ struct RemoteHealth {
   IBusStats stats{};
   /** Times the link went from OK to stale while running. */
   std::uint64_t staleEvents{0};
+  /** Times the newest frame went into failsafe while running: one per run of
+   *  failsafe frames, the first frame included. Disarms count too. */
+  std::uint64_t failsafeEvents{0};
   std::string lastError;
 };
 
@@ -92,6 +102,10 @@ struct RemoteHealth {
  */
 class RemoteControl {
   public:
+    /**
+     * @param config Port, stale-link time and failsafe channel; checked by
+     *               start(), which reports a bad one through lastError
+     */
     explicit RemoteControl(const ReceiverConfig &config);
 
     /**

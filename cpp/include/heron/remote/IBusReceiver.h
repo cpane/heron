@@ -18,8 +18,10 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 
+#include "heron/remote/Failsafe.h"
 #include "heron/remote/IBusParser.h"
 #include "heron/remote/IBusPort.h"
 #include "heron/remote/LinkMonitor.h"
@@ -32,6 +34,10 @@ namespace Heron::Remote {
 struct ReceiverConfig {
   SerialConfig serial{};
   Duration staleAfter{kDefaultStaleAfter};
+  /** The channel whose failsafe value means radio loss. Empty by default:
+   *  the channel map is the robot's, not this library's. IBusReceiver only
+   *  checks it; RemoteControl applies it (docs/remote-cpp-design.md §5). */
+  std::optional<FailsafeConfig> failsafe{};
 };
 
 /**
@@ -53,12 +59,13 @@ class IBusReceiver {
     /**
      * Opens the port.
      *
-     * @param config Port settings and the stale-link time
-     * @throws std::invalid_argument for bad settings
+     * @param config Port settings, the stale-link time and the failsafe channel
+     * @throws std::invalid_argument for bad settings, a bad failsafe channel
+     *         included
      * @throws std::system_error if the port cannot be opened (see IBusPort)
      */
     explicit IBusReceiver(const ReceiverConfig &config)
-        : m_port(config.serial), m_link(config.staleAfter) {}
+        : m_port(checked(config).serial), m_link(config.staleAfter) {}
 
     /**
      * Waits up to timeout for bytes, decodes them, and updates the link rule.
@@ -91,6 +98,15 @@ class IBusReceiver {
     [[nodiscard]] const SerialConfig &getConfig() const noexcept { return m_port.getConfig(); }
 
   private:
+    // Checks the failsafe settings before the port is opened, so a bad one
+    // fails like any other bad setting, and RemoteControl::start() reports it.
+    static const ReceiverConfig &checked(const ReceiverConfig &config) {
+      if (config.failsafe) {
+        checkFailsafeConfig(*config.failsafe);
+      }
+      return config;
+    }
+
     IBusPort m_port;
     IBusParser m_parser;
     LinkMonitor m_link;

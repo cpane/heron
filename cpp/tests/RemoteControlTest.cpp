@@ -1,7 +1,8 @@
 // File        : RemoteControlTest.cpp
 // Author      : Chris Pane
 // Description : RemoteControl end to end over a pseudo-terminal: start, the
-//               reader thread, latest-wins publication, the stale rule, stop.
+//               reader thread, latest-wins publication, the stale rule, the
+//               failsafe channel, stop.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -44,10 +45,13 @@ void check(const char *what, bool ok) {
   }
 }
 
-std::vector<std::uint8_t> makeFrame(std::uint16_t ch1) {
+// CH7 (index 6) is the arm switch in our setup, and the failsafe channel.
+constexpr std::size_t kArmChannel = 6;
+
+std::vector<std::uint8_t> makeFrame(std::uint16_t ch1, std::uint16_t ch7) {
   std::vector<std::uint8_t> f = {kIBusHeader0, kIBusHeader1};
   for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
-    const std::uint16_t v = i == 0 ? ch1 : 1500;
+    const std::uint16_t v = i == 0 ? ch1 : i == kArmChannel ? ch7 : 1500;
     f.push_back(static_cast<std::uint8_t>(v & 0xFF));
     f.push_back(static_cast<std::uint8_t>(v >> 8));
   }
@@ -83,8 +87,8 @@ class Pty {
     Pty(const Pty &) = delete;
     Pty &operator=(const Pty &) = delete;
 
-    void send(std::uint16_t ch1) {
-      const std::vector<std::uint8_t> f = makeFrame(ch1);
+    void send(std::uint16_t ch1, std::uint16_t ch7 = 1500) {
+      const std::vector<std::uint8_t> f = makeFrame(ch1, ch7);
       if (::write(m_master, f.data(), f.size()) != static_cast<ssize_t>(f.size())) {
         std::perror("write");
       }
@@ -107,10 +111,10 @@ class Pty {
 /** Streams frames at about the receiver's rate until destroyed. */
 class Streamer {
   public:
-    Streamer(Pty &pty, std::uint16_t ch1)
-        : m_thread([&pty, ch1](std::stop_token stop) {
+    Streamer(Pty &pty, std::uint16_t ch1, std::uint16_t ch7 = 1500)
+        : m_thread([&pty, ch1, ch7](std::stop_token stop) {
             while (!stop.stop_requested()) {
-              pty.send(ch1);
+              pty.send(ch1, ch7);
               std::this_thread::sleep_for(milliseconds(8));
             }
           }) {}
@@ -191,6 +195,87 @@ int main() {
       check("restart: frames flow again", remote.getLatest().frame.channels[0] == 1100);
     }
   }
+
+  std::printf("Failsafe channel\n");
+
+  {
+    Pty pty;
+    ReceiverConfig config;
+    config.serial.device = pty.getSlavePath();
+    config.failsafe = FailsafeConfig{14, 1000, 50};
+    RemoteControl remote(config);
+    check("bad failsafe channel: start() fails", !remote.start());
+    check("bad failsafe channel: lastError says why",
+          remote.getHealth().lastError.find("checkFailsafeConfig") != std::string::npos);
+  }
+
+  {
+    // Our setup (docs/remote-ibus-protocol.md §5, run 4): SwA on CH7, 2000 =
+    // armed, 1000 = disarmed, and the transmitter fails CH7 to 1000.
+    Pty pty;
+    ReceiverConfig config;
+    config.serial.device = pty.getSlavePath();
+    config.failsafe = FailsafeConfig{kArmChannel, 1000, 50};
+    RemoteControl remote(config);
+    check("failsafe: start() succeeds", remote.start());
+    check("failsafe: not set before any frame", !remote.getLatest().failsafe);
+
+    {
+      Streamer streamer(pty, 1500, 2000);
+      std::this_thread::sleep_for(milliseconds(150));
+      const RemoteSnapshot s = remote.getLatest();
+      check("armed: link OK, not failsafe, isOk()", s.link == LinkState::Ok && !s.failsafe &&
+                                                         s.isOk());
+    }
+    {
+      // Radio loss as our receiver shows it: frames keep coming, CH7 at 1000.
+      Streamer streamer(pty, 1500, 1000);
+      std::this_thread::sleep_for(milliseconds(150));
+      const RemoteSnapshot s = remote.getLatest();
+      check("failsafe value: link still OK", s.link == LinkState::Ok);
+      check("failsafe value: failsafe set", s.failsafe);
+      check("failsafe value: isOk() false", !s.isOk());
+      check("failsafe value: one failsafe event", remote.getHealth().failsafeEvents == 1);
+      check("failsafe value: no stale event", remote.getHealth().staleEvents == 0);
+    }
+    {
+      Streamer streamer(pty, 1500, 2000);
+      std::this_thread::sleep_for(milliseconds(150));
+      const RemoteSnapshot s = remote.getLatest();
+      check("armed again: isOk() true", s.isOk() && !s.failsafe);
+      check("armed again: still one failsafe event", remote.getHealth().failsafeEvents == 1);
+    }
+    {
+      Streamer streamer(pty, 1500, 1040);  // inside the tolerance
+      std::this_thread::sleep_for(milliseconds(150));
+      check("near the failsafe value: failsafe, second event",
+            remote.getLatest().failsafe && remote.getHealth().failsafeEvents == 2);
+    }
+
+    std::this_thread::sleep_for(milliseconds(250));
+    const RemoteSnapshot quiet = remote.getLatest();
+    check("frames stop in failsafe: STALE, failsafe still reported, not ok",
+          quiet.link == LinkState::Stale && quiet.failsafe && !quiet.isOk());
+
+    remote.stop();
+    check("restart: failsafe cleared", remote.start() && !remote.getLatest().failsafe &&
+                                           remote.getHealth().failsafeEvents == 0);
+  }
+
+  {
+    // No failsafe configured: CH7 at 1000 is just a channel value.
+    Pty pty;
+    ReceiverConfig config;
+    config.serial.device = pty.getSlavePath();
+    RemoteControl remote(config);
+    remote.start();
+    Streamer streamer(pty, 1500, 1000);
+    std::this_thread::sleep_for(milliseconds(150));
+    check("no failsafe config: never failsafe",
+          remote.getLatest().isOk() && !remote.getLatest().failsafe);
+  }
+
+  std::printf("Hangup\n");
 
   {
     // The device going away mid-run: closing the master hangs up the slave.
