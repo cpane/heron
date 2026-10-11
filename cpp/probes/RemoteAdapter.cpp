@@ -13,8 +13,14 @@
 // The remote control's counterpart of lidar_adapter. Uses only
 // RemoteControl.h and links only heron_remote, as robot code will. Polls
 // getLatest() at 50 Hz, like a control loop, and counts how often the link
-// was not OK at a poll. Switch the transmitter off mid-run to watch the link
-// state; what that shows is the subject of docs/remote-ibus-protocol.md §5.
+// was not OK at a poll, and how often it was in failsafe.
+//
+// The failsafe channel is our setup's arm switch: SwA on CH7, failing to
+// 1000 (disarmed) on the transmitter (docs/remote-ibus-protocol.md §5, run
+// 4). Switch the transmitter off mid-run: the link stays OK, because the
+// receiver keeps sending, and failsafe goes YES about 1 s later. Flipping
+// SwA up reads the same, by design. If neither shows, check the
+// transmitter's Failsafe menu: run 3 found the setting lost.
 
 #include <chrono>
 #include <cinttypes>
@@ -49,6 +55,7 @@ int main(int argc, char **argv) {
   std::printf("========================================\n\n");
 
   ReceiverConfig config;  // /dev/serial0, 115200 8N1, stale after 100 ms
+  config.failsafe = FailsafeConfig{6, 1000, 50};  // CH7 (SwA) at 1000 +- 50
   if (argc > 2) {
     config.serial.device = argv[2];
   }
@@ -61,6 +68,7 @@ int main(int argc, char **argv) {
   constexpr milliseconds kLoop(20);  // a 50 Hz control loop
   std::uint64_t polls = 0;
   std::uint64_t notOk = 0;
+  std::uint64_t inFailsafe = 0;
   std::uint64_t lastSeq = 0;
   const auto begin = Clock::now();
   auto nextReport = begin + std::chrono::seconds(1);
@@ -72,27 +80,34 @@ int main(int argc, char **argv) {
     if (!s.isOk()) {
       ++notOk;
     }
+    if (s.failsafe) {
+      ++inFailsafe;
+    }
     if (now < nextReport) {
       continue;
     }
     nextReport += std::chrono::seconds(1);
     const RemoteHealth h = remote.getHealth();
-    std::printf("%3.0f s  %-6s link %-9s age %5.0f ms  +%3" PRIu64
-                " frames  CH1-6 %4u %4u %4u %4u %4u %4u  stale events %" PRIu64 "\n",
+    std::printf("%3.0f s  %-6s link %-9s failsafe %-3s age %5.0f ms  +%3" PRIu64
+                " frames  CH1-6 %4u %4u %4u %4u %4u %4u  CH7 %4u  events: stale %" PRIu64
+                " failsafe %" PRIu64 "\n",
                 std::chrono::duration<double>(now - begin).count(), toString(h.state),
-                toString(s.link), std::chrono::duration<double, std::milli>(s.age).count(),
-                s.seq - lastSeq, s.frame.channels[0], s.frame.channels[1], s.frame.channels[2],
-                s.frame.channels[3], s.frame.channels[4], s.frame.channels[5], h.staleEvents);
+                toString(s.link), s.failsafe ? "YES" : "no",
+                std::chrono::duration<double, std::milli>(s.age).count(), s.seq - lastSeq,
+                s.frame.channels[0], s.frame.channels[1], s.frame.channels[2],
+                s.frame.channels[3], s.frame.channels[4], s.frame.channels[5],
+                s.frame.channels[6], h.staleEvents, h.failsafeEvents);
     std::fflush(stdout);
     lastSeq = s.seq;
   }
 
   remote.stop();
   const RemoteHealth h = remote.getHealth();
-  std::printf("\n%s. %" PRIu64 " polls, link not OK at %" PRIu64 "; %" PRIu64
-              " frames, %" PRIu64 " checksum errors, %" PRIu64 " stale events, state %s%s%s\n",
-              s_stopRequested != 0 ? "Stopped by signal" : "Finished", polls, notOk,
-              h.stats.framesDecoded, h.stats.checksumErrors, h.staleEvents, toString(h.state),
-              h.lastError.empty() ? "" : ": ", h.lastError.c_str());
+  std::printf("\n%s. %" PRIu64 " polls, not OK at %" PRIu64 ", failsafe at %" PRIu64
+              "; %" PRIu64 " frames, %" PRIu64 " checksum errors, %" PRIu64
+              " stale events, %" PRIu64 " failsafe events, state %s%s%s\n",
+              s_stopRequested != 0 ? "Stopped by signal" : "Finished", polls, notOk, inFailsafe,
+              h.stats.framesDecoded, h.stats.checksumErrors, h.staleEvents, h.failsafeEvents,
+              toString(h.state), h.lastError.empty() ? "" : ": ", h.lastError.c_str());
   return 0;
 }
