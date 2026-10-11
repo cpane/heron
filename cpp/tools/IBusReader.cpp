@@ -973,8 +973,8 @@ int runFailsafeTest(const Options &options) {
       "failsafe-test: what does the link do when the transmitter goes away?\n"
       "\n"
       "Before starting:\n"
-      "  1. Set the transmitter failsafe you want to test (FS-i6X: Functions setup >\n"
-      "     Failsafe). Run once with every channel Off, and once with a value set.\n"
+      "  1. Set the transmitter failsafe you want to test (FS-i6X: System setup >\n"
+      "     RX setup > Failsafe). Run once with every channel Off, and once with a value set.\n"
       "  2. Flip a switch away from its usual position and turn a knob off-centre, so\n"
       "     'holds the last values' can be told apart from 'goes to failsafe values'.\n"
       "  3. Then leave the controls alone until the test says otherwise.\n\n");
