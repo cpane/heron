@@ -1,6 +1,6 @@
 # Remote control workstream — resume point
 
-Last updated 2026-10-10. Branch **`feature/ibus-reader`**.
+Last updated 2026-10-11. Branch **`feature/ibus-reader`**.
 
 ## Read this first when resuming
 
@@ -25,13 +25,13 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
 
 ## Picking up: two hardware runs, with someone at the transmitter
 
-1. **`failsafe-test`**, at least twice: once with every channel's failsafe
-   Off, and once with a failsafe value set. Use both `o` (switch off) and
-   `r` (out of range) if practical. Paste each result block into protocol §5
-   and replace the NOT YET VERIFIED callout with what was measured.
-   **Every source says the iA6B keeps sending frames on radio loss**, which
-   would make the stale rule blind to it. This run decides whether the
-   robot's stop logic can rely on `LinkMonitor` alone.
+1. **`failsafe-test`**: run 1 is done (2026-10-11, every channel Off,
+   transmitter off): **FROZEN**. Frames kept coming at 129.9 Hz with the
+   last values, so `LinkMonitor` alone **cannot** detect radio loss. Still
+   to run: a failsafe value set on a channel (FS-i6X: System setup › RX
+   setup › Failsafe; set the value, then *hold* CANCEL to save, a short
+   press discards it), and out of range (`r`). Paste each block into
+   protocol §5.
 2. **`identify`**, every control on the i6X (both sticks on both axes, the
    switches, VrA and VrB). Paste the table into protocol §4. Decide whether
    to set the i6X to 10 channels.
@@ -57,5 +57,8 @@ All on 2026-10-10, on the Pi with the live receiver:
   one, 130 frames/s, no checksum errors. `remote_control_test` passes on the
   Pi.
 
-**Not verified:** failsafe behaviour (§5), the channel map (§4), 8N1 vs 8N2
+- `failsafe-test` run 1, failsafe all Off, transmitter off: frames and
+  values continued unchanged (protocol §5).
+
+**Not verified:** failsafe with a value set and out of range (§5), the channel map (§4), 8N1 vs 8N2
 on the wire (§2, needs a scope), and the high nibble outside rest.

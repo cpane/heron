@@ -213,12 +213,11 @@ as 9192 and clamp to full scale.
 
 ## 5. Failsafe behaviour of our FS-iA6B
 
-> ⚠️ **NOT YET VERIFIED — needs a hardware run.**
->
-> Nothing below is a measured property of our receiver. The robot's stop
-> logic depends on this section. Until `ibus_reader failsafe-test` has been
-> run on the real receiver and its result pasted here, assume nothing about
-> what the link does when the transmitter is off or out of range.
+> ⚠️ **PARTLY VERIFIED.** One hardware run so far: every channel's failsafe
+> Off, transmitter switched off. **The frames did not stop and the values
+> did not change** [ours]: the loss is invisible to the stale rule and in
+> the data. The run with a failsafe value set, and the out-of-range case,
+> are still to do. Until then, nothing here says how to detect radio loss.
 
 **What the sources say [community, not verified by us]:**
 
@@ -231,7 +230,7 @@ as 9192 and clamp to full scale.
   position.
 - #24 reports that with every channel's failsafe Off, an FS-i6X and iA6B kept
   sending the last values after the transmitter was switched off: a frozen
-  stream that looks healthy **[unverified]**.
+  stream that looks healthy. **Our run 1 below confirms this for ours [ours].**
 - No source we read describes a "no output" failsafe mode for the iA6B's iBUS
   port.
 
@@ -241,16 +240,36 @@ failsafe value set on the transmitter that the robot recognizes (or a flag,
 if the `0x2000` report holds). That is a design consequence of the sources,
 **[unverified]**.
 
-**Result** (paste the block `failsafe-test` prints here):
+**Results.** Each run is the block `failsafe-test` printed, unedited.
+
+#### failsafe-test, 2026-10-11 13:09
 
 | Item | Result |
 |---|---|
-| Date, firmware, transmitter failsafe setting | |
-| Transmitter OFF: frames stop, or continue? | |
-| Values while lost | |
-| Time to detect loss | |
-| Out of range: same as OFF? | |
-| Recovery when the transmitter returns | |
+| Transmitter failsafe setting | all off |
+| Link lost by | switching the transmitter off |
+| Before the loss | 129.9 Hz; CH1-14: 1502 1500 1595 1500 1563 1562 1500 1500 1500 1500 1500 1500 1500 1500 |
+| Frames after the loss | **continued**: 1299 frames in 10.0 s (129.9 Hz) |
+| Values while lost | unchanged from rest |
+| Detecting the loss | **not detectable**: frames and values carried on unchanged |
+| Recovery | nothing to recover from |
+| Verdict | CONTINUES WITH THE LAST VALUES (FROZEN). The stale rule cannot see this, and nothing in the data shows it. Unsafe for robot control as configured. If the transmitter was really off, set a failsafe value and test again. |
+
+Times are from pressing Enter, which was matched to the switch-off by hand: allow a
+few hundred ms. Checksum errors during the watch: 0.
+
+Set-up for that run: CH3 (the throttle stick, by its value) and CH5, CH6
+(the knobs, by their values) were off their rest positions, so a jump to
+other values would have shown. None changed. The rate did not even shift:
+129.9 Hz before and after.
+
+**Still to run:**
+
+| Run | State |
+|---|---|
+| Failsafe all Off, transmitter off | done, FROZEN (above) |
+| Failsafe value set on a channel, transmitter off | to do |
+| Out of range instead of off | to do |
 
 ## 6. Telemetry (SENS port): not used by this project
 
@@ -348,9 +367,10 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
 
 ## 9. Open questions
 
-1. **Failsafe (§5):** does our iA6B keep sending when the transmitter is off
-   or out of range? With what values? Does it behave differently with the
-   transmitter's failsafe Off and with a value set? Does bit `0x2000` appear?
+1. **Failsafe (§5):** with every channel Off, our iA6B keeps sending the last
+   values when the transmitter is switched off **[ours]**. Still open: what
+   it sends with a failsafe value set, whether bit `0x2000` appears, and
+   whether out of range behaves the same as off.
 2. **Stop bits:** a scope measurement of the gap between bytes would show
    whether the receiver sends one stop bit or two.
 3. **Interval under load:** 7.70 ms ± 0.04 ms on an idle Pi **[ours]**. How

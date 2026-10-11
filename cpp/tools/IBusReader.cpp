@@ -975,7 +975,7 @@ int runFailsafeTest(const Options &options) {
       "Before starting:\n"
       "  1. Set the transmitter failsafe you want to test (FS-i6X: System setup >\n"
       "     RX setup > Failsafe). Run once with every channel Off, and once with a value set.\n"
-      "  2. Flip a switch away from its usual position and turn a knob off-centre, so\n"
+      "  2. Turn a knob part way and leave the throttle stick off its end stop, so\n"
       "     'holds the last values' can be told apart from 'goes to failsafe values'.\n"
       "  3. Then leave the controls alone until the test says otherwise.\n\n");
   if (!waitForLink(rx)) {
@@ -1089,7 +1089,9 @@ int runFailsafeTest(const Options &options) {
 
   // Recovery, if there is anything to recover from.
   std::printf("\nNow switch the transmitter back ON (or bring it back in range).\n%s",
-              somethingHappened ? "Watching for up to 20 s...\n" : "");
+              somethingHappened ? "Watching for up to 20 s...\n"
+                                : "Nothing changed during the loss, so there is no recovery to "
+                                  "measure.\n");
   const TimePoint t1 = Clock::now();
   bool resumed = false;
   TimePoint resumedAt{};
