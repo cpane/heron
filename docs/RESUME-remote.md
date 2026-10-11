@@ -34,11 +34,10 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
    disarmed). Still to run: out of range (`r`). FS-i6X: System setup › RX
    setup › Failsafe; *hold* CANCEL to save. On switch-on it will not
    transmit until the throttle is down.
-2. **`identify`**: done at the transmitter's defaults (2026-10-11, protocol
-   §4): CH1–CH4 the sticks, CH5 VrA, CH6 VrB; **no switch is on any
-   channel**. Next: System setup › Aux switches, turn the switches on and
-   set Ch to 10; Functions setup › Aux channels, assign them to CH7–CH10;
-   run `identify` again for the switches.
+2. **`identify`**: done (2026-10-11, protocol §4). CH1–CH4 the sticks,
+   CH5 VrA, CH6 VrB, and, with the i6X set to 10 channels, SwA–SwD on
+   CH7–CH10. Next: pick the arm switch and set its failsafe to disarmed,
+   then a `failsafe-test` run to confirm it.
 
 Then add failsafe detection to the library as `remote-cpp-design.md` §5
 describes, shaped by what the test showed. After that, settle §7's control
@@ -64,8 +63,8 @@ All on 2026-10-10, on the Pi with the live receiver:
 - `failsafe-test`, transmitter off: with failsafe all Off, frames and values
   continued unchanged; with CH3 −100%, CH3 went to 1001 after about 1 s,
   no flag (protocol §5).
-- `identify`: the sticks and knobs on CH1–CH6; switches on no channel
-  (protocol §4).
+- `identify`: the sticks and knobs on CH1–CH6, SwA–SwD on CH7–CH10 once
+  the i6X is set to 10 channels (protocol §4).
 
-**Not verified:** failsafe out of range (§5), the switches' channels (§4), 8N1 vs 8N2
+**Not verified:** failsafe out of range (§5), SwC's middle value (§4), 8N1 vs 8N2
 on the wire (§2, needs a scope), and the high nibble outside rest.

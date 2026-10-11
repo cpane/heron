@@ -219,6 +219,21 @@ at its defaults (6 channels, mode 2), 4 s per control:
 
 - **The switches SwA–SwD are on no channel** at the defaults: moving each
   one moved nothing. CH7–CH14 read 1500 throughout.
+
+With the i6X set to 10 channels (System setup › Aux switches, Ch 10) and
+the switches assigned in Functions setup › Aux channels, measured the same
+day **[ours]**:
+
+| Control on the FS-i6X | Channel | Range seen | Notes |
+|---|---|---|---|
+| SwA | CH7 | 1000..2000 |  |
+| SwB | CH8 | 1000..2000 |  |
+| SwC | CH9 | 1000..2000 | 3-position; the middle is not shown by a range |
+| SwD | CH10 | 1000..2000 |  |
+
+This is now the transmitter's configuration. CH11–CH14 are unused.
+Which physical position gives 1000, and SwC's middle value, are still to
+read from `monitor`.
 - The "also CH2" on CH1 is about 100 counts, most likely the stick moved a
   little off-axis by hand rather than a mix. No mix is configured.
 - Ranges short of 1000 or 2000 (CH1 1016, CH2 1010, VrA 1745) are probably
@@ -428,7 +443,7 @@ Reusing any of it needs the maintainer's approval first, whatever its license.
    whether the receiver sends one stop bit or two.
 3. **Interval under load:** 7.70 ms ± 0.04 ms on an idle Pi **[ours]**. How
    much does it spread with the LiDAR and the robot running?
-4. **The channel map (§4)** is measured at the defaults. Open: setting the
-   i6X to 10 channels to put the switches on CH7–CH10, and an arm switch.
+4. **The channel map (§4)** is measured, with the switches on CH7–CH10.
+   Open: which switch arms the robot, and SwC's middle value.
 5. **The high nibble:** never set in 3896 frames at rest, and not set in
    failsafe either (§5) **[ours]**. Its meaning stays as in §4.
