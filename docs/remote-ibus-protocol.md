@@ -232,8 +232,8 @@ day **[ours]**:
 | SwD | CH10 | 1000..2000 |  |
 
 This is now the transmitter's configuration. CH11–CH14 are unused.
-Which physical position gives 1000, and SwC's middle value, are still to
-read from `monitor`.
+SwA reads **1000 up, 2000 down** (`monitor`) **[ours]**. SwC's middle
+value is still to read.
 - The "also CH2" on CH1 is about 100 counts, most likely the stick moved a
   little off-axis by hand rather than a mix. No mix is configured.
 - Ranges short of 1000 or 2000 (CH1 1016, CH2 1010, VrA 1745) are probably
