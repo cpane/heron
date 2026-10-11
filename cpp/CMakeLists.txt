@@ -65,11 +65,12 @@ target_link_libraries(heron_lidar
 # -- remote control: FlySky iBUS ----------------------------------------------
 #
 # Independent of everything above. heron_ibus is pure -- frame parser, stats,
-# the stale-link rule, normalization -- and does no I/O, so the tests drive it
+# the stale-link rule, failsafe detection, normalization -- and does no I/O, so the tests drive it
 # with bytes. heron_ibus_port is the receive-only termios port. They are
 # separate so a consumer, or a test, can take the parser without the port.
 # See docs/remote-ibus-protocol.md.
 add_library(heron_ibus STATIC
+    src/remote/Failsafe.cpp
     src/remote/IBusParser.cpp
     src/remote/Normalize.cpp)
 target_include_directories(heron_ibus PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -98,6 +99,10 @@ add_test(NAME ibus_parser_test COMMAND ibus_parser_test)
 add_executable(normalize_test tests/NormalizeTest.cpp)
 target_link_libraries(normalize_test PRIVATE heron_ibus heron_warnings)
 add_test(NAME normalize_test COMMAND normalize_test)
+
+add_executable(failsafe_test tests/FailsafeTest.cpp)
+target_link_libraries(failsafe_test PRIVATE heron_ibus heron_warnings)
+add_test(NAME failsafe_test COMMAND failsafe_test)
 
 add_executable(remote_control_test tests/RemoteControlTest.cpp)
 target_link_libraries(remote_control_test PRIVATE heron_remote Threads::Threads heron_warnings)
