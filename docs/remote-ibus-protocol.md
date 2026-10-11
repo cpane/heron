@@ -251,7 +251,9 @@ SwA reads **1000 up, 2000 down**, and SwC reads **1500 in the middle**
 > and the loss is invisible. With a failsafe value set, that channel moves
 > to it about 1 s after the loss, with no flag in the top bits. Radio loss
 > is therefore only detectable through a failsafe value the robot
-> recognizes. Out of range is still to test.
+> recognizes. **But run 3, after the i6X was set to 10 channels, applied
+> no failsafe value at all:** cause not yet known. Out of range is still to
+> test.
 
 **What the sources say [community, not verified by us]:**
 
@@ -330,6 +332,28 @@ Notes on that run [ours]:
   only when the values return to rest. The tool now asks for the controls
   to be put back. It also shows a limit of the approach: **a failsafe value
   that a control can also produce cannot be told from that control.**
+
+#### failsafe-test, 2026-10-11 18:19
+
+| Item | Result |
+|---|---|
+| Transmitter failsafe setting | CH7 SwA up (disarm), CH3 -100% |
+| Link lost by | switching the transmitter off |
+| Before the loss | 129.9 Hz; CH1-14: 1502 1500 1606 1500 1164 1884 2000 1000 1500 1000 1500 1500 1500 1500 |
+| Frames after the loss | **continued**: 1299 frames in 10.0 s (129.9 Hz) |
+| Values while lost | unchanged from rest |
+| Detecting the loss | **not detectable**: frames and values carried on unchanged |
+| Recovery | nothing to recover from |
+| Verdict | CONTINUES WITH THE LAST VALUES (FROZEN). The stale rule cannot see this, and nothing in the data shows it. Unsafe for robot control as configured. If the transmitter was really off, set a failsafe value and test again. |
+
+Times are from pressing Enter, which was matched to the switch-off by hand: allow a
+few hundred ms. Checksum errors during the watch: 0.
+
+**Unexplained [ours]:** in this run **neither failsafe value was applied**,
+not even CH3's, which run 2 applied after about 1 s. Between the two runs
+the i6X went from 6 to 10 channels and CH7's failsafe was set. The cause is
+not known yet; until it is, a failsafe value set on the transmitter cannot
+be relied on.
 
 **Still to run:**
 
