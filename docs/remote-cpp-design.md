@@ -44,6 +44,98 @@ robot core deals with every sensor the same way:
   than 130 Hz simply skips frames. `seq` counts frames, so a consumer can see
   how many it skipped.
 
+### Examples, one per layer
+
+These compile against the headers and link with the libraries (checked
+2026-10-12). `setMotors()`, `check()`, `handle()` and the choice of sticks
+are placeholders for code that does not exist yet.
+
+**`heron_remote`: robot code, almost always.** The newest sticks, at the
+loop's own rate. With the failsafe configured, one `isOk()` covers a
+stale link, a disarm and a lost radio.
+
+```cpp
+#include "heron/remote/RemoteControl.h"
+using namespace Heron::Remote;
+
+void driveLoop(const std::atomic<bool> &running) {
+  ReceiverConfig config;                          // /dev/serial0, stale after 100 ms
+  config.failsafe = FailsafeConfig{6, 1000, 50};  // CH7 = SwA: 1000 is disarmed or radio lost
+  RemoteControl remote(config);
+  if (!remote.start()) {                          // never throws
+    std::fprintf(stderr, "remote: %s\n", remote.getHealth().lastError.c_str());
+    return;
+  }
+  const AxisConfig stick{.deadband = 20};
+  while (running) {
+    const RemoteSnapshot s = remote.getLatest();  // never waits
+    if (!s.isOk()) {
+      setMotors(0, 0);                            // stale, disarmed, or radio lost
+    } else {
+      const std::int32_t speed = normalizeAxis(s.frame.channels[1], stick);  // CH2
+      const std::int32_t turn = normalizeAxis(s.frame.channels[0], stick);   // CH1
+      setMotors(speed + turn, speed - turn);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));  // 50 Hz
+  }
+  remote.stop();
+}
+```
+
+The real robot adds the arming rule (§4): after a stop, SwA must be seen
+disarmed and then armed before it drives again.
+
+**`heron_ibus_port`: every frame, in order.** Logging, timing and
+diagnostics, with no background thread. This is how `ibus_reader`'s
+`dump`, `record` and `stats` work; `RemoteControl` would skip frames here,
+because it keeps only the newest.
+
+```cpp
+#include "heron/remote/IBusReceiver.h"
+using namespace Heron::Remote;
+
+// Log every SwA change with frame-accurate times.
+int main() {
+  IBusReceiver rx(ReceiverConfig{});              // throws std::system_error if the port fails
+  const TimePoint start = Clock::now();
+  std::uint16_t last = 0;
+  while (Clock::now() - start < std::chrono::seconds(10)) {
+    rx.pump(std::chrono::milliseconds(20), [&](const IBusFrame &f) {
+      if (f.channels[6] != last) {
+        const double t = std::chrono::duration<double>(f.stamp - start).count();
+        std::printf("%6.3f s  CH7 %u -> %u\n", t, last, f.channels[6]);
+        last = f.channels[6];
+      }
+    });
+  }
+  std::printf("%" PRIu64 " frames, %" PRIu64 " checksum errors\n",
+              rx.getStats().framesDecoded, rx.getStats().checksumErrors);
+}
+```
+
+**`heron_ibus`: rarely on its own.** Tests, replays, and bytes that do not
+come from a serial port. Robot code still uses its helpers
+(`normalizeAxis()`, `decodeSwitch3()`) all the time, through
+`heron_remote`.
+
+```cpp
+#include "heron/remote/Failsafe.h"
+#include "heron/remote/Normalize.h"
+using namespace Heron::Remote;
+
+// Test control logic with no hardware: build the frame by hand.
+IBusFrame f{};
+f.channels.fill(1500);
+f.channels[6] = 1000;                             // SwA up
+check(isFailsafe(f, FailsafeConfig{6, 1000, 50}), "SwA up reads as failsafe");
+check(normalizeAxis(1750, AxisConfig{}) == 500, "three-quarter stick is +500");
+check(decodeSwitch3(1500) == Switch3::Mid, "SwC middle");
+
+// Or decode raw bytes from anywhere: a file, a test vector, a socket.
+IBusParser parser;
+parser.feed(bytes, Clock::now(), [](const IBusFrame &frame) { handle(frame); });
+```
+
 ## 3. The link is judged when you ask
 
 `RemoteSnapshot::link` is computed **at the time of the `getLatest()`

@@ -1,6 +1,7 @@
 # Remote control workstream — resume point
 
-Last updated 2026-10-11. Branch **`feature/ibus-reader`**.
+Last updated 2026-10-12. The reader, library and failsafe work is merged
+into `develop` (PR #7); new work starts on a fresh branch.
 
 ## Read this first when resuming
 
