@@ -48,9 +48,11 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
    design §5). `remote_adapter 40`: SwA up and transmitter off each set
    failsafe while the link stayed OK; every not-OK poll was a failsafe one.
 
+4. **Deadband measured** (2026-10-12, protocol §7): sticks at rest do not
+   jitter, and return to within 1 count after release; recommended 10.
+
 After that, settle protocol §7's control assignment (drive, turn, speed
-ceiling, mode) from the map, and tune the deadband from `monitor`'s resting
-jitter.
+ceiling, mode) from the map; that is robot design.
 
 ## Verified so far
 

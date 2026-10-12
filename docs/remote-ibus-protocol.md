@@ -465,8 +465,13 @@ wire or receiver. Whether it catches radio loss depends on §5.**
    configurable center, deadband and endpoints. The output rises from 0 at the
    deadband edge, so there is no step. Each side scales separately, so a
    trimmed center still reaches both ends. Values beyond an endpoint clamp.
-   Proposed starting deadband: 20 counts (4% of half travel), to be tuned from
-   `monitor`'s observed jitter at rest.
+   **Recommended deadband: 10 counts** (2% of half travel). Measured
+   2026-10-12 with `monitor` **[ours]**: at rest for 60 s the sticks did not
+   move by one count (CH1 1502, CH2 1500, CH4 1501), and after being pushed
+   to an end and released they returned to within 1 count of those values,
+   every time. The largest distance from 1500 seen was 2 counts (CH1, a fixed
+   offset). 10 leaves a five-fold margin for wear, temperature and a resting
+   thumb, and is not yet tuned against driving.
 3. **Knobs** (VrA, VrB): `normalizeKnob()` maps to 0..1000, clamped.
 4. **Switches**: `decodeSwitch3()` gives LOW below 1250, HIGH above 1750,
    and MID in between. A two-position switch decodes as LOW or HIGH.
