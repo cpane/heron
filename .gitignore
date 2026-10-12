@@ -24,6 +24,8 @@ compile_commands.json
 # CLAUDE.md and .claude/settings.json
 CLAUDE.local.md
 .claude/settings.local.json
+# Isolated working copies Claude Code makes for background agents
+.claude/worktrees/
 
 # Deployment/temp files
 .tmp/
