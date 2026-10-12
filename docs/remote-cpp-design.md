@@ -66,7 +66,7 @@ void driveLoop(const std::atomic<bool> &running) {
     std::fprintf(stderr, "remote: %s\n", remote.getHealth().lastError.c_str());
     return;
   }
-  const AxisConfig stick{.deadband = 20};
+  const AxisConfig stick{.deadband = 10};        // measured, protocol §7
   while (running) {
     const RemoteSnapshot s = remote.getLatest();  // never waits
     if (!s.isOk()) {
