@@ -254,7 +254,7 @@ SwA reads **1000 up, 2000 down**, and SwC reads **1500 in the middle**
 > recognizes. The arm switch (SwA, CH7) set to fail to disarmed does
 > this: it goes to disarmed in the same frame (run 4). Run 3 applied
 > nothing because the settings had been lost on the transmitter. Out of
-> range and the recovery time are still to test.
+> range is still to test. On switch-on the link comes back disarmed (run 5).
 
 **What the sources say [community, not verified by us]:**
 
@@ -384,6 +384,34 @@ Notes on run 4 [ours]:
   when a value that moved during the loss leaves its failsafe value (for
   example SwA flipped back down). Recovery time is still unmeasured.
 
+#### failsafe-test, 2026-10-11 20:29
+
+| Item | Result |
+|---|---|
+| Transmitter failsafe setting | CH7 SwA up (disarm), CH3 -100% |
+| Link lost by | switching the transmitter off |
+| Before the loss | 129.9 Hz; CH1-14: 1502 1500 1652 1500 1164 1884 2000 1000 1000 1000 1500 1500 1500 1500 |
+| Frames after the loss | **continued**: 1299 frames in 10.0 s (129.9 Hz) |
+| Values while lost | CH3 1652 -> 1002 (+1028 ms); CH7 2000 -> 1000 (+1028 ms) |
+| Detecting the loss | **not by the stale rule**; values changed from 1028 ms after Enter |
+| Recovery | live values 12.6 s after the switch-on prompt |
+| Verdict | CONTINUES WITH FAILSAFE VALUES. The stale rule cannot see this; only recognising the failsafe values can. |
+
+Times are from pressing Enter, which was matched to the switch-off by hand: allow a
+few hundred ms. Checksum errors during the watch: 0.
+
+Notes on run 5 [ours]:
+
+- **The 1 s delay repeats a third time:** 1028 ms (runs 2 and 4: 1028,
+  1027).
+- **Recovery, 12.6 s, is a human time, not the link's.** It runs from the
+  prompt to SwA being flipped down, through: setting SwA up and the
+  throttle down, switching on, the FS-i6X's start-up warning, and the
+  flip. The FS-i6X will not transmit until SwA is up and the throttle down
+  (observed), so **the link always comes back disarmed** and stays so until
+  the operator arms. How fast the receiver relinks on its own is not
+  measured, and the robot does not need it to be.
+
 **Still to run:**
 
 | Run | State |
@@ -391,7 +419,7 @@ Notes on run 4 [ours]:
 | Failsafe all Off, transmitter off | done, FROZEN (above) |
 | Failsafe value set on a channel, transmitter off | done, FAILSAFE VALUES after about 1 s, no flag (run 2) |
 | Arm switch (CH7) failsafe to disarmed, 10 channels | done, works, same 1 s (run 4) |
-| Recovery time | to do, with the fixed test |
+| Recovery after switch-on | done: comes back disarmed; 12.6 s to re-arm by hand (run 5) |
 | Out of range instead of off | to do |
 
 ## 6. Telemetry (SENS port): not used by this project

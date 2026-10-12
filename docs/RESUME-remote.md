@@ -25,14 +25,15 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
 
 ## Picking up: two hardware runs, with someone at the transmitter
 
-1. **`failsafe-test`**: four runs on 2026-10-11, transmitter off (protocol
+1. **`failsafe-test`**: five runs on 2026-10-11, transmitter off (protocol
    §5). **The frames never stop.** Failsafe Off: the values freeze. With
    failsafe values set, those channels move to them about 1 s after the
    loss, no flag. **SwA (CH7) is the arm switch, failsafe to disarmed
    (1000), confirmed in run 4**; CH3 is −100%. So radio loss is detected
    as "disarmed". Run 3 applied nothing: the settings had been lost on the
-   transmitter, so check its Failsafe menu. Still to run: recovery time
-   (the test's recovery check is now fixed) and out of range (`r`).
+   transmitter, so check its Failsafe menu. Run 5: the link comes back
+   disarmed (the i6X will not transmit until SwA is up and the throttle
+   down). Still to run: out of range (`r`), outdoors, if it matters.
    FS-i6X: System setup › RX setup › Failsafe; UP/DOWN turns a channel
    on, *hold* CANCEL to save. On switch-on it will not transmit until the
    throttle is down.
