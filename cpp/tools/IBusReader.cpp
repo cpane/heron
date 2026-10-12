@@ -1,0 +1,1292 @@
+// File        : IBusReader.cpp
+// Author      : Chris Pane
+// Description : Learning and debugging tool for the FlySky iBUS remote
+//               control link on the Pi's UART, built on heron_ibus.
+//
+// Copyright (c) 2026 Chris Pane
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License; see LICENSE in the repository root.
+
+//     scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
+//     build-host/bin/ibus_reader monitor --device /tmp/ibus   (with ibus_fake.py)
+//
+// A bench tool, so it prints; the reusable parts (port, parser, stats, link
+// rule, normalization, IBusReceiver) are in heron_ibus and heron_ibus_port
+// and do not. It reads synchronously because dump, record and stats need
+// every frame; robot code uses RemoteControl instead.
+// Receive-only: the port is opened read-only. Subcommands and their output
+// are described in docs/remote-ibus-reader.md, the protocol in
+// docs/remote-ibus-protocol.md.
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <csignal>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <exception>
+#include <filesystem>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+#include <vector>
+
+#include <poll.h>
+#include <termios.h>
+#include <unistd.h>
+
+#include "heron/remote/IBusParser.h"
+#include "heron/remote/IBusReceiver.h"
+#include "heron/remote/LinkMonitor.h"
+
+namespace {
+
+using namespace Heron::Remote;
+using std::chrono::milliseconds;
+
+volatile std::sig_atomic_t s_stopRequested = 0;
+
+void onSignal(int) {
+  s_stopRequested = 1;
+}
+
+/** How long to wait before saying "no data", and repeating it. */
+constexpr auto kNoDataHintAfter = std::chrono::seconds(2);
+constexpr milliseconds kPumpTimeout(20);
+
+// ---------------------------------------------------------------------------
+// Options
+
+struct Options {
+  std::string command;
+  SerialConfig serial;
+  milliseconds staleAfter{100};
+  std::int64_t count{0};      // dump: frames to print, 0 = unlimited
+  std::int64_t decimate{1};   // dump: print every Nth frame
+  double seconds{0.0};        // 0 = until stopped (stats: 10)
+  double windowS{4.0};        // identify: how long to move each control
+  std::string out;            // identify, record: output file
+  double watchS{10.0};        // failsafe-test: how long to watch after the loss
+};
+
+/** Applies --seconds: true once it has elapsed since start. */
+bool timeUp(const Options &options, TimePoint start, TimePoint now) {
+  return options.seconds > 0.0 &&
+         now - start >= std::chrono::duration<double>(options.seconds);
+}
+
+[[noreturn]] void usage(int status) {
+  std::fprintf(status == 0 ? stdout : stderr,
+               "Usage: ibus_reader <command> [options]\n"
+               "\n"
+               "Commands:\n"
+               "  monitor        live display of all 14 channels (r: reset min/max, q: quit)\n"
+               "  dump           each raw packet as hex plus its decoded channels\n"
+               "  identify       guided discovery of which control drives which channel\n"
+               "  record         write every valid frame to CSV, by default to\n"
+               "                 captures/ibus-<time>.csv\n"
+               "  stats          run quietly for --seconds (default 10), then summarize\n"
+               "  failsafe-test  guided test of what the link does when the transmitter is lost\n"
+               "\n"
+               "Options:\n"
+               "  --device PATH  serial device (default /dev/serial0)\n"
+               "  --stale-ms N   no valid frame for N ms means link lost (default 100)\n"
+               "  --stop-bits N  1 or 2 (default 1; see docs/remote-ibus-protocol.md §2)\n"
+               "  --baud N       baud rate (default 115200)\n"
+               "  --seconds S    stop after S seconds\n"
+               "  --count N      dump: stop after printing N packets\n"
+               "  --decimate N   dump: print every Nth packet\n"
+               "  --window S     identify: seconds to move each control (default 4)\n"
+               "  --out FILE     identify: save the map to FILE; record: the CSV path\n"
+               "  --watch S      failsafe-test: seconds to watch after the loss (default 10)\n"
+               "  -h, --help     this text\n");
+  std::exit(status);
+}
+
+std::int64_t toInt(const std::string &flag, const std::string &text) {
+  try {
+    std::size_t used = 0;
+    const long long value = std::stoll(text, &used);
+    if (used == text.size()) {
+      return value;
+    }
+  } catch (const std::exception &) {
+  }
+  std::fprintf(stderr, "ERROR: %s needs a whole number, got '%s'\n", flag.c_str(), text.c_str());
+  usage(2);
+}
+
+double toDouble(const std::string &flag, const std::string &text) {
+  try {
+    std::size_t used = 0;
+    const double value = std::stod(text, &used);
+    if (used == text.size()) {
+      return value;
+    }
+  } catch (const std::exception &) {
+  }
+  std::fprintf(stderr, "ERROR: %s needs a number, got '%s'\n", flag.c_str(), text.c_str());
+  usage(2);
+}
+
+Options parse(int argc, char **argv) {
+  Options options;
+  for (int i = 1; i < argc; ++i) {  // int: matches argc
+    const std::string arg = argv[i];
+    auto value = [&]() -> std::string {
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "ERROR: %s needs a value\n", arg.c_str());
+        usage(2);
+      }
+      return argv[++i];
+    };
+    if (arg == "-h" || arg == "--help") {
+      usage(0);
+    } else if (arg == "--device") {
+      options.serial.device = value();
+    } else if (arg == "--stale-ms") {
+      options.staleAfter = milliseconds(toInt(arg, value()));
+    } else if (arg == "--stop-bits") {
+      options.serial.stopBits = static_cast<std::uint8_t>(toInt(arg, value()));
+    } else if (arg == "--count") {
+      options.count = toInt(arg, value());
+    } else if (arg == "--decimate") {
+      options.decimate = toInt(arg, value());
+    } else if (arg == "--window") {
+      options.windowS = toDouble(arg, value());
+    } else if (arg == "--watch") {
+      options.watchS = toDouble(arg, value());
+    } else if (arg == "--out") {
+      options.out = value();
+    } else if (arg == "--seconds") {
+      options.seconds = toDouble(arg, value());
+    } else if (arg == "--baud") {
+      options.serial.baud = static_cast<std::uint32_t>(toInt(arg, value()));
+    } else if (!arg.empty() && arg[0] != '-' && options.command.empty()) {
+      options.command = arg;
+    } else {
+      std::fprintf(stderr, "ERROR: unexpected argument '%s'\n", arg.c_str());
+      usage(2);
+    }
+  }
+  if (options.command.empty()) {
+    usage(2);
+  }
+  if (options.count < 0 || options.decimate < 1) {
+    std::fprintf(stderr, "ERROR: --count cannot be negative and --decimate must be at least 1\n");
+    usage(2);
+  }
+  if (options.watchS <= 0.0) {
+    std::fprintf(stderr, "ERROR: --watch must be positive\n");
+    usage(2);
+  }
+  if (options.windowS <= 0.0) {
+    std::fprintf(stderr, "ERROR: --window must be positive\n");
+    usage(2);
+  }
+  if (options.seconds < 0.0) {
+    std::fprintf(stderr, "ERROR: --seconds cannot be negative\n");
+    usage(2);
+  }
+  if (options.staleAfter <= milliseconds(0)) {
+    std::fprintf(stderr, "ERROR: --stale-ms must be positive\n");
+    usage(2);
+  }
+  return options;
+}
+
+// ---------------------------------------------------------------------------
+// The receiver
+
+ReceiverConfig receiverConfig(const Options &options) {
+  ReceiverConfig config;
+  config.serial = options.serial;
+  config.staleAfter = options.staleAfter;
+  return config;
+}
+
+/** The likely causes when no valid frame arrives, depending on whether any bytes did. */
+void printNoDataHint(const IBusReceiver &rx) {
+  const char *device = rx.getConfig().device.c_str();
+  if (!rx.sawBytes()) {
+    std::fprintf(stderr,
+                 "\nNo data at all on %s. Check:\n"
+                 "  - the transmitter is on and bound, and its RX output mode is i-BUS\n"
+                 "    (FS-i6X: System > RX setup > Output mode)\n"
+                 "  - the receiver's SERVO iBUS pin (not SENS) goes to GPIO15/RXD, with a\n"
+                 "    common ground\n"
+                 "  - the UART is enabled: enable_uart=1 and dtoverlay=disable-bt in\n"
+                 "    /boot/firmware/config.txt, then a reboot (target/provision/base.sh)\n"
+                 "  - the serial console is off: no console=serial0 in cmdline.txt\n\n",
+                 device);
+  } else {
+    std::fprintf(stderr,
+                 "\nBytes are arriving on %s but no valid iBUS frame. Check:\n"
+                 "  - the wire is on the SERVO iBUS pin, not SENS (telemetry)\n"
+                 "  - the RX output mode is i-BUS, not S.BUS or PPM\n"
+                 "  - the line settings (now %u baud, %u stop bit%s)\n\n",
+                 device, rx.getConfig().baud, rx.getConfig().stopBits,
+                 rx.getConfig().stopBits == 1 ? "" : "s");
+  }
+}
+
+/** Says so, once, when no frame has arrived kNoDataHintAfter after start. */
+class NoDataWatch {
+  public:
+    void check(const IBusReceiver &rx, TimePoint now) {
+      if (!m_hinted && !rx.getLink().hasFrame() && now - m_start > kNoDataHintAfter) {
+        printNoDataHint(rx);
+        m_hinted = true;
+      }
+    }
+
+  private:
+    TimePoint m_start{Clock::now()};
+    bool m_hinted{false};
+};
+
+// ---------------------------------------------------------------------------
+// The terminal
+
+/**
+ * Puts stdin in single-key mode for the lifetime of the object, restoring it
+ * on every exit path. Ctrl-C still raises SIGINT (ISIG stays on), which the
+ * loops turn into a clean exit, so the destructor always runs.
+ */
+class KeyMode {
+  public:
+    KeyMode() {
+      if (isatty(STDIN_FILENO) == 0 || tcgetattr(STDIN_FILENO, &m_saved) != 0) {
+        return;
+      }
+      termios raw = m_saved;
+      raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
+      raw.c_cc[VMIN] = 0;
+      raw.c_cc[VTIME] = 0;
+      m_active = tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0;
+    }
+
+    ~KeyMode() {
+      if (m_active) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &m_saved);
+      }
+    }
+
+    KeyMode(const KeyMode &) = delete;
+    KeyMode &operator=(const KeyMode &) = delete;
+
+    /** @return The next key pressed, or 0 if none is waiting */
+    [[nodiscard]] char poll() const {
+      if (!m_active) {
+        return 0;
+      }
+      pollfd pfd{STDIN_FILENO, POLLIN, 0};
+      char c = 0;
+      if (::poll(&pfd, 1, 0) > 0 && ::read(STDIN_FILENO, &c, 1) == 1) {
+        return c;
+      }
+      return 0;
+    }
+
+  private:
+    termios m_saved{};
+    bool m_active{false};
+};
+
+/** The alternate screen with the cursor hidden, undone on destruction. */
+class FullScreen {
+  public:
+    FullScreen() : m_active(isatty(STDOUT_FILENO) != 0) {
+      if (m_active) {
+        std::fputs("\033[?1049h\033[?25l\033[2J", stdout);
+      }
+    }
+
+    ~FullScreen() {
+      if (m_active) {
+        std::fputs("\033[?25h\033[?1049l", stdout);
+        std::fflush(stdout);
+      }
+    }
+
+    FullScreen(const FullScreen &) = delete;
+    FullScreen &operator=(const FullScreen &) = delete;
+
+  private:
+    bool m_active;
+};
+
+/**
+ * Lines typed on stdin, read without blocking so the caller can keep reading
+ * the receiver while it waits. Works on a terminal or a pipe.
+ */
+class LineInput {
+  public:
+    /**
+     * @param line Set to the next complete line, without its newline
+     * @return true if a line was available
+     */
+    bool poll(std::string &line) {
+      for (;;) {
+        const std::size_t nl = m_pending.find('\n');
+        if (nl != std::string::npos) {
+          line = m_pending.substr(0, nl);
+          m_pending.erase(0, nl + 1);
+          if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+          }
+          return true;
+        }
+        if (m_eof) {
+          return false;
+        }
+        pollfd pfd{STDIN_FILENO, POLLIN, 0};
+        if (::poll(&pfd, 1, 0) <= 0) {
+          return false;
+        }
+        char chunk[256];
+        const ssize_t n = ::read(STDIN_FILENO, chunk, sizeof chunk);
+        if (n <= 0) {
+          m_eof = true;  // treat a closed stdin as "finish"
+          if (!m_pending.empty()) {
+            m_pending.push_back('\n');
+            continue;
+          }
+          return false;
+        }
+        m_pending.append(chunk, static_cast<std::size_t>(n));
+      }
+    }
+
+    [[nodiscard]] bool isClosed() const noexcept { return m_eof && m_pending.empty(); }
+
+  private:
+    std::string m_pending;
+    bool m_eof{false};
+};
+
+/**
+ * Keeps the receiver running until a line is typed.
+ * @return false if stdin closed or a signal asked to stop
+ */
+bool waitForLine(IBusReceiver &rx, LineInput &input, std::string &line) {
+  while (s_stopRequested == 0) {
+    if (input.poll(line)) {
+      return true;
+    }
+    if (input.isClosed()) {
+      return false;
+    }
+    rx.pump(kPumpTimeout);
+  }
+  return false;
+}
+
+/**
+ * Waits for the link to come up, saying what to check if it does not.
+ * @return false if a signal asked to stop first
+ */
+bool waitForLink(IBusReceiver &rx) {
+  NoDataWatch noData;
+  const TimePoint start = Clock::now();
+  bool told = false;
+  while (s_stopRequested == 0) {
+    rx.pump(kPumpTimeout);
+    const TimePoint now = Clock::now();
+    if (rx.getLink().isOk(now)) {
+      return true;
+    }
+    if (!told && now - start > milliseconds(500)) {
+      std::printf("Waiting for the receiver (switch the transmitter on)...\n");
+      std::fflush(stdout);
+      told = true;
+    }
+    noData.check(rx, now);
+  }
+  return false;
+}
+
+double toMs(Duration d) {
+  return std::chrono::duration<double, std::milli>(d).count();
+}
+
+// ---------------------------------------------------------------------------
+// monitor
+
+/**
+ * A bar from 1000 to 2000, filled from the 1500 midpoint to the value, so
+ * sticks and knobs read the same way. Out-of-range values show an arrow.
+ */
+std::string bar(std::uint16_t raw) {
+  constexpr std::int32_t kCells = 41;  // 25 counts per cell, centre cell at 20
+  constexpr std::int32_t kMid = kCells / 2;
+  std::string out(kCells, ' ');
+  out[kMid] = '|';
+  const std::int32_t value = channelValue(raw);
+  const std::int32_t cell = std::clamp((value - 1000 + 12) / 25, 0, kCells - 1);
+  for (std::int32_t i = std::min(cell, kMid); i <= std::max(cell, kMid); ++i) {
+    if (i != kMid) {
+      out[static_cast<std::size_t>(i)] = '=';
+    }
+  }
+  if (value < 1000) {
+    out.front() = '<';
+  } else if (value > 2000) {
+    out.back() = '>';
+  }
+  return "[" + out + "]";
+}
+
+int runMonitor(const Options &options) {
+  IBusReceiver rx(receiverConfig(options));
+  KeyMode keys;
+  FullScreen screen;
+  const bool color = isatty(STDOUT_FILENO) != 0;
+
+  IBusFrame latest;
+  std::array<std::uint16_t, kIBusChannelCount> lo{};
+  std::array<std::uint16_t, kIBusChannelCount> hi{};
+  bool haveMinMax = false;
+  auto resetMinMax = [&] {
+    lo.fill(0xFFFF);
+    hi.fill(0);
+    haveMinMax = false;
+  };
+  resetMinMax();
+
+  std::uint64_t staleEvents = 0;
+  LinkState previous = LinkState::NoSignal;
+  double rateHz = 0.0;
+  std::uint64_t framesAtMark = 0;
+  const TimePoint start = Clock::now();
+  TimePoint mark = start;
+  TimePoint nextDraw = mark;
+
+  while (s_stopRequested == 0 && !timeUp(options, start, Clock::now())) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      latest = f;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        lo[i] = std::min(lo[i], f.channels[i]);
+        hi[i] = std::max(hi[i], f.channels[i]);
+      }
+      haveMinMax = true;
+    });
+
+    const char key = keys.poll();
+    if (key == 'q' || key == 'Q') {
+      break;
+    }
+    if (key == 'r' || key == 'R') {
+      resetMinMax();
+    }
+
+    const TimePoint now = Clock::now();
+    const LinkState state = rx.getLink().getState(now);
+    if (state == LinkState::Stale && previous == LinkState::Ok) {
+      ++staleEvents;
+    }
+    previous = state;
+
+    if (now - mark >= std::chrono::seconds(1)) {
+      const std::uint64_t frames = rx.getStats().framesDecoded;
+      rateHz = static_cast<double>(frames - framesAtMark) /
+               std::chrono::duration<double>(now - mark).count();
+      framesAtMark = frames;
+      mark = now;
+    }
+    if (now < nextDraw) {
+      continue;
+    }
+    nextDraw = now + milliseconds(100);
+
+    const IBusStats &s = rx.getStats();
+    const char *on = "";
+    const char *off = "";
+    if (color) {
+      on = state == LinkState::Ok ? "\033[32m" : "\033[31;1m";
+      off = "\033[0m";
+    }
+    std::printf("\033[H");
+    std::printf("ibus_reader monitor   %s   %u baud, %u stop bit(s)   stale after %.0f ms"
+                "\033[K\n",
+                rx.getConfig().device.c_str(), rx.getConfig().baud, rx.getConfig().stopBits,
+                toMs(rx.getLink().getStaleAfter()));
+    if (state == LinkState::NoSignal && now - start > kNoDataHintAfter) {
+      // The full hint goes to stderr from the line-mode commands; here, a
+      // one-line version that fits the screen.
+      std::printf("link %sNO SIGNAL%s  %s\033[K\n", on, off,
+                  rx.sawBytes() ? "bytes but no valid frame: SERVO pin? i-BUS mode? line settings?"
+                                : "no bytes: transmitter on, i-BUS mode, wiring, UART enabled?");
+    } else if (state == LinkState::NoSignal) {
+      std::printf("link %sNO SIGNAL%s (no valid frame yet)\033[K\n", on, off);
+    } else {
+      std::printf("link %s%-5s%s  last frame %6.0f ms ago   rate %6.1f Hz   frames %llu\033[K\n",
+                  on, toString(state), off, toMs(rx.getLink().sinceLastFrame(now)), rateHz,
+                  static_cast<unsigned long long>(s.framesDecoded));
+    }
+    std::printf("errors: checksum %llu   discarded bytes %llu   resyncs %llu   "
+                "stale events %llu\033[K\n",
+                static_cast<unsigned long long>(s.checksumErrors),
+                static_cast<unsigned long long>(s.discardedBytes),
+                static_cast<unsigned long long>(s.resyncs),
+                static_cast<unsigned long long>(staleEvents));
+    std::printf("\033[K\n CH   raw   1000                 1500                 2000    min   max"
+                "\033[K\n");
+    for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+      const std::uint16_t raw = latest.channels[i];
+      const std::uint8_t nibble = channelHighNibble(raw);
+      char flag[8] = "";
+      if (nibble != 0) {
+        std::snprintf(flag, sizeof flag, " !0x%X", nibble);
+      }
+      if (rx.getLink().hasFrame()) {
+        std::printf(" %2zu  %5u  %s", i + 1, raw, bar(raw).c_str());
+      } else {
+        std::printf(" %2zu      -", i + 1);
+      }
+      if (haveMinMax) {
+        std::printf("  %5u %5u%s\033[K\n", lo[i], hi[i], flag);
+      } else {
+        std::printf("      -     -\033[K\n");
+      }
+    }
+    std::printf("\033[K\nr: reset min/max   q or Ctrl-C: quit\033[K\n\033[J");
+    std::fflush(stdout);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dump
+
+/** Totals for the line-mode commands, on stderr so stdout stays data. */
+void printSummary(const IBusReceiver &rx, const char *what) {
+  const IBusStats &s = rx.getStats();
+  std::fprintf(stderr,
+               "%s: %llu frames decoded, %llu checksum errors, %llu bytes discarded in "
+               "%llu resyncs\n",
+               what, static_cast<unsigned long long>(s.framesDecoded),
+               static_cast<unsigned long long>(s.checksumErrors),
+               static_cast<unsigned long long>(s.discardedBytes),
+               static_cast<unsigned long long>(s.resyncs));
+}
+
+int runDump(const Options &options) {
+  IBusReceiver rx(receiverConfig(options));
+  NoDataWatch noData;
+  const TimePoint start = Clock::now();
+  std::int64_t seen = 0;
+  std::int64_t printed = 0;
+
+  std::printf("# t_ms: since start. hex: the 32 bytes as received (20 40, 14 channels LE, "
+              "checksum LE).\n# Then CH1..CH14 decoded, raw 16-bit.\n");
+  std::printf("#     t_ms  ");
+  for (std::size_t i = 0; i < kIBusFrameLen; ++i) {
+    std::printf("%02zu ", i);
+  }
+  std::printf("|");
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    std::printf(" CH%-3zu", i + 1);
+  }
+  std::printf("\n");
+
+  while (s_stopRequested == 0 && !timeUp(options, start, Clock::now()) &&
+         (options.count == 0 || printed < options.count)) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      if (seen++ % options.decimate != 0 || (options.count != 0 && printed >= options.count)) {
+        return;
+      }
+      ++printed;
+      std::printf("%10.3f  ", toMs(f.stamp - start));
+      for (const std::uint8_t b : f.bytes) {
+        std::printf("%02X ", b);
+      }
+      std::printf("|");
+      for (const std::uint16_t v : f.channels) {
+        std::printf(" %5u", v);
+      }
+      std::printf("\n");
+    });
+    std::fflush(stdout);
+    noData.check(rx, Clock::now());
+  }
+  printSummary(rx, "dump");
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// identify
+
+/** A channel must swing at least this far to count as moved: well above the
+ *  one or two counts of jitter a resting control shows. */
+constexpr std::int32_t kMinMoveSpan = 100;
+
+struct MapEntry {
+  std::string control;
+  std::size_t channel{0};  // 0-based
+  std::uint16_t lo{0};
+  std::uint16_t hi{0};
+  std::string notes;
+};
+
+std::string mapTable(const std::vector<MapEntry> &entries) {
+  std::string out = "| Control on the FS-i6X | Channel | Range seen | Notes |\n"
+                    "|---|---|---|---|\n";
+  char row[256];
+  for (const MapEntry &e : entries) {
+    std::snprintf(row, sizeof row, "| %s | CH%zu | %u..%u | %s |\n", e.control.c_str(),
+                  e.channel + 1, e.lo, e.hi, e.notes.c_str());
+    out += row;
+  }
+  return out;
+}
+
+int runIdentify(const Options &options) {
+  IBusReceiver rx(receiverConfig(options));
+  LineInput input;
+  std::printf("identify: find which channel each transmitter control drives.\n"
+              "For each control: type a name for it, press Enter, then move that ONE\n"
+              "control end to end a few times within %g s. Leave the others alone.\n\n",
+              options.windowS);
+  if (!waitForLink(rx)) {
+    return 0;
+  }
+  std::printf("Link OK.\n");
+
+  std::vector<MapEntry> entries;
+  std::string line;
+  for (;;) {
+    std::printf("\nControl %zu: name it (e.g. 'right stick left-right', 'SwA', 'VrB') and\n"
+                "press Enter; an empty name numbers it; q finishes.\n> ",
+                entries.size() + 1);
+    std::fflush(stdout);
+    if (!waitForLine(rx, input, line) || line == "q" || line == "Q") {
+      break;
+    }
+    MapEntry entry;
+    entry.control = line.empty() ? "control " + std::to_string(entries.size() + 1) : line;
+
+    std::array<std::uint16_t, kIBusChannelCount> lo{};
+    std::array<std::uint16_t, kIBusChannelCount> hi{};
+    lo.fill(0xFFFF);
+    std::uint64_t frames = 0;
+    bool wentStale = false;
+    const TimePoint begin = Clock::now();
+    const auto window = std::chrono::duration<double>(options.windowS);
+    std::int64_t lastShown = -1;
+    std::printf("Move '%s' now: ", entry.control.c_str());
+    while (s_stopRequested == 0 && Clock::now() - begin < window) {
+      rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+        ++frames;
+        for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+          lo[i] = std::min(lo[i], f.channels[i]);
+          hi[i] = std::max(hi[i], f.channels[i]);
+        }
+      });
+      const TimePoint now = Clock::now();
+      wentStale = wentStale || !rx.getLink().isOk(now);
+      const auto left = static_cast<std::int64_t>(
+          std::chrono::duration<double>(window - (now - begin)).count() + 0.999);
+      if (left != lastShown && left > 0) {
+        std::printf("%lld ", static_cast<long long>(left));
+        std::fflush(stdout);
+        lastShown = left;
+      }
+    }
+    std::printf("\n");
+    if (s_stopRequested != 0) {
+      break;
+    }
+    if (wentStale || frames == 0) {
+      std::printf("The link dropped during the window; try that control again.\n");
+      continue;
+    }
+
+    std::array<std::size_t, kIBusChannelCount> order{};
+    for (std::size_t i = 0; i < order.size(); ++i) {
+      order[i] = i;
+    }
+    auto span = [&](std::size_t i) { return static_cast<std::int32_t>(hi[i]) - lo[i]; };
+    std::sort(order.begin(), order.end(),
+              [&](std::size_t a, std::size_t b) { return span(a) > span(b); });
+    if (span(order[0]) < kMinMoveSpan) {
+      std::printf("No channel moved more than %d counts; try that control again.\n",
+                  kMinMoveSpan);
+      continue;
+    }
+
+    entry.channel = order[0];
+    entry.lo = lo[order[0]];
+    entry.hi = hi[order[0]];
+    std::printf("CH%zu moved (%u..%u)\n", entry.channel + 1, entry.lo, entry.hi);
+    for (std::size_t k = 1; k < order.size() && span(order[k]) >= kMinMoveSpan; ++k) {
+      char also[64];
+      std::snprintf(also, sizeof also, "also CH%zu (%u..%u)", order[k] + 1, lo[order[k]],
+                    hi[order[k]]);
+      std::printf("  %s -- a mix, or more than one control moved\n", also);
+      entry.notes += entry.notes.empty() ? also : std::string("; ") + also;
+    }
+    for (const MapEntry &e : entries) {
+      if (e.channel == entry.channel) {
+        std::printf("  note: CH%zu was already found for '%s'\n", entry.channel + 1,
+                    e.control.c_str());
+      }
+    }
+    entries.push_back(entry);
+  }
+
+  if (entries.empty()) {
+    std::printf("\nNo controls identified.\n");
+    return 0;
+  }
+  const std::string table = mapTable(entries);
+  std::printf("\nChannel map -- for docs/remote-ibus-protocol.md §4:\n\n%s", table.c_str());
+  if (!options.out.empty()) {
+    std::FILE *file = std::fopen(options.out.c_str(), "w");
+    if (file == nullptr) {
+      std::fprintf(stderr, "ERROR: cannot write %s\n", options.out.c_str());
+      return 1;
+    }
+    std::fputs(table.c_str(), file);
+    std::fclose(file);
+    std::printf("\nSaved to %s\n", options.out.c_str());
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// record
+
+/** captures/ibus-YYYYmmdd-HHMMSS.csv, relative to the working directory:
+ *  ~/heron on the Pi when run by deploy_cpp.sh, where fetch_captures.sh looks. */
+std::string defaultCapturePath() {
+  const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm local{};
+  localtime_r(&now, &local);
+  char name[64];
+  std::strftime(name, sizeof name, "captures/ibus-%Y%m%d-%H%M%S.csv", &local);
+  return name;
+}
+
+int runRecord(const Options &options) {
+  const std::string path = options.out.empty() ? defaultCapturePath() : options.out;
+  const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+  if (!parent.empty()) {
+    std::filesystem::create_directories(parent);
+  }
+  IBusReceiver rx(receiverConfig(options));  // opened first: no empty file if it fails
+  std::FILE *file = std::fopen(path.c_str(), "w");
+  if (file == nullptr) {
+    std::fprintf(stderr, "ERROR: cannot write %s\n", path.c_str());
+    return 1;
+  }
+  std::fputs("t_ms", file);
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    std::fprintf(file, ",ch%zu", i + 1);
+  }
+  std::fputs("\n", file);
+
+  char forHow[48] = "";
+  if (options.seconds > 0.0) {
+    std::snprintf(forHow, sizeof forHow, " for %g s", options.seconds);
+  }
+  std::fprintf(stderr, "record: writing %s%s; Ctrl-C to stop\n", path.c_str(), forHow);
+  NoDataWatch noData;
+  const bool progress = isatty(STDERR_FILENO) != 0;
+  const TimePoint start = Clock::now();
+  TimePoint nextProgress = start + std::chrono::seconds(1);
+  std::uint64_t written = 0;
+  while (s_stopRequested == 0 && !timeUp(options, start, Clock::now())) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      std::fprintf(file, "%.3f", toMs(f.stamp - start));
+      for (const std::uint16_t v : f.channels) {
+        std::fprintf(file, ",%u", v);
+      }
+      std::fputs("\n", file);
+      ++written;
+    });
+    const TimePoint now = Clock::now();
+    noData.check(rx, now);
+    if (progress && now >= nextProgress) {
+      std::fprintf(stderr, "\r  %6.0f s  %llu frames  link %s\033[K",
+                   std::chrono::duration<double>(now - start).count(),
+                   static_cast<unsigned long long>(written), toString(rx.getLink().getState(now)));
+      nextProgress += std::chrono::seconds(1);
+    }
+  }
+  const bool ok = std::fclose(file) == 0;
+  std::fprintf(stderr, "%s", progress ? "\n" : "");
+  printSummary(rx, "record");
+  std::fprintf(stderr, "record: %llu frames written to %s\n",
+               static_cast<unsigned long long>(written), path.c_str());
+  if (!ok) {
+    std::fprintf(stderr, "ERROR: writing %s failed\n", path.c_str());
+    return 1;
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// stats
+
+int runStats(const Options &options) {
+  constexpr double kDefaultSeconds = 10.0;
+  constexpr std::size_t kBins = 20;  // 1 ms each; the last also holds anything longer
+  Options timed = options;
+  if (timed.seconds == 0.0) {
+    timed.seconds = kDefaultSeconds;
+  }
+
+  IBusReceiver rx(receiverConfig(timed));
+  NoDataWatch noData;
+  std::array<std::uint64_t, kBins> histogram{};
+  std::array<std::uint64_t, kIBusChannelCount> nibbleFrames{};
+  std::uint64_t staleEvents = 0;
+  LinkState previous = LinkState::NoSignal;
+  TimePoint lastStamp{};
+  bool haveLast = false;
+
+  std::fprintf(stderr, "stats: collecting for %g s on %s...\n", timed.seconds,
+               rx.getConfig().device.c_str());
+  const TimePoint start = Clock::now();
+  while (s_stopRequested == 0 && !timeUp(timed, start, Clock::now())) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      if (haveLast) {
+        const auto bin = static_cast<std::size_t>(toMs(f.stamp - lastStamp));
+        ++histogram[std::min(bin, kBins - 1)];
+      }
+      lastStamp = f.stamp;
+      haveLast = true;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        if (channelHighNibble(f.channels[i]) != 0) {
+          ++nibbleFrames[i];
+        }
+      }
+    });
+    const TimePoint now = Clock::now();
+    const LinkState state = rx.getLink().getState(now);
+    if (state == LinkState::Stale && previous == LinkState::Ok) {
+      ++staleEvents;
+    }
+    previous = state;
+    noData.check(rx, now);
+  }
+  const double elapsed = std::chrono::duration<double>(Clock::now() - start).count();
+
+  const IBusStats &s = rx.getStats();
+  std::printf("iBUS statistics: %s, %u baud, %u stop bit(s), %.1f s\n",
+              rx.getConfig().device.c_str(), rx.getConfig().baud, rx.getConfig().stopBits,
+              elapsed);
+  std::printf("  bytes received     %llu\n", static_cast<unsigned long long>(s.bytesReceived));
+  std::printf("  frames decoded     %llu   (%.1f Hz)\n",
+              static_cast<unsigned long long>(s.framesDecoded), s.frameRateHz());
+  if (s.intervalCount() > 0) {
+    std::printf("  frame interval     min %.2f   mean %.2f   max %.2f   std dev %.2f ms\n",
+                toMs(s.minInterval), toMs(s.meanInterval()), toMs(s.maxInterval),
+                toMs(s.intervalStdDev()));
+    std::printf("  interval histogram, 1 ms bins (read-time stamps; protocol doc §2)\n");
+    const std::uint64_t peak = *std::max_element(histogram.begin(), histogram.end());
+    for (std::size_t b = 0; b < kBins; ++b) {
+      if (histogram[b] == 0) {
+        continue;
+      }
+      const auto width = static_cast<std::size_t>(40 * histogram[b] / peak);
+      char label[16];
+      if (b + 1 == kBins) {
+        std::snprintf(label, sizeof label, "%zu+", b);
+      } else {
+        std::snprintf(label, sizeof label, "%zu-%zu", b, b + 1);
+      }
+      std::printf("    %6s ms  %7llu  %s\n", label, static_cast<unsigned long long>(histogram[b]),
+                  std::string(std::max<std::size_t>(width, 1), '#').c_str());
+    }
+  }
+  std::printf("  checksum errors    %llu\n", static_cast<unsigned long long>(s.checksumErrors));
+  std::printf("  discarded bytes    %llu   in %llu resync(s)\n",
+              static_cast<unsigned long long>(s.discardedBytes),
+              static_cast<unsigned long long>(s.resyncs));
+  std::printf("  stale events       %llu   (stale after %.0f ms)\n",
+              static_cast<unsigned long long>(staleEvents), toMs(rx.getLink().getStaleAfter()));
+  std::string nibbles;
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (nibbleFrames[i] > 0) {
+      nibbles += " CH" + std::to_string(i + 1) + " (" + std::to_string(nibbleFrames[i]) +
+                 " frames)";
+    }
+  }
+  std::printf("  high nibble set    %s\n", nibbles.empty() ? "never" : nibbles.c_str());
+  if (s.framesDecoded == 0) {
+    printNoDataHint(rx);
+    return 1;
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// failsafe-test
+
+/** Beyond the resting range by more than this counts as a change. */
+constexpr std::int32_t kChangeThreshold = 20;
+/** A stream silent this long has clearly stopped; no need to watch further. */
+constexpr auto kStoppedLongEnough = std::chrono::seconds(3);
+
+std::string describeValue(std::uint16_t raw) {
+  char text[64];
+  if (channelHighNibble(raw) != 0) {
+    std::snprintf(text, sizeof text, "0x%04X (%u, nibble 0x%X)", raw, channelValue(raw),
+                  channelHighNibble(raw));
+  } else {
+    std::snprintf(text, sizeof text, "%u", raw);
+  }
+  return text;
+}
+
+std::string localTimestamp() {
+  const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm local{};
+  localtime_r(&now, &local);
+  char text[32];
+  std::strftime(text, sizeof text, "%Y-%m-%d %H:%M", &local);
+  return text;
+}
+
+/** What happened in the watch window after the user said the link was going. */
+struct LossWatch {
+  std::uint64_t frames{0};
+  TimePoint lastFrame{};
+  bool wentStale{false};
+  TimePoint staleAt{};
+  TimePoint lastFrameBeforeStale{};
+  bool resumedAfterStale{false};
+  std::array<bool, kIBusChannelCount> changed{};
+  std::array<TimePoint, kIBusChannelCount> changedAt{};
+  IBusFrame final;
+};
+
+int runFailsafeTest(const Options &options) {
+  IBusReceiver rx(receiverConfig(options));
+  LineInput input;
+  std::printf(
+      "failsafe-test: what does the link do when the transmitter goes away?\n"
+      "\n"
+      "Before starting:\n"
+      "  1. Set the transmitter failsafe you want to test (FS-i6X: System setup >\n"
+      "     RX setup > Failsafe). Run once with every channel Off, and once with a value set.\n"
+      "  2. Turn a knob part way and leave the throttle stick off its end stop, so\n"
+      "     'holds the last values' can be told apart from 'goes to failsafe values'.\n"
+      "  3. Then leave the controls alone until the test says otherwise.\n\n");
+  if (!waitForLink(rx)) {
+    return 0;
+  }
+  std::printf("Link OK.\n\n");
+
+  std::string setting;
+  std::string method;
+  std::printf("Transmitter failsafe setting being tested (e.g. 'all Off', 'CH3 -100%%'):\n> ");
+  std::fflush(stdout);
+  if (!waitForLine(rx, input, setting)) {
+    return 0;
+  }
+  std::printf("How will the link be lost? o = switch the transmitter off, r = carry it out\n"
+              "of range [o]:\n> ");
+  std::fflush(stdout);
+  if (!waitForLine(rx, input, method)) {
+    return 0;
+  }
+  const bool byRange = method == "r" || method == "R";
+
+  // Baseline: the resting range of every channel, and the frame rate.
+  std::printf("\nMeasuring the link at rest for 2 s; leave the controls alone...\n");
+  std::array<std::uint16_t, kIBusChannelCount> baseLo{};
+  std::array<std::uint16_t, kIBusChannelCount> baseHi{};
+  baseLo.fill(0xFFFF);
+  IBusFrame baseline;
+  rx.resetStats();
+  const TimePoint baseStart = Clock::now();
+  while (s_stopRequested == 0 && Clock::now() - baseStart < std::chrono::seconds(2)) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      baseline = f;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        baseLo[i] = std::min(baseLo[i], f.channels[i]);
+        baseHi[i] = std::max(baseHi[i], f.channels[i]);
+      }
+    });
+  }
+  const double baseHz = rx.getStats().frameRateHz();
+  if (s_stopRequested != 0 || !rx.getLink().isOk(Clock::now())) {
+    std::printf("The link was not steady during the baseline; start again.\n");
+    return 1;
+  }
+  std::printf("At rest: %.1f Hz. CH1-CH14:", baseHz);
+  for (const std::uint16_t v : baseline.channels) {
+    std::printf(" %u", v);
+  }
+  std::printf("\n\n");
+
+  if (byRange) {
+    std::printf("Press Enter as you start carrying the transmitter away, and keep going\n"
+                "until it is out of range. Watching for %g s after Enter.\n> ",
+                options.watchS);
+  } else {
+    std::printf("Press Enter and switch the transmitter OFF at the same moment.\n"
+                "Watching for %g s after Enter.\n> ",
+                options.watchS);
+  }
+  std::fflush(stdout);
+  std::string ignored;
+  if (!waitForLine(rx, input, ignored)) {
+    return 0;
+  }
+
+  LossWatch w;
+  const TimePoint t0 = Clock::now();
+  const auto watch = std::chrono::duration<double>(options.watchS);
+  rx.resetStats();
+  while (s_stopRequested == 0 && Clock::now() - t0 < watch) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      ++w.frames;
+      w.lastFrame = f.stamp;
+      w.final = f;
+      if (w.wentStale) {
+        w.resumedAfterStale = true;
+      }
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        const std::int32_t v = f.channels[i];
+        const bool outside = v < baseLo[i] - kChangeThreshold || v > baseHi[i] + kChangeThreshold;
+        if (!w.changed[i] && outside) {
+          w.changed[i] = true;
+          w.changedAt[i] = f.stamp;
+        }
+      }
+    });
+    const TimePoint now = Clock::now();
+    if (!w.wentStale && rx.getLink().getState(now) == LinkState::Stale) {
+      w.wentStale = true;
+      w.staleAt = now;
+      w.lastFrameBeforeStale = rx.getLink().getLastFrame();
+    }
+    if (w.wentStale && !w.resumedAfterStale && now - w.staleAt > kStoppedLongEnough) {
+      break;
+    }
+  }
+  if (s_stopRequested != 0) {
+    return 0;
+  }
+  const double watchedS = std::chrono::duration<double>(Clock::now() - t0).count();
+  const IBusStats lossStats = rx.getStats();
+
+  const bool anyChanged = std::any_of(w.changed.begin(), w.changed.end(), [](bool c) { return c; });
+  TimePoint firstChange = TimePoint::max();
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (w.changed[i]) {
+      firstChange = std::min(firstChange, w.changedAt[i]);
+    }
+  }
+  const bool somethingHappened = w.wentStale || anyChanged;
+
+  // Recovery, if there is anything to recover from.
+  std::printf("\nNow switch the transmitter back ON (or bring it back in range).\n%s",
+              somethingHappened
+                  ? "Then move a control that changed during the loss (flip the switch back):\n"
+                    "recovery is when a value leaves the one it took while the link was lost.\n"
+                    "(If the FS-i6X beeps a throttle warning, it will not transmit until the\n"
+                    "throttle stick is down.) Watching for up to 20 s...\n"
+                                : "Nothing changed during the loss, so there is no recovery to "
+                                  "measure.\n");
+  const TimePoint t1 = Clock::now();
+  bool resumed = false;
+  TimePoint resumedAt{};
+  bool restored = false;
+  TimePoint restoredAt{};
+  const std::uint64_t framesBefore = rx.getStats().framesDecoded;
+  while (somethingHappened && s_stopRequested == 0 &&
+         Clock::now() - t1 < std::chrono::seconds(20) && !restored) {
+    rx.pump(kPumpTimeout, [&](const IBusFrame &f) {
+      // Values that moved during the loss: live input again once any of them
+      // leaves the value it took then. Putting every control back within a
+      // few counts of rest by hand is not possible, so rest is no test.
+      // Frames that only stopped: back at rest is enough.
+      bool live = !anyChanged;
+      for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+        const std::int32_t v = f.channels[i];
+        if (anyChanged) {
+          live = live || (w.changed[i] && std::abs(v - w.final.channels[i]) > kChangeThreshold);
+        } else {
+          live = live && v >= baseLo[i] - kChangeThreshold && v <= baseHi[i] + kChangeThreshold;
+        }
+      }
+      if (!resumed && rx.getStats().framesDecoded > framesBefore && w.wentStale) {
+        resumed = true;
+        resumedAt = f.stamp;
+      }
+      if (live) {
+        restored = true;
+        restoredAt = f.stamp;
+      }
+    });
+  }
+
+  // Classify and report.
+  bool anyNibble = false;
+  std::string valuesWhileLost;
+  for (std::size_t i = 0; i < kIBusChannelCount; ++i) {
+    if (channelHighNibble(w.final.channels[i]) != 0) {
+      anyNibble = true;
+    }
+    if (w.changed[i]) {
+      char row[160];
+      std::snprintf(row, sizeof row, "%sCH%zu %u -> %s (+%.0f ms)",
+                    valuesWhileLost.empty() ? "" : "; ", i + 1, baseline.channels[i],
+                    describeValue(w.final.channels[i]).c_str(), toMs(w.changedAt[i] - t0));
+      valuesWhileLost += row;
+    }
+  }
+  const double staleMs = toMs(rx.getLink().getStaleAfter());
+
+  std::string framesAfter;
+  std::string detect;
+  std::string verdict;
+  char text[256];
+  if (w.wentStale && !w.resumedAfterStale) {
+    const double lastMs = toMs(w.lastFrameBeforeStale - t0);
+    std::snprintf(text, sizeof text, "**stopped**: last frame %.0f ms after Enter", lastMs);
+    framesAfter = text;
+    std::snprintf(text, sizeof text, "stale rule (%.0f ms) fired %.0f ms after Enter", staleMs,
+                  toMs(w.staleAt - t0));
+    detect = text;
+    verdict = "STOPS. The stream stops, so the stale-link rule detects the loss.";
+  } else if (w.wentStale) {
+    std::snprintf(text, sizeof text,
+                  "**stopped, then resumed** within the watch: silent from %.0f ms after Enter",
+                  toMs(w.lastFrameBeforeStale - t0));
+    framesAfter = text;
+    std::snprintf(text, sizeof text, "stale rule (%.0f ms) fired %.0f ms after Enter", staleMs,
+                  toMs(w.staleAt - t0));
+    detect = text;
+    verdict = anyChanged ? "STOPS, THEN RESUMES WITH CHANGED VALUES. Look at the values below."
+                         : "STOPS, THEN RESUMES WITH THE SAME VALUES. Check the transmitter "
+                           "really stayed off.";
+  } else {
+    std::snprintf(text, sizeof text, "**continued**: %llu frames in %.1f s (%.1f Hz)",
+                  static_cast<unsigned long long>(w.frames), watchedS, lossStats.frameRateHz());
+    framesAfter = text;
+    if (anyChanged) {
+      std::snprintf(text, sizeof text,
+                    "**not by the stale rule**; values changed from %.0f ms after Enter",
+                    toMs(firstChange - t0));
+      detect = text;
+      verdict = anyNibble
+                    ? "CONTINUES WITH FAILSAFE VALUES, FLAGGED IN THE HIGH NIBBLE. The stale "
+                      "rule cannot see this; the values or the flag can."
+                    : "CONTINUES WITH FAILSAFE VALUES. The stale rule cannot see this; only "
+                      "recognising the failsafe values can.";
+    } else {
+      detect = "**not detectable**: frames and values carried on unchanged";
+      verdict = "CONTINUES WITH THE LAST VALUES (FROZEN). The stale rule cannot see this, and "
+                "nothing in the data shows it. Unsafe for robot control as configured. If the "
+                "transmitter was really off, set a failsafe value and test again.";
+    }
+  }
+  if (valuesWhileLost.empty()) {
+    valuesWhileLost = w.frames > 0 ? "unchanged from rest" : "none received";
+  }
+  if (anyNibble) {
+    valuesWhileLost += "; high nibble set";
+  }
+
+  std::string recovery;
+  if (restored) {
+    std::snprintf(text, sizeof text, "live values %.1f s after the switch-on prompt",
+                  std::chrono::duration<double>(restoredAt - t1).count());
+    recovery = text;
+    if (resumed) {
+      std::snprintf(text, sizeof text, "; frames resumed after %.1f s",
+                    std::chrono::duration<double>(resumedAt - t1).count());
+      recovery += text;
+    }
+  } else if (resumed) {
+    std::snprintf(text, sizeof text,
+                  "frames resumed %.1f s after the prompt, values not live within 20 s",
+                  std::chrono::duration<double>(resumedAt - t1).count());
+    recovery = text;
+  } else if (somethingHappened) {
+    recovery = "not within 20 s of the switch-on prompt";
+  } else {
+    recovery = "nothing to recover from";
+  }
+
+  std::printf("\nResult: %s\n", verdict.c_str());
+  std::printf("\n----- paste into docs/remote-ibus-protocol.md §5 -----\n\n");
+  std::printf("#### failsafe-test, %s\n\n", localTimestamp().c_str());
+  std::printf("| Item | Result |\n|---|---|\n");
+  std::printf("| Transmitter failsafe setting | %s |\n",
+              setting.empty() ? "(not given)" : setting.c_str());
+  std::printf("| Link lost by | %s |\n", byRange ? "carrying the transmitter out of range"
+                                                  : "switching the transmitter off");
+  std::printf("| Before the loss | %.1f Hz; CH1-14:", baseHz);
+  for (const std::uint16_t v : baseline.channels) {
+    std::printf(" %u", v);
+  }
+  std::printf(" |\n");
+  std::printf("| Frames after the loss | %s |\n", framesAfter.c_str());
+  std::printf("| Values while lost | %s |\n", valuesWhileLost.c_str());
+  std::printf("| Detecting the loss | %s |\n", detect.c_str());
+  std::printf("| Recovery | %s |\n", recovery.c_str());
+  std::printf("| Verdict | %s |\n", verdict.c_str());
+  std::printf("\nTimes are from pressing Enter, which was matched to the %s by hand: allow a\n"
+              "few hundred ms. Checksum errors during the watch: %llu.\n",
+              byRange ? "start of the walk" : "switch-off",
+              static_cast<unsigned long long>(lossStats.checksumErrors));
+  std::printf("\n----- end -----\n");
+  return 0;
+}
+
+}  // namespace
+
+int main(int argc, char **argv) {
+  const Options options = parse(argc, argv);
+  std::signal(SIGINT, onSignal);
+  std::signal(SIGTERM, onSignal);
+
+  try {
+    if (options.command == "monitor") {
+      return runMonitor(options);
+    }
+    if (options.command == "dump") {
+      return runDump(options);
+    }
+    if (options.command == "identify") {
+      return runIdentify(options);
+    }
+    if (options.command == "record") {
+      return runRecord(options);
+    }
+    if (options.command == "stats") {
+      return runStats(options);
+    }
+    if (options.command == "failsafe-test") {
+      return runFailsafeTest(options);
+    }
+    std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
+    usage(2);
+  } catch (const std::system_error &e) {
+    std::fprintf(stderr, "ERROR: %s\n", e.what());
+    if (e.code() == std::errc::no_such_file_or_directory) {
+      std::fprintf(stderr,
+                   "  %s does not exist. On the Pi the GPIO UART needs enable_uart=1 and\n"
+                   "  dtoverlay=disable-bt (target/provision/base.sh) and a reboot.\n",
+                   options.serial.device.c_str());
+    } else if (e.code() == std::errc::permission_denied) {
+      std::fprintf(stderr,
+                   "  Permission denied: add this user to the dialout group, then log in\n"
+                   "  again:   sudo usermod -aG dialout \"$USER\"\n");
+    }
+    return 1;
+  } catch (const std::exception &e) {
+    std::fprintf(stderr, "ERROR: %s\n", e.what());
+    return 1;
+  }
+}

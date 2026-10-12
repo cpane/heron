@@ -21,7 +21,7 @@ Host-native, for anything that does not need the target:
 
 ```
 cmake --preset host && cmake --build --preset host
-ctest --test-dir build-host          # the four unit-test suites
+ctest --test-dir build-host          # the unit-test suites
 ./build-host/bin/lidar_nearest --replay captures/<stem>.rpraw
 ```
 
@@ -174,6 +174,14 @@ robot code, programs      see Heron::Scan, never sl::  (robot code: later)
 Each row uses the rows above it.
 
 cpp/probes/               may use the SDK directly; not production
+
+heron_ibus                remote control: iBUS parser, stats, link rule,
+                          normalization; pure, no I/O
+  ^
+heron_ibus_port           receive-only termios port, and IBusReceiver
+  ^
+heron_remote              RemoteControl: reader thread, latest-wins; what
+                          robot code links (remote-cpp-design.md)
 ```
 
 `heron_lidar` links the SDK and the channels **privately**, so anything
@@ -186,9 +194,12 @@ include path. The boundary is enforced by the build. Rationale in
 | Target | Source | Kind |
 |---|---|---|
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
+| `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
 | `lidar_info`, `lidar_record`, `lidar_adapter`, `lidar_nearest` | `cpp/probes/` | on-target programs |
 | `lidar_gui_server` | `cpp/tools/` | serves the library to the viewer |
+| `remote_adapter` | `cpp/probes/` | `RemoteControl` live, as a 50 Hz robot loop sees it |
+| `ibus_reader` | `cpp/tools/` | learns and debugs the FlySky iBUS remote control link from the Pi's UART; see [`remote-ibus-reader.md`](remote-ibus-reader.md) |
 
 ## Two things the first hardware run established
 

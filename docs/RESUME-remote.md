@@ -1,0 +1,77 @@
+# Remote control workstream — resume point
+
+Last updated 2026-10-11. Branch **`feature/ibus-reader`**.
+
+## Read this first when resuming
+
+The remote is a FlySky **FS-i6X** transmitter and an **FS-iA6B** receiver.
+The receiver's iBUS SERVO output is wired to the Pi's GPIO UART
+(`/dev/serial0`). The aim of this stage is to understand the link and build a
+reusable reader, as the LiDAR workstream did. It is not robot control yet.
+
+| Piece | Where | State |
+|---|---|---|
+| Protocol reference | [`remote-ibus-protocol.md`](remote-ibus-protocol.md) | sourced and cross-checked; timing measured; **§4 map and §5 failsafe await hardware runs** |
+| `heron_ibus`: parser, stats, `LinkMonitor`, normalization | `cpp/include/heron/remote/`, `cpp/src/remote/` | unit tested; decodes live frames on the Pi |
+| `heron_ibus_port`: receive-only termios port, `IBusReceiver` | same | verified on the Pi |
+| **`heron_remote`: `RemoteControl`**, what robot code links | same; [`remote-cpp-design.md`](remote-cpp-design.md) | pty test on host and Pi; `remote_adapter` live on the Pi, including failsafe |
+| `ibus_reader`: monitor, dump, identify, record, failsafe-test, stats | `cpp/tools/IBusReader.cpp`; [`remote-ibus-reader.md`](remote-ibus-reader.md) | all six tested against the fake; monitor, dump, record and stats also run live on the Pi |
+| `ibus_fake.py`: fake receiver on a pty | `python/tools/` | host testing |
+
+```
+scripts/build_cpp.sh
+scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
+```
+
+## Picking up: two hardware runs, with someone at the transmitter
+
+1. **`failsafe-test`**: five runs on 2026-10-11, transmitter off (protocol
+   §5). **The frames never stop.** Failsafe Off: the values freeze. With
+   failsafe values set, those channels move to them about 1 s after the
+   loss, no flag. **SwA (CH7) is the arm switch, failsafe to disarmed
+   (1000), confirmed in run 4**; CH3 is −100%. So radio loss is detected
+   as "disarmed". Run 3 applied nothing: the settings had been lost on the
+   transmitter, so check its Failsafe menu. Run 5: the link comes back
+   disarmed (the i6X will not transmit until SwA is up and the throttle
+   down). Still to run: out of range (`r`), outdoors, if it matters.
+   FS-i6X: System setup › RX setup › Failsafe; UP/DOWN turns a channel
+   on, *hold* CANCEL to save. On switch-on it will not transmit until the
+   throttle is down.
+2. **`identify`**: done (2026-10-11, protocol §4). CH1–CH4 the sticks,
+   CH5 VrA, CH6 VrB, and, with the i6X set to 10 channels, SwA–SwD on
+   CH7–CH10. Next: pick the arm switch and set its failsafe to disarmed,
+   then a `failsafe-test` run to confirm it.
+
+3. **Failsafe detection is in the library and verified on the receiver**
+   (`FailsafeConfig`, `RemoteSnapshot::failsafe`, folded into `isOk()`;
+   design §5). `remote_adapter 40`: SwA up and transmitter off each set
+   failsafe while the link stayed OK; every not-OK poll was a failsafe one.
+
+After that, settle protocol §7's control assignment (drive, turn, speed
+ceiling, mode) from the map, and tune the deadband from `monitor`'s resting
+jitter.
+
+## Verified so far
+
+All on 2026-10-10, on the Pi with the live receiver:
+
+- The refactored reader decodes live frames. `ibus_parser_test` and
+  `normalize_test` pass on the host and on the Pi.
+- `dump` captured the frame used as protocol §3's worked example. The parser
+  test decodes it.
+- `stats --seconds 30`: 129.9 Hz, interval 7.70 ms (7.66–7.73, std dev
+  0.01), 0 checksum errors. Every byte is accounted for by channel frames
+  (protocol §2).
+- `monitor` and `record` run against the live receiver.
+- `RemoteControl` (`remote_adapter 5`): 250 polls at 50 Hz, link OK at every
+  one, 130 frames/s, no checksum errors. `remote_control_test` passes on the
+  Pi.
+
+- `failsafe-test`, transmitter off: with failsafe all Off, frames and values
+  continued unchanged; with CH3 −100%, CH3 went to 1001 after about 1 s,
+  no flag; SwA on CH7 failing to disarmed works (protocol §5).
+- `identify`: the sticks and knobs on CH1–CH6, SwA–SwD on CH7–CH10 once
+  the i6X is set to 10 channels (protocol §4).
+
+**Not verified:** failsafe out of range (§5), 8N1 vs 8N2
+on the wire (§2, needs a scope), and the high nibble outside rest.
