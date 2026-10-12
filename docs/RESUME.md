@@ -7,7 +7,7 @@ another's. Start from the workstream you are picking up.
 | Workstream | Resume file | State | Pick up at |
 |---|---|---|---|
 | LiDAR (RPLIDAR A1M8) | [`RESUME-lidar.md`](RESUME-lidar.md) | paused 2026-10-04 at a clean stopping point | lifecycle hardening (its §9) |
-| Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | active since 2026-10-10 | see its "Picking up" |
+| Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | paused 2026-10-12 at a clean stopping point | optional checks only (its "Picking up") |
 
 Planned, not started: odometry (I²C), and, after it and the remote control, the robot design that ties them together.
 

@@ -3,8 +3,8 @@
 Robot platform on a Raspberry Pi 3, in hardware bring-up. Each sensor or
 subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
-ties them together. The LiDAR workstream has a working C++ library and is
-paused; the remote control is being explored, and odometry is next.
+ties them together. The LiDAR and remote control workstreams each have a
+working C++ library and are paused; odometry is next.
 
 ## Workstreams
 
@@ -53,7 +53,7 @@ LiDAR-only facts:
   robot. Robot-level design (motion arbiter, motor link, shutdown path,
   deskewing, mounting offset) waits.
 
-### Remote control — FlySky FS-i6X / FS-iA6B over iBUS (active)
+### Remote control — FlySky FS-i6X / FS-iA6B over iBUS (paused 2026-10-12)
 
 Read before doing remote-control work:
 
@@ -61,8 +61,8 @@ Read before doing remote-control work:
 - `docs/remote-ibus-protocol.md` — the protocol reference. FlySky publishes
   no spec; every fact there is tagged [ours], [community] or [unverified].
   Do not state community facts as measured, and do not fill gaps from
-  general knowledge. **§5 (failsafe) is unverified until a hardware run**,
-  and the robot's stop logic depends on it.
+  general knowledge. §5 (failsafe) is measured: the receiver never stops
+  sending on radio loss, so the robot detects it through the arm switch.
 - `docs/remote-cpp-design.md` — the library layers and how the robot uses them.
 - `docs/remote-ibus-reader.md` — the `ibus_reader` tool and its subcommands.
 
