@@ -14,7 +14,7 @@ reusable reader, as the LiDAR workstream did. It is not robot control yet.
 | Protocol reference | [`remote-ibus-protocol.md`](remote-ibus-protocol.md) | sourced and cross-checked; timing measured; **§4 map and §5 failsafe await hardware runs** |
 | `heron_ibus`: parser, stats, `LinkMonitor`, normalization | `cpp/include/heron/remote/`, `cpp/src/remote/` | unit tested; decodes live frames on the Pi |
 | `heron_ibus_port`: receive-only termios port, `IBusReceiver` | same | verified on the Pi |
-| **`heron_remote`: `RemoteControl`**, what robot code links | same; [`remote-cpp-design.md`](remote-cpp-design.md) | pty test on host and Pi; `remote_adapter` live on the Pi; failsafe detection host-tested only |
+| **`heron_remote`: `RemoteControl`**, what robot code links | same; [`remote-cpp-design.md`](remote-cpp-design.md) | pty test on host and Pi; `remote_adapter` live on the Pi, including failsafe |
 | `ibus_reader`: monitor, dump, identify, record, failsafe-test, stats | `cpp/tools/IBusReader.cpp`; [`remote-ibus-reader.md`](remote-ibus-reader.md) | all six tested against the fake; monitor, dump, record and stats also run live on the Pi |
 | `ibus_fake.py`: fake receiver on a pty | `python/tools/` | host testing |
 
@@ -42,12 +42,10 @@ scripts/deploy_cpp.sh <user>@<pi> ibus_reader monitor
    CH7–CH10. Next: pick the arm switch and set its failsafe to disarmed,
    then a `failsafe-test` run to confirm it.
 
-3. **Failsafe detection is in the library** (`FailsafeConfig`,
-   `RemoteSnapshot::failsafe`, folded into `isOk()`; design §5), tested on
-   the host with a pty. **Not yet run on the receiver:** run
-   `remote_adapter 30` (it watches CH7 = 1000 ± 50), switch the
-   transmitter off mid-run, and check failsafe goes YES about 1 s later
-   while the link stays OK; flipping SwA up should do the same.
+3. **Failsafe detection is in the library and verified on the receiver**
+   (`FailsafeConfig`, `RemoteSnapshot::failsafe`, folded into `isOk()`;
+   design §5). `remote_adapter 40`: SwA up and transmitter off each set
+   failsafe while the link stayed OK; every not-OK poll was a failsafe one.
 
 After that, settle protocol §7's control assignment (drive, turn, speed
 ceiling, mode) from the map, and tune the deadband from `monitor`'s resting

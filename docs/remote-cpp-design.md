@@ -134,6 +134,12 @@ judges each frame as it arrives and publishes the result:
 down 2000 = armed. Its transmitter failsafe is 1000. So the robot sets
 `FailsafeConfig{6, 1000, 50}`, and `remote_adapter` does the same.
 
+**Verified on the receiver** (2026-10-11, `remote_adapter 40`) **[ours]**:
+flipping SwA up, and switching the transmitter off, each set `failsafe` with
+the link staying OK throughout. Over 1992 polls, every one that was not OK
+was a failsafe one (742), with 0 stale events, 2 failsafe events, and 0
+checksum errors. After switch-on and SwA down it cleared.
+
 **Limits:**
 
 - **A deliberate disarm reads exactly like radio loss.** That is intended:
