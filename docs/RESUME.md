@@ -8,8 +8,9 @@ another's. Start from the workstream you are picking up.
 |---|---|---|---|
 | LiDAR (RPLIDAR A1M8) | [`RESUME-lidar.md`](RESUME-lidar.md) | paused 2026-10-04 at a clean stopping point | lifecycle hardening (its §9) |
 | Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | paused 2026-10-12 at a clean stopping point | optional checks only (its "Picking up") |
+| Odometry (SparkFun OTOS, I²C) | [`RESUME-odometry.md`](RESUME-odometry.md) | active since 2026-10-12 | see its "Picking up" |
 
-Planned, not started: odometry (I²C), and, after it and the remote control, the robot design that ties them together.
+Planned, not started: the robot design that ties the workstreams together, after odometry.
 
 ## Starting a new workstream
 

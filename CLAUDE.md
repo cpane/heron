@@ -4,7 +4,7 @@ Robot platform on a Raspberry Pi 3, in hardware bring-up. Each sensor or
 subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR and remote control workstreams each have a
-working C++ library and are paused; odometry is next.
+working C++ library and are paused; odometry is being explored.
 
 ## Workstreams
 
@@ -78,6 +78,18 @@ Remote-only facts:
 - No code from the iBUS sources may be copied; IBusBM and Betaflight are
   copyleft. The license table is in the protocol doc, §8.
 
+### Odometry — SparkFun OTOS (PAA5160E1) over I2C (active)
+
+Read before doing odometry work:
+
+- **`docs/RESUME-odometry.md`** — where the work stands and what is next.
+
+Odometry-only facts:
+
+- The sensor is on the Pi's I2C bus 1 (`/dev/i2c-1`, SDA GPIO2, SCL
+  GPIO3), enabled by provisioning. Nothing about the sensor has been
+  measured yet: do not state its behaviour from general knowledge.
+
 ## Development model
 
 Code is written on the host (macOS) and stored in git. **The Pi is a
@@ -109,8 +121,9 @@ Deployed code and binaries live under `~/heron` on the Pi; provisioning and
 deploy scripts need SSH to it, and provisioning needs `sudo` there.
 
 Attached: the RPLIDAR A1M8 (USB), and a FlySky FS-iA6B receiver (iBUS on the
-GPIO UART) for the FS-i6X remote. Planned, not yet attached or explored: an
-Arduino motor controller and I2C odometry.
+GPIO UART) for the FS-i6X remote. Being explored: a SparkFun OTOS optical
+odometry sensor on I2C. Planned, not yet attached or explored: an Arduino
+motor controller.
 
 ## Common commands
 
