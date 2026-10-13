@@ -83,12 +83,19 @@ Remote-only facts:
 Read before doing odometry work:
 
 - **`docs/RESUME-odometry.md`** — where the work stands and what is next.
+- `docs/odometry-otos-reference.md` — the sensor reference: wiring,
+  register map, start-up, calibration, mounting. Every fact is tagged
+  [ours], [community] or [unverified], as in the remote's protocol doc.
 
 Odometry-only facts:
 
 - The sensor is on the Pi's I2C bus 1 (`/dev/i2c-1`, SDA GPIO2, SCL
-  GPIO3), enabled by provisioning. Nothing about the sensor has been
-  measured yet: do not state its behaviour from general knowledge.
+  GPIO3), enabled at 100 kHz by provisioning; address 0x17. **3.3 V
+  only.** Nothing about it has been measured yet: do not state its
+  behaviour from general knowledge.
+- No code from the SparkFun sources may be copied without the user's
+  approval, even the MIT libraries; the schematic is CC BY-SA. The license
+  table is in the reference, §9.
 
 ## Development model
 

@@ -15,21 +15,25 @@ robot localisation yet.
 
 | Piece | Where | State |
 |---|---|---|
-| I2C bus enabled in provisioning | `target/provision/base.sh` | written; not yet run on the Pi |
+| Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; nothing measured |
+| I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | written; not yet run on the Pi |
 
 ## Picking up
 
-1. **Research the sources** (product page, hookup guide, register map, the
-   SparkFun libraries and their licenses) into a sensor reference,
-   `docs/odometry-otos-reference.md`, with every fact tagged as in the
-   remote's protocol doc.
+1. **Wire it** (reference §2): 3V3 to Pi pin 1, SDA pin 3, SCL pin 5, GND
+   to a ground pin; IO9 and IO10 unconnected; never pin 2 or 4 (5 V). The
+   Pi has no Qwiic socket: use a Qwiic-to-female-jumper cable, or solder a
+   header into the board's edge holes.
 2. **Run provisioning** (`scripts/provision_pi.sh <user>@<pi>`, then
    reboot) and check `/dev/i2c-1` exists and the user is in group `i2c`.
-3. **Attach the sensor** (Qwiic: 3.3 V, GND, SDA on GPIO2 / pin 3, SCL on
-   GPIO3 / pin 5) and confirm it answers with `i2cdetect -y 1`.
-4. Then a first C++ probe that reads its product ID, and on from there.
+3. **Confirm it answers:** `i2cdetect -y 1` should show 0x17.
+4. **First C++ probe:** read the product ID (0x00 = 0x5F), then 36-byte
+   bursts from 0x20 in a loop, counting failures. The first risk is the Pi
+   3's I2C and the board's clock stretching (reference §3, §10).
 
 ## Open questions
 
-- Is the sensor mounted on the robot, and at what height and offset from
-  the robot's centre?
+- Mounting: not mounted yet (loose on the bench). Height must be 10–27 mm
+  above the floor, rigid and level; the offset from the robot's centre is
+  written to the sensor.
+- The rest are in the reference, §10.

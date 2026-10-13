@@ -323,7 +323,10 @@ I2C_MARKER="# heron: I2C bus for the odometry sensor"
 
 # The ARM I2C bus on GPIO2/GPIO3 (pins 3 and 5) is off on a stock image.
 # i2c_arm turns the controller on; i2c-dev is the module that gives user
-# space /dev/i2c-1, which our C++ talks to directly. [all] for the same
+# space /dev/i2c-1, which our C++ talks to directly. 100 kHz is stated
+# rather than left to the default: the OTOS stretches the clock, SparkFun
+# advise 100 kHz, and the Pi 3's controller is known to mishandle clock
+# stretching (docs/odometry-otos-reference.md §3). [all] for the same
 # reason as above.
 if ! grep -qF "${I2C_MARKER}" "${BOOT_CONFIG}"; then
     {
@@ -331,6 +334,7 @@ if ! grep -qF "${I2C_MARKER}" "${BOOT_CONFIG}"; then
         echo "${I2C_MARKER}"
         echo "[all]"
         echo "dtparam=i2c_arm=on"
+        echo "dtparam=i2c_arm_baudrate=100000"
     } >> "${BOOT_CONFIG}"
     REBOOT_NEEDED=1
 fi
