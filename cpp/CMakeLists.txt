@@ -169,6 +169,11 @@ target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(otos_bus probes/OtosBus.cpp)
     target_link_libraries(otos_bus PRIVATE heron_warnings)
+
+    # The start-up sequence (IMU calibration, reset), then a still board's
+    # status, heading drift and raw accelerometer.
+    add_executable(otos_start probes/OtosStart.cpp)
+    target_link_libraries(otos_start PRIVATE heron_warnings)
 endif()
 
 # -- tools -----------------------------------------------------------------------

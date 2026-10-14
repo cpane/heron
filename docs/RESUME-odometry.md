@@ -20,17 +20,21 @@ shows 0x17 and nothing else.
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
+| `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | builds; not yet run |
 
 ## Picking up
 
 Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
 
-1. **Probe O1 is clean** (reference §3). Status read 0x01 (tilt) every time,
-   sensor side up. Run 2, turned over without a power cycle: 0x03, a large
-   pose, fast heading drift (reference §8). Next: power-cycle the Pi with
-   the board sensor side down, raised, still, and re-run.
-2. Then the start-up sequence (reference §4): calibration, scalars, reset.
-   Later, a long `otos_bus` soak with the LiDAR and remote running.
+1. **Probe O1 is clean** (reference §3). A still board reports a tilt
+   warning and drifts by degrees a minute, even after a power cycle in the
+   working orientation (reference §8, runs 1–3).
+2. **Run probe O2:** `scripts/deploy_cpp.sh <user>@<pi> otos_start`, board
+   still and sensor side down. It runs the start-up sequence (IMU
+   calibration, reset), then prints status, heading drift and the raw
+   accelerometer for 30 s. Does calibration clear the tilt warning and
+   slow the drift? Which accelerometer axis carries gravity?
+3. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
