@@ -61,7 +61,13 @@ alone unless the bus misbehaves.
   [community: GI#5]. Provisioning sets the Pi's bus to 100 kHz.
 - **Clock stretching:** the board stretches the clock [community: FW, GI#5].
   The Pi 3's I2C controller has a long-documented problem with clock
-  stretching [community: PI]. **This is the first risk to measure** (§10).
+  stretching [community: PI]. **Probe O1 (`otos_bus`), 2026-10-13, at
+  100 kHz:** 4000 combined write-then-read transactions in 11.8 s, 2000 of
+  them 37-byte reads from 0x1F, with 0 failures, 0 bad product IDs and 0
+  pose jumps [ours]. A 37-byte read took 3.66 ms at least (about the bare
+  bus time), 5.30 ms on average, 5.92 ms at most [ours]. Whether the extra
+  is clock stretching or scheduling is not known [unverified]. One short run
+  on a still sensor: not yet a soak test.
 - **Transfers:** write the register index, then read or write; the index
   auto-increments. Reads past 0x5F return 0 [community: FW].
 - **A single read is a coherent snapshot.** The board updates the readable
@@ -76,7 +82,7 @@ alone unless the bus misbehaves.
 | Reg | Name | Access | Format, raw int16 to SI |
 |---|---|---|---|
 | 0x00 | Product ID | R | 0x5F |
-| 0x01, 0x02 | HW, FW version | R | high nibble major, low nibble minor; FW 1.0 reports HW 1.1, FW 1.0 |
+| 0x01, 0x02 | HW, FW version | R | high nibble major, low nibble minor; FW 1.0 reports HW 1.1, FW 1.0; ours reads HW 1.1, FW 1.0 [ours] |
 | 0x04, 0x05 | Linear, angular scalar | R/W | int8: scalar = 1 + raw × 0.001, so 0.872 to 1.127 |
 | 0x06 | IMU calibration | R/W | write N samples (1–255); reads back the remaining count, 0 when done |
 | 0x07 | Reset | R/W | bit 0 resets tracking (pose to 0); reads back 0 when done |
@@ -166,6 +172,10 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   points to a bad IMU calibration [community: F4, HG].
 - **Position range ±10 m** in the registers. What happens beyond is
   unknown; possibly wraps [unverified]. Matters for a floor robot.
+- **Tilt warning on the bench [ours]:** status read 0x01 (tilt) in all
+  2000 snapshots of probe O1, with the board loose on the bench, sensor
+  side up. The working orientation is sensor side down, facing the floor,
+  so the board may simply have been upside down [unverified].
 - **Tilt:** beyond about 11.5° of roll or pitch the board stops using the
   accelerometer and sets the tilt warning [community: FW]. Long runs might
   raise a false tilt warning, because roll and pitch are a pure gyro
@@ -199,7 +209,9 @@ optical chip.
 
 ## 10. Open questions, for the hardware
 
-1. **Does the Pi 3's I2C read the board reliably** at 100 kHz, given clock
+1. **Partly answered:** probe O1 was clean (§3). Still open: a long soak,
+   and reads while the LiDAR and remote are running.
+   **Does the Pi 3's I2C read the board reliably** at 100 kHz, given clock
    stretching? Can a 36-byte burst be read in one combined transaction? If
    not: a delay between write and read, or the bit-banged `i2c-gpio`.
 2. Does an offset write over `/dev/i2c-1` take effect every time?
