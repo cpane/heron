@@ -182,6 +182,12 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   −4.2° in 11.4 s, against −0.011° in run 1 [ours]. A guess: roll and pitch
   are a gyro integral from power-up (§8), so after being turned over the
   board still thinks it is upside down [unverified].
+  **Run 3,** after a full power cycle, sensor side down, raised, still:
+  status 0x01 (tilt only) in every snapshot; heading −1.6° in 8.2 s; pose a
+  few cm from boot [ours]. So the tilt warning is not from being turned over
+  after power-up. Every read took 3.66–3.71 ms, against 5.3 ms on average in
+  runs 1 and 2 [ours]; why is not known. Not yet tried: the full IMU
+  calibration (§4).
 - **Tilt:** beyond about 11.5° of roll or pitch the board stops using the
   accelerometer and sets the tilt warning [community: FW]. Long runs might
   raise a false tilt warning, because roll and pitch are a pure gyro
