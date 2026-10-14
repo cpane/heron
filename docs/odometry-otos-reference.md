@@ -116,6 +116,11 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
      0.6 s. **The board must be still and flat** throughout.
   4. Set the scalars and the offset.
   5. Reset tracking (0x07 = 1).
+- **Steps 3 and 5 are needed [ours, probe O2, 2026-10-13].** Without them, a
+  still board read a tilt warning and drifted 12°/min (§8, runs 1–3). After
+  them: calibration took 619 ms and the reset 11 ms; status 0x00 for 30 s;
+  pose stayed at 0; heading wandered within 0.04° and ended at 0.000°. One
+  30 s run, sensor side down, still.
 
 ## 5. Calibration
 
@@ -186,8 +191,15 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   status 0x01 (tilt only) in every snapshot; heading −1.6° in 8.2 s; pose a
   few cm from boot [ours]. So the tilt warning is not from being turned over
   after power-up. Every read took 3.66–3.71 ms, against 5.3 ms on average in
-  runs 1 and 2 [ours]; why is not known. Not yet tried: the full IMU
-  calibration (§4).
+  runs 1 and 2 [ours]; why is not known.
+  **Probe O2** (full IMU calibration and reset, §4) cleared the warning
+  (0x00 for 30 s), in the same position [ours]. The raw accelerometer read
+  x −185, y −360, z +2044 (mean): gravity on +z with the sensor side down,
+  and a tilt of about 11.2° from the vector [ours, arithmetic]. That is
+  just under the 11.5° threshold, so the earlier warnings may have been a
+  real borderline tilt, and calibration may take the current attitude as
+  level [unverified]. 2044 counts for 1 g fits a ±16 g range (2048/g)
+  [unverified].
 - **Tilt:** beyond about 11.5° of roll or pitch the board stops using the
   accelerometer and sets the tilt warning [community: FW]. Long runs might
   raise a false tilt warning, because roll and pitch are a pure gyro

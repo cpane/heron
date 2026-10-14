@@ -11,7 +11,7 @@ The aim of this stage is the same as for the LiDAR and the remote: understand
 the sensor, build a reusable reader, and verify it on the hardware. It is not
 robot localisation yet.
 
-**Measured so far:** it answers on the bus. Wired 2026-10-13 through the
+**Measured so far:** it answers on the bus, reads cleanly, and holds still after the start-up sequence. Wired 2026-10-13 through the
 HAT's SDA/SCL/3V3/GND (the HAT passes GPIO2/3 through); `i2cdetect -y 1`
 shows 0x17 and nothing else.
 
@@ -20,21 +20,20 @@ shows 0x17 and nothing else.
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
-| `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | builds; not yet run |
+| `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: status 0x00, no drift in 30 s (reference §4) |
 
 ## Picking up
 
 Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
 
-1. **Probe O1 is clean** (reference §3). A still board reports a tilt
-   warning and drifts by degrees a minute, even after a power cycle in the
-   working orientation (reference §8, runs 1–3).
-2. **Run probe O2:** `scripts/deploy_cpp.sh <user>@<pi> otos_start`, board
-   still and sensor side down. It runs the start-up sequence (IMU
-   calibration, reset), then prints status, heading drift and the raw
-   accelerometer for 30 s. Does calibration clear the tilt warning and
-   slow the drift? Which accelerometer axis carries gravity?
-3. Later, a long `otos_bus` soak with the LiDAR and remote running.
+1. **Probes O1 and O2 are done:** the bus is clean; the start-up sequence
+   (IMU calibration, reset) is required, and with it a still board holds
+   status 0x00 and its heading (reference §3, §4).
+2. **A long still run:** `otos_start 600`, board level, to measure heading
+   drift against the 18°/h one user reported (reference §8, §10 q3).
+3. **Moving:** the board on a sled 10–27 mm above the floor, pushed known
+   distances, for the optical tracking and the linear scalar (reference §5).
+4. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
