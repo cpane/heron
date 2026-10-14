@@ -6,8 +6,8 @@ claims, update the tags and the text.
 
 **Tags.** **[ours]** measured on our hardware. **[community]** stated by a
 source in §9 (the bracket names it). **[unverified]** our inference, or a
-claim no source makes directly. Nothing is **[ours]** yet: the sensor has
-not been attached.
+claim no source makes directly. Little is **[ours]** yet: the sensor answers
+on the bus, and nothing else has been measured.
 
 Written in our own words from the sources in §9, retrieved 2026-10-12. **No
 code from any source is in this repository.**
@@ -43,7 +43,7 @@ code from any source is in this repository.**
 | Current | Not stated for the board. Optical chip about 14.5 mA, plus 2 mA for the laser | [community: DS] |
 | IO9, IO10 | IO9 is a data-ready output in normal use; both are the bootloader UART for firmware updates. Neither is needed to read the sensor | [community: HG, FW] |
 
-**Our wiring** (not yet done): 3V3 to Pi pin 1, SDA to pin 3 (GPIO2), SCL to
+**Our wiring** (done 2026-10-13, through a HAT that passes the pins through): 3V3 to Pi pin 1, SDA to pin 3 (GPIO2), SCL to
 pin 5 (GPIO3), GND to a ground pin. IO9 and IO10 unconnected. Never a 5 V
 pin (2 or 4).
 
@@ -55,6 +55,7 @@ alone unless the bus misbehaves.
 ## 3. I2C
 
 - **Address 0x17,** fixed; there is no jumper [community: PP, HG, FW].
+  `i2cdetect -y 1` shows 0x17 and nothing else on bus 1 [ours, 2026-10-13].
 - **Product ID:** register 0x00 reads **0x5F** [community: RM, AR].
 - **Speed:** no source states a maximum. SparkFun advise 100 kHz
   [community: GI#5]. Provisioning sets the Pi's bus to 100 kHz.
