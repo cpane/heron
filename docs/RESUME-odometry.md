@@ -26,8 +26,9 @@ shows 0x17 and nothing else.
 Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
 
 1. **Probe O1 is clean** (reference §3). Status read 0x01 (tilt) every time,
-   with the board sensor side up on the bench: re-run with it sensor side
-   down, raised 10–25 mm, to see whether the warning clears.
+   sensor side up. Run 2, turned over without a power cycle: 0x03, a large
+   pose, fast heading drift (reference §8). Next: power-cycle the Pi with
+   the board sensor side down, raised, still, and re-run.
 2. Then the start-up sequence (reference §4): calibration, scalars, reset.
    Later, a long `otos_bus` soak with the LiDAR and remote running.
 

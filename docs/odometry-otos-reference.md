@@ -176,6 +176,12 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   2000 snapshots of probe O1, with the board loose on the bench, sensor
   side up. The working orientation is sensor side down, facing the floor,
   so the board may simply have been upside down [unverified].
+  **Run 2,** tape off, turned sensor side down and raised, without a power
+  cycle: status 0x03 (tilt and optical tracking) in every snapshot; pose
+  x +2.06 m, y −6.31 m, heading −40° after the handling; heading drifting
+  −4.2° in 11.4 s, against −0.011° in run 1 [ours]. A guess: roll and pitch
+  are a gyro integral from power-up (§8), so after being turned over the
+  board still thinks it is upside down [unverified].
 - **Tilt:** beyond about 11.5° of roll or pitch the board stops using the
   accelerometer and sets the tilt warning [community: FW]. Long runs might
   raise a false tilt warning, because roll and pitch are a pure gyro
