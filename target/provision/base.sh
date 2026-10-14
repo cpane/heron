@@ -410,6 +410,11 @@ if [[ -n "${THROTTLED}" && "${THROTTLED}" != "throttled=0x0" ]]; then
     echo "for at least 2.5 A, and consider a powered USB hub for the LiDAR."
 fi
 
+# Flush everything written above to the SD card now. Otherwise, if the Pi
+# loses power before the kernel writes it out, config.txt (FAT) keeps its old
+# contents and new files under /etc can come back empty.
+sync
+
 echo
 echo "========================================"
 echo " Provisioning complete"

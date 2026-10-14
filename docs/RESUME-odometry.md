@@ -26,7 +26,9 @@ robot localisation yet.
    header into the board's edge holes.
 2. **Run provisioning** (`scripts/provision_pi.sh <user>@<pi>`, then
    reboot) and check `/dev/i2c-1` exists and the user is in group `i2c`.
-3. **Confirm it answers:** `i2cdetect -y 1` should show 0x17.
+3. **Confirm it answers:** `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`
+   should show 0x17. The full path is needed: `/usr/sbin` is not on the
+   PATH of a non-login ssh command.
 4. **First C++ probe:** read the product ID (0x00 = 0x5F), then 36-byte
    bursts from 0x20 in a loop, counting failures. The first risk is the Pi
    3's I2C and the board's clock stretching (reference §3, §10).
