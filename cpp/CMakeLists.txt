@@ -163,6 +163,14 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 add_executable(remote_adapter probes/RemoteAdapter.cpp)
 target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
 
+# OTOS over I2C: does the Pi 3 read the odometry sensor reliably? Uses the
+# kernel's I2C interface (linux/i2c-dev.h), so it builds only for Linux --
+# the Pi -- and not on a macOS host. docs/odometry-otos-reference.md §10.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(otos_bus probes/OtosBus.cpp)
+    target_link_libraries(otos_bus PRIVATE heron_warnings)
+endif()
+
 # -- tools -----------------------------------------------------------------------
 #
 # Programs for working with the LiDAR from the host. The viewer server serves
