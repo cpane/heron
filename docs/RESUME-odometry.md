@@ -21,7 +21,7 @@ shows 0x17 and nothing else.
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
-| `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | builds; not yet run |
+| `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 1: mixed, clean trials within 1.1% (reference §5) |
 
 ## Picking up
 
@@ -35,9 +35,9 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    enough to move on; recalibrating while stopped, and LiDAR heading
    correction, are robot-design questions.
 3. **Moving, probe O3:** `scripts/deploy_cpp.sh <user>@<pi> otos_move`.
-   Interactive: the sensor on a sled 12–15 mm above the floor, pushed along
-   a tape measure; it prints the reported distance, and from the true one
-   the error and the linear scalar (reference §5). Default scalars.
+   Run 1 was mixed: large heading changes and sideways travel (reference
+   §5). Next: pushes guided along a straight edge, with the probe's new
+   start-heading and direction columns.
 4. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The

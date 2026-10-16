@@ -28,6 +28,12 @@
 //
 // While a trial runs, one line updates in place five times a second.
 //
+// Two columns are there to tell the sled's motion from the sensor's errors:
+// the heading read straight after the reset (does the reset zero it?), and
+// the direction of travel in the reset frame. Pushed straight along a guide,
+// the direction should stay the same from trial to trial and the heading
+// change near 0.
+//
 // The start-up and the per-trial reset are the only writes. No scalars are
 // set: this measures the uncorrected sensor.
 
@@ -195,6 +201,8 @@ struct Trial {
   double yMm;
   double headingDeg;
   double pathMm;
+  double startHeadingDeg;  // as read straight after the reset
+  double directionDeg;     // of travel, from the sensor's +y axis
   std::uint8_t statusSeen;
   std::uint64_t failedReads;
 };
@@ -243,6 +251,8 @@ bool runTrial(int fd, Trial &trial) {
   trial.yMm = (last.y - start.y) * 1000.0;
   trial.reportedMm = std::hypot(trial.xMm, trial.yMm);
   trial.headingDeg = (last.h - start.h) * 180.0 / kPi;
+  trial.startHeadingDeg = start.h * 180.0 / kPi;
+  trial.directionDeg = std::atan2(-trial.xMm, trial.yMm) * 180.0 / kPi;
   trial.pathMm = path * 1000.0;
   trial.statusSeen = statusSeen;
   trial.failedReads = failed;
@@ -252,7 +262,7 @@ bool runTrial(int fd, Trial &trial) {
 
 void printTable(const std::vector<Trial> &trials) {
   std::printf("\n  #  reported mm   true mm   error %%  scalar   x mm     y mm     heading  path mm"
-              "  status  failed\n");
+              "  start h  direction  status  failed\n");
   for (std::size_t i = 0; i < trials.size(); ++i) {
     const Trial &t = trials[i];
     std::printf("%3zu  %10.1f", i + 1, t.reportedMm);
@@ -262,8 +272,9 @@ void printTable(const std::vector<Trial> &trials) {
     } else {
       std::printf("  %8s  %7s  %6s", "-", "-", "-");
     }
-    std::printf("  %+7.1f  %+7.1f  %+7.2f  %7.1f   0x%02X  %6" PRIu64 "\n", t.xMm, t.yMm,
-                t.headingDeg, t.pathMm, t.statusSeen, t.failedReads);
+    std::printf("  %+7.1f  %+7.1f  %+7.2f  %7.1f  %+7.2f  %+8.1f   0x%02X  %6" PRIu64 "\n",
+                t.xMm, t.yMm, t.headingDeg, t.pathMm, t.startHeadingDeg, t.directionDeg,
+                t.statusSeen, t.failedReads);
   }
 }
 
@@ -320,6 +331,9 @@ int main(int argc, char **argv) {
     std::printf("\n\n  reported        %.1f mm (x %+.1f, y %+.1f), heading %+.2f deg\n",
                 t.reportedMm, t.xMm, t.yMm, t.headingDeg);
     std::printf("  path length     %.1f mm\n", t.pathMm);
+    std::printf("  direction       %+.1f deg from the sensor's +y axis; heading after the reset"
+                " %+.2f deg\n",
+                t.directionDeg, t.startHeadingDeg);
     std::printf("  status bits     0x%02X (bit 0 tilt, 1 optical tracking, 6 optical chip,"
                 " 7 IMU)\n",
                 t.statusSeen);

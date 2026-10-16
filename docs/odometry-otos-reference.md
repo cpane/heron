@@ -124,6 +124,27 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
 
 ## 5. Calibration
 
+**Probe O3 (`otos_move`), run 1, 2026-10-15** [ours]: five pushes of
+1000 mm along a tape measure, default scalars, sled and floor not recorded.
+
+| # | Reported mm | Error | x, y mm | Heading change | Path mm | Status |
+|---|---|---|---|---|---|---|
+| 1 | 1013.2 | +1.32% | +60.7, +1011.4 | −39.77° | 1033.8 | 0x01 |
+| 2 | 953.8 | −4.62% | −545.3, +782.5 | −4.99° | 1106.7 | 0x03 |
+| 3 | 943.7 | −5.63% | −405.6, +852.1 | −7.99° | 1101.4 | 0x01 |
+| 4 | 999.4 | −0.06% | −419.0, +907.3 | −11.85° | 1053.1 | 0x00 |
+| 5 | 1010.9 | +1.09% | −53.7, +1009.5 | −28.58° | 1028.5 | 0x00 |
+
+- The two clean trials (status 0x00) were within 1.1% [ours].
+- Trials 2–4 moved 25–35° off the sensor's y axis, and every trial showed a
+  heading change of 5–40°. Whether the sled turned, was pushed at an angle,
+  or the heading is wrong is not known [unverified]. A 40° turn spread over
+  the push would have bent the path far more than trial 1's 61 mm sideways,
+  so trial 1's turn, if real, came at the start or the end [ours,
+  arithmetic].
+- Tilt (bit 0) in trials 1–3 and an optical warning (bit 1) in trial 2.
+- Too mixed to set a scalar. Next: a guided, straight push.
+
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
   - **angular:** spin about 10 full turns; scalar = true angle / reported
