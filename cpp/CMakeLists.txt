@@ -174,6 +174,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # status, heading drift and raw accelerometer.
     add_executable(otos_start probes/OtosStart.cpp)
     target_link_libraries(otos_start PRIVATE heron_warnings)
+
+    # Interactive: push the sensor a measured distance, compare.
+    add_executable(otos_move probes/OtosMove.cpp)
+    target_link_libraries(otos_move PRIVATE heron_warnings)
 endif()
 
 # -- tools -----------------------------------------------------------------------

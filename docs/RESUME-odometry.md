@@ -20,7 +20,8 @@ shows 0x17 and nothing else.
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
-| `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: status 0x00, no drift in 30 s (reference §4) |
+| `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
+| `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | builds; not yet run |
 
 ## Picking up
 
@@ -33,8 +34,10 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    the rate to about 0.2°/min and it grows from there (reference §8). Good
    enough to move on; recalibrating while stopped, and LiDAR heading
    correction, are robot-design questions.
-3. **Moving:** the board on a sled 10–27 mm above the floor, pushed known
-   distances, for the optical tracking and the linear scalar (reference §5).
+3. **Moving, probe O3:** `scripts/deploy_cpp.sh <user>@<pi> otos_move`.
+   Interactive: the sensor on a sled 12–15 mm above the floor, pushed along
+   a tape measure; it prints the reported distance, and from the true one
+   the error and the linear scalar (reference §5). Default scalars.
 4. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
