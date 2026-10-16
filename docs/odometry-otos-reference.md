@@ -182,7 +182,14 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   +0.59, +0.68, +0.89, +0.92, +0.90° [ours]. So the gyro bias moved after
   calibration; why is not known (temperature is a candidate, given no
   compensation) [unverified]. Status 0x00 and pose exactly 0 throughout;
-  43215 readings, 0 failed [ours]. One run.
+  43215 readings, 0 failed [ours].
+  **Run 2, straight after:** heading +3.22° in 10 min, 0.32°/min, about
+  19°/h [ours]. Per minute +0.21, +0.20, +0.23, +0.30, +0.34, +0.37,
+  +0.40, +0.35, +0.37, +0.47° [ours]. So a fresh calibration brought the
+  rate back to about 0.2°/min, and it grew again, more slowly [ours]. Between
+  the runs, uncalibrated, the heading had moved to +34° and the tilt warning
+  had come back, with the board untouched [ours]; consistent with roll and
+  pitch drifting as a gyro integral (below) [unverified].
 - **Position range ±10 m** in the registers. What happens beyond is
   unknown; possibly wraps [unverified]. Matters for a floor robot.
 - **Tilt warning on the bench [ours]:** status read 0x01 (tilt) in all
@@ -247,9 +254,9 @@ optical chip.
    stretching? Can a 36-byte burst be read in one combined transaction? If
    not: a delay between write and read, or the bit-banged `i2c-gpio`.
 2. Does an offset write over `/dev/i2c-1` take effect every time?
-3. Stationary heading drift: one 10 min run measured (§8); the rate grew
-   from about 0.2 to 0.9°/min. Does it repeat, and does a fresh
-   calibration reset it?
+3. Stationary heading drift: two 10 min runs (§8). A fresh calibration
+   resets the rate to about 0.2°/min, and it then grows. Why it grows, and
+   how often the robot should recalibrate while stopped, are open.
 4. The right mounting height for our floor, and how often the optical
    tracking warning appears.
 5. Scalars on our floor; does the foam-tuned LUT help or hurt (0x0E bit 0)?
