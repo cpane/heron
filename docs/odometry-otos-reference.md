@@ -175,6 +175,14 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
 - **Heading drift:** gyro only, with no temperature compensation. One user
   measured about 18°/h while stationary [community: GI#2]. A rapid spin
   points to a bad IMU calibration [community: F4, HG].
+  **Ours, probe O2, 600 s, 2026-10-15** (board level to 1.3° by the
+  accelerometer, sensor side down, still, after calibration and reset):
+  heading +5.85° in 10 min, 0.59°/min, about 35°/h on average [ours]. The
+  rate grew during the run: per minute +0.28, +0.18, +0.34, +0.56, +0.52,
+  +0.59, +0.68, +0.89, +0.92, +0.90° [ours]. So the gyro bias moved after
+  calibration; why is not known (temperature is a candidate, given no
+  compensation) [unverified]. Status 0x00 and pose exactly 0 throughout;
+  43215 readings, 0 failed [ours]. One run.
 - **Position range ±10 m** in the registers. What happens beyond is
   unknown; possibly wraps [unverified]. Matters for a floor robot.
 - **Tilt warning on the bench [ours]:** status read 0x01 (tilt) in all
@@ -239,8 +247,9 @@ optical chip.
    stretching? Can a 36-byte burst be read in one combined transaction? If
    not: a delay between write and read, or the bit-banged `i2c-gpio`.
 2. Does an offset write over `/dev/i2c-1` take effect every time?
-3. Stationary heading drift after a 255-sample calibration, and over
-   warm-up.
+3. Stationary heading drift: one 10 min run measured (§8); the rate grew
+   from about 0.2 to 0.9°/min. Does it repeat, and does a fresh
+   calibration reset it?
 4. The right mounting height for our floor, and how often the optical
    tracking warning appears.
 5. Scalars on our floor; does the foam-tuned LUT help or hurt (0x0E bit 0)?

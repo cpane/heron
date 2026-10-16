@@ -29,8 +29,9 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
 1. **Probes O1 and O2 are done:** the bus is clean; the start-up sequence
    (IMU calibration, reset) is required, and with it a still board holds
    status 0x00 and its heading (reference §3, §4).
-2. **A long still run:** `otos_start 600`, board level, to measure heading
-   drift against the 18°/h one user reported (reference §8, §10 q3).
+2. **Still drift:** one 600 s run, level: +5.85° in 10 min, the rate
+   growing from about 0.2 to 0.9°/min (reference §8). Next: repeat at once,
+   to see whether a fresh calibration resets the rate.
 3. **Moving:** the board on a sled 10–27 mm above the floor, pushed known
    distances, for the optical tracking and the linear scalar (reference §5).
 4. Later, a long `otos_bus` soak with the LiDAR and remote running.
