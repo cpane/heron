@@ -68,6 +68,20 @@ alone unless the bus misbehaves.
   bus time), 5.30 ms on average, 5.92 ms at most [ours]. Whether the extra
   is clock stretching or scheduling is not known [unverified]. One short run
   on a still sensor: not yet a soak test.
+- **Soak, 2026-10-18** [ours]: `otos_bus 150000` with `lidar_adapter` and
+  `remote_adapter` running throughout, the Pi on Wi-Fi, the sensor still.
+  300 000 transactions, 150 000 of them 37-byte reads, in 976.8 s: **0
+  failures, 0 bad product IDs, 0 pose jumps.** A 37-byte read took 3.66 ms
+  at least, 5.83 ms on average, 6.28 ms at most: the minimum unchanged,
+  the average 0.5 ms above the unloaded run. Meanwhile the LiDAR delivered
+  7653 scans with 0 sequence skips (2 grab timeouts), and the remote link
+  stayed OK at about 130 frames/s with 0 stale events.
+  - About 152 iterations a second for most of the run, but about 245 a
+    second for the first 3 s and for 5 s around 612 s. The cause is not
+    known [unverified].
+  - No start-up sequence (the probe writes nothing): status 0x01, tilt, in
+    every snapshot, and the heading drifted +19.6° over the run, about
+    1.2°/min, as an uncalibrated board does (§8).
 - **Transfers:** write the register index, then read or write; the index
   auto-increments. Reads past 0x5F return 0 [community: FW].
 - **A single read is a coherent snapshot.** The board updates the readable
@@ -420,8 +434,8 @@ optical chip.
 
 ## 10. Open questions, for the hardware
 
-1. **Partly answered:** probe O1 was clean (§3). Still open: a long soak,
-   and reads while the LiDAR and remote are running.
+1. **Answered for 100 kHz:** probe O1 was clean, alone and in a 977 s
+   soak with the LiDAR and remote running (§3).
    **Does the Pi 3's I2C read the board reliably** at 100 kHz, given clock
    stretching? Can a 36-byte burst be read in one combined transaction? If
    not: a delay between write and read, or the bit-banged `i2c-gpio`.

@@ -19,7 +19,7 @@ shows 0x17 and nothing else.
 |---|---|---|
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
-| `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
+| `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
 | `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
 | `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | run 4, out and back: no direction difference, steadiest spins within 0.05%; scalar stays 1.0 (reference §5) |
@@ -45,7 +45,11 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    directions; the error fell trial by trial with steadier handling, to
    0.05%. The angular scalar stays 1.0 (reference §5). Both scalars are
    to be checked again on the robot.
-5. **Next:** a long `otos_bus` soak with the LiDAR and remote running.
+5. **Bus soak done:** 150 000 iterations in 977 s with the LiDAR and
+   remote running, 0 errors (reference §3).
+6. **Next:** the exploration questions are answered well enough to design
+   the library (`OtosConfig` for scalars and offset; start-up sequence;
+   reader thread like `Lidar` and `RemoteControl`).
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
