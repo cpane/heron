@@ -147,7 +147,7 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
 
 **Run 2, 2026-10-17** [ours]: the sled stiffened so it could not tip, and
 pushed along a straight edge. Five pushes of 1000 mm, default scalars.
-Floor and sensor height not recorded.
+Wood panel floor; sensor height not recorded.
 
 | # | Reported mm | Error | x, y mm | Heading change | Path mm | Status |
 |---|---|---|---|---|---|---|
@@ -168,6 +168,36 @@ Floor and sensor height not recorded.
   a rigid, guided sled removed them [ours].
 - Path length runs 3–10 mm over the straight-line distance: small sideways
   wander along the push.
+
+**Probe O4 (`otos_spin`), run 1, 2026-10-17** [ours]: the same sled spun
+by hand 10 turns in place, from a mark back to it, all in the same
+direction (negative heading). Default scalars, read back as raw 0. Wood
+panel floor.
+
+| # | Reported deg | Error | End heading | Moved x, y mm | Time s | Fastest deg/s | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | −3599.27 | −0.02% | +0.73° | −270, +469 | 55.4 | 544 | 0x03 |
+| 2 | −3601.39 | +0.04% | −1.39° | −418, +1044 | 48.5 | 364 | 0x03 |
+| 3 | −3605.28 | +0.15% | −5.28° | +1377, −870 | 43.6 | 513 | 0x03 |
+| 4 | −3611.26 | +0.31% | −11.26° | +137, −2 | 44.2 | 338 | 0x03 |
+| 5 | −3601.63 | +0.05% | −1.63° | +102, +240 | 48.2 | 322 | 0x03 |
+
+- **Mean +0.11%, standard deviation 0.13%** over 3600° [ours]. The
+  correcting scalar would be 0.999, one register step; **the angular
+  scalar stays at 1.0** for now [ours, arithmetic].
+- Trials 1, 2 and 5 ended within 1.7° of the mark, about what lining up
+  by eye allows. Trials 3 and 4 ended 5° and 11° over. Whether that was
+  the lining up or the gyro is not known [unverified]. Trial 4 had the
+  slowest top speed, so it does not point to the gyro saturating.
+- Gyro drift while still (§8, up to about 0.6°/min) adds under 0.5° to a
+  trial of under a minute [ours, arithmetic].
+- **Tilt and optical warnings (0x03) in every trial**, and the position
+  moved 0.1–1.6 m although the sled stayed in place. The sensor is off the
+  spin's centre, so some motion is real; how much of it is the optical
+  tracking losing the floor while turning is not known [unverified]. It
+  does not affect the heading, which is gyro only (§1).
+- Only one direction was spun: whether the error is the same the other
+  way is open.
 
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
@@ -305,9 +335,9 @@ optical chip.
 4. The right mounting height for our floor, and how often the optical
    tracking warning appears.
    No optical warning on a rigid, guided sled (§5, run 2).
-5. **Linear partly answered:** 1.0 holds within 0.2% on a guided push
-   (§5, run 2). Still open: the angular scalar, and does the foam-tuned
-   LUT help or hurt (0x0E bit 0)?
+5. **Mostly answered:** linear and angular scalars both stay at 1.0, within
+   0.2% and 0.11% (§5). Still open: the angular error spinning the other
+   way, and does the foam-tuned LUT help or hurt (0x0E bit 0)?
 6. Distance error against speed. Repeatability at slow push speed: 0.41%
    standard deviation over 1 m (§5, run 2).
 7. What happens beyond ±10 m.
