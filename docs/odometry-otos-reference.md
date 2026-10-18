@@ -237,6 +237,32 @@ heading), after a fresh start-up.
   [ours, the user's report]: ten stops and starts per trial.
 - **Angular scalar stays at 1.0** until the cause is known.
 
+**Run 3, 2026-10-18** [ours]: out and back, untethered from winding: 5
+turns one way, 5 back to the mark, so the true total is 0. Trials 1–3
+stopped at the mark every turn, 4–6 turned smoothly. The probe was the
+build before the leg split, so only the net angle was recorded.
+
+| # | Net deg | Moved x, y mm | Time s | Fastest deg/s | Status |
+|---|---|---|---|---|---|
+| 1 | +9.48 | +24, −14 | 47.9 | 361 | 0x01 |
+| 2 | +3.15 | +3, +40 | 44.9 | 417 | 0x01 |
+| 3 | +4.12 | −20, −4 | 41.8 | 407 | 0x01 |
+| 4 | −6.46 | +9, −45 | 37.0 | 297 | 0x01 |
+| 5 | +12.60 | +15, +34 | 36.9 | 416 | 0x01 |
+| 6 | +9.77 | +20, +19 | 27.6 | 374 | 0x01 |
+
+- **Net mean +5.4°, standard deviation 6.6°, over 3600° turned** [ours].
+  Runs 1–2's errors (+0.11% and −0.72% by direction) would have left about
+  −15° net every trial [ours, arithmetic]. They did not: **the direction
+  asymmetry of runs 1–2 came from the cable**, not the gyro.
+- What remains, about 0.15% of the angle turned, is the same size as
+  lining the sled up by eye (a few degrees) [ours, arithmetic]. No
+  difference between stopping every turn and turning smoothly.
+- Tilt warning (0x01) in every trial, no optical warning; position moved
+  under 50 mm.
+- Each direction's own scale is still unmeasured: the leg split will give
+  it.
+
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
   - **angular:** spin about 10 full turns; scalar = true angle / reported
@@ -374,8 +400,9 @@ optical chip.
    tracking warning appears.
    No optical warning on a rigid, guided sled (§5, run 2).
 5. **Partly answered:** the linear scalar stays at 1.0, within 0.2% (§5).
-   The angular scalar is open: O4 runs 1–2 were spoiled by the cable
-   winding up (§5). Also open: does the foam-tuned LUT
+   The angular scalar: O4 runs 1–2 were spoiled by the cable winding up;
+   out and back (run 3), the directions agree to about 0.15% (§5). Each
+   direction's own scale is still to measure. Also open: does the foam-tuned LUT
    help or hurt (0x0E bit 0)?
 6. Distance error against speed. Repeatability at slow push speed: 0.41%
    standard deviation over 1 m (§5, run 2).
