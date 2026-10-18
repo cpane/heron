@@ -132,6 +132,14 @@ GPIO UART) for the FS-i6X remote. Being explored: a SparkFun OTOS optical
 odometry sensor on I2C. Planned, not yet attached or explored: an Arduino
 motor controller.
 
+GPIO header use, through a HAT that passes the Pi's pins through and adds
+spare 5 V and GND connections:
+
+- **iBUS receiver:** signal to pin 10 (GPIO15, RXD); power from any 5 V,
+  ground to any GND (pins 4 and 6 at present). Pin 8 (TXD) stays empty.
+- **OTOS:** 3.3 V, SDA (pin 3), SCL (pin 5), GND. **3.3 V only:** the 5 V
+  pins 2 and 4 sit beside pins 1 and 3.
+
 ## Common commands
 
 ```
