@@ -237,8 +237,9 @@ heading), after a fresh start-up.
   [ours, the user's report]: ten stops and starts per trial.
 - **Angular scalar stays at 1.0** until the cause is known.
 
-**Run 3, 2026-10-18** [ours]: out and back, untethered from winding: 5
-turns one way, 5 back to the mark, so the true total is 0. Trials 1–3
+**Run 3, 2026-10-18** [ours]: out and back, 5 turns one way, 5 back to
+the mark, so the true total is 0; the Pi on Wi-Fi with its Ethernet cable
+unplugged, one cable fewer on the sled. Trials 1–3
 stopped at the mark every turn, 4–6 turned smoothly. The probe was the
 build before the leg split, so only the net angle was recorded.
 
