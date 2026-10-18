@@ -22,7 +22,7 @@ shows 0x17 and nothing else.
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
 | `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
-| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | runs 1–2: depends on direction, +0.11% one way, −0.72% the other (reference §5) |
+| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | runs 1–2 invalid (cable wound up); now splits out-and-back legs, not yet run (reference §5) |
 
 ## Picking up
 
@@ -40,12 +40,10 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    along a straight edge: all five within 0.7%, mean +0.18%, status 0x00;
    the linear scalar stays 1.0 (reference §5).
 4. **Angular, probe O4:** `scripts/deploy_cpp.sh <user>@<pi> otos_spin`.
-   Five spins of 10 turns each way: +0.11% spun negative, −0.72% spun
-   positive. One scalar cannot fix both; it stays 1.0 until the cause is
-   known (reference §5). The cable wound up by turn 6 or 7 and may
-   have caused it. Next: out and back in one trial (5 turns one way, 5
-   back to the mark, net 0), so the cable never winds past 5 turns and
-   lining up hardly matters; then the same at a slower speed.
+   Runs 1–2 are invalid: the cable wound up and pulled on the sled
+   (reference §5). Start over with out-and-back trials, 5 turns one way
+   and 5 back to the mark; the probe splits each trial at the turnaround
+   and gives the error of each direction.
 5. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The

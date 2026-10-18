@@ -169,6 +169,11 @@ Wood panel floor; sensor height not recorded.
 - Path length runs 3–10 mm over the straight-line distance: small sideways
   wander along the push.
 
+**Probe O4 runs 1–2 are not valid for the scalar** [ours]: the sled was
+tethered by its cable, which wound up and pulled on it (notes below). They
+are kept as a record of that. The angular scalar is to be measured again
+with out-and-back trials, which keep the cable from winding.
+
 **Probe O4 (`otos_spin`), run 1, 2026-10-17** [ours]: the same sled spun
 by hand 10 turns in place, from a mark back to it, all in the same
 direction (negative heading). Default scalars, read back as raw 0. Wood
@@ -369,8 +374,8 @@ optical chip.
    tracking warning appears.
    No optical warning on a rigid, guided sled (§5, run 2).
 5. **Partly answered:** the linear scalar stays at 1.0, within 0.2% (§5).
-   The angular error depends on the direction: +0.11% one way, −0.72% the
-   other (§5, O4 runs 1–2); why is open. Also open: does the foam-tuned LUT
+   The angular scalar is open: O4 runs 1–2 were spoiled by the cable
+   winding up (§5). Also open: does the foam-tuned LUT
    help or hurt (0x0E bit 0)?
 6. Distance error against speed. Repeatability at slow push speed: 0.41%
    standard deviation over 1 m (§5, run 2).
