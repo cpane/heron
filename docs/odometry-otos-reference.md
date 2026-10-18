@@ -196,8 +196,35 @@ panel floor.
   spin's centre, so some motion is real; how much of it is the optical
   tracking losing the floor while turning is not known [unverified]. It
   does not affect the heading, which is gyro only (§1).
-- Only one direction was spun: whether the error is the same the other
-  way is open.
+- Only one direction was spun in run 1; run 2 spun the other way.
+
+**Run 2, 2026-10-17** [ours]: the same, spun the other way (positive
+heading), after a fresh start-up.
+
+| # | Reported deg | Error | End heading | Moved x, y mm | Time s | Fastest deg/s | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | +3581.60 | −0.51% | −18.40° | +76, −64 | 41.0 | 325 | 0x01 |
+| 2 | +3580.38 | −0.54% | −19.62° | +76, −46 | 41.8 | 271 | 0x01 |
+| 3 | +3559.10 | −1.14% | −40.90° | +126, −193 | 43.6 | 406 | 0x01 |
+| 4 | +3571.51 | −0.79% | −28.49° | +39, −115 | 33.4 | 410 | 0x01 |
+| 5 | +3576.79 | −0.64% | −23.21° | +35, +6 | 37.2 | 341 | 0x01 |
+
+- **Mean −0.72%, standard deviation 0.26%:** every trial short by 18–41°,
+  far more than lining up by eye allows [ours].
+- **The error depends on the direction.** Spun negative, the board
+  over-reports by 0.11%; spun positive, it under-reports by 0.72% [ours].
+  Correcting scalars 0.999 and 1.007. One scalar multiplies both
+  directions, so it cannot remove the difference: the best single value,
+  about 1.003, would leave about ±0.4% each way [ours, arithmetic].
+- **Not explained by the still drift.** A constant offset fitted to both
+  runs would be about −0.34°/s (−20°/min), against 0.2–0.6°/min measured
+  still (§8) [ours, arithmetic]. Whether the cause is a direction
+  dependent gyro scale, a bias that appears only while turning, or the
+  sled tipping while spun by hand is not known [unverified].
+- Tilt warning (0x01) in every trial, but no optical warning, and the
+  position moved only 0.04–0.23 m, against 0.1–1.6 m in run 1. The sled
+  may have been spun differently [unverified].
+- **Angular scalar stays at 1.0** until the cause is known.
 
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
@@ -335,9 +362,10 @@ optical chip.
 4. The right mounting height for our floor, and how often the optical
    tracking warning appears.
    No optical warning on a rigid, guided sled (§5, run 2).
-5. **Mostly answered:** linear and angular scalars both stay at 1.0, within
-   0.2% and 0.11% (§5). Still open: the angular error spinning the other
-   way, and does the foam-tuned LUT help or hurt (0x0E bit 0)?
+5. **Partly answered:** the linear scalar stays at 1.0, within 0.2% (§5).
+   The angular error depends on the direction: +0.11% one way, −0.72% the
+   other (§5, O4 runs 1–2); why is open. Also open: does the foam-tuned LUT
+   help or hurt (0x0E bit 0)?
 6. Distance error against speed. Repeatability at slow push speed: 0.41%
    standard deviation over 1 m (§5, run 2).
 7. What happens beyond ±10 m.

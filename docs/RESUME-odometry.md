@@ -22,7 +22,7 @@ shows 0x17 and nothing else.
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
 | `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
-| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | run 1: 10 turns within 0.31%, mean +0.11%; scalar stays 1.0 (reference §5) |
+| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | runs 1–2: depends on direction, +0.11% one way, −0.72% the other (reference §5) |
 
 ## Picking up
 
@@ -40,9 +40,11 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    along a straight edge: all five within 0.7%, mean +0.18%, status 0x00;
    the linear scalar stays 1.0 (reference §5).
 4. **Angular, probe O4:** `scripts/deploy_cpp.sh <user>@<pi> otos_spin`.
-   Run 1, five spins of 10 turns, one direction: mean +0.11%, worst
-   +0.31%; the angular scalar stays 1.0. Tilt and optical warnings while
-   spinning (reference §5). Open: the other direction.
+   Five spins of 10 turns each way: +0.11% spun negative, −0.72% spun
+   positive. One scalar cannot fix both; it stays 1.0 until the cause is
+   known (reference §5). Next: out and back in one trial (10 turns one
+   way, 10 back to the mark, net 0), which needs no lining up and shows
+   the asymmetry directly; then the same at a slower speed.
 5. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
