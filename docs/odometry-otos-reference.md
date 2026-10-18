@@ -228,6 +228,8 @@ heading), after a fresh start-up.
   fighting it [ours, the user's report]. Its pull may have tipped or
   dragged the sled, which would fit the tilt warnings and some of the
   error; runs 1–2 cannot separate it from the sensor.
+- In both runs the sled was stopped at the mark after every turn
+  [ours, the user's report]: ten stops and starts per trial.
 - **Angular scalar stays at 1.0** until the cause is known.
 
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
