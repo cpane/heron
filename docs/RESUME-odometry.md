@@ -22,6 +22,7 @@ shows 0x17 and nothing else.
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
 | `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
+| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | built, not yet run |
 
 ## Picking up
 
@@ -38,9 +39,10 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    Run 1 was mixed: the sled turned and tipped. Run 2, rigid and guided
    along a straight edge: all five within 0.7%, mean +0.18%, status 0x00;
    the linear scalar stays 1.0 (reference §5).
-4. **Next: the angular scalar.** Spin the sled about 10 full turns in
-   place and compare the reported heading with the true angle (reference
-   §5). Needs a probe that unwraps the heading across ±180°.
+4. **Next: the angular scalar, probe O4:**
+   `scripts/deploy_cpp.sh <user>@<pi> otos_spin`. Spin the sled about 10
+   full turns in place, from a mark back to it; the probe unwraps the
+   heading and gives scalar = true / reported (reference §5).
 5. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The

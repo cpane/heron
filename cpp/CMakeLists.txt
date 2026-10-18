@@ -178,6 +178,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Interactive: push the sensor a measured distance, compare.
     add_executable(otos_move probes/OtosMove.cpp)
     target_link_libraries(otos_move PRIVATE heron_warnings)
+
+    # Interactive: spin the sensor a counted number of turns, compare.
+    add_executable(otos_spin probes/OtosSpin.cpp)
+    target_link_libraries(otos_spin PRIVATE heron_warnings)
 endif()
 
 # -- tools -----------------------------------------------------------------------
