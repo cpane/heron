@@ -145,6 +145,30 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
 - Tilt (bit 0) in trials 1–3 and an optical warning (bit 1) in trial 2.
 - Too mixed to set a scalar. Next: a guided, straight push.
 
+**Run 2, 2026-10-17** [ours]: the sled stiffened so it could not tip, and
+pushed along a straight edge. Five pushes of 1000 mm, default scalars.
+Floor and sensor height not recorded.
+
+| # | Reported mm | Error | x, y mm | Heading change | Path mm | Status |
+|---|---|---|---|---|---|---|
+| 1 | 1001.2 | +0.12% | −22.0, +1001.0 | −0.02° | 1009.6 | 0x00 |
+| 2 | 999.8 | −0.02% | −6.7, +999.8 | −1.01° | 1003.4 | 0x00 |
+| 3 | 996.4 | −0.36% | +0.6, +996.4 | −0.49° | 999.8 | 0x00 |
+| 4 | 1004.9 | +0.49% | +0.3, +1004.9 | +0.97° | 1010.6 | 0x00 |
+| 5 | 1006.8 | +0.68% | +0.3, +1006.8 | +1.24° | 1010.2 | 0x00 |
+
+- **Mean +0.18%, spread −0.36% to +0.68%, standard deviation 4.1 mm
+  (0.41%)** [ours]. The mean is within one standard error (0.18%) of zero,
+  so a linear scalar of 0.998 is not supported by five trials; **the scalar
+  stays at 1.0** on this floor for now [ours, arithmetic].
+- Status 0x00 throughout; heading change within ±1.3°; start heading 0.00°
+  after every reset; travel within 1.3° of the sensor's +y axis.
+- **Run 1's heading changes and warnings came from the sled turning and
+  tipping**, not the sensor: the user saw it turn while being lined up, and
+  a rigid, guided sled removed them [ours].
+- Path length runs 3–10 mm over the straight-line distance: small sideways
+  wander along the push.
+
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
   - **angular:** spin about 10 full turns; scalar = true angle / reported
@@ -280,8 +304,12 @@ optical chip.
    how often the robot should recalibrate while stopped, are open.
 4. The right mounting height for our floor, and how often the optical
    tracking warning appears.
-5. Scalars on our floor; does the foam-tuned LUT help or hurt (0x0E bit 0)?
-6. Distance error against speed, and repeatability.
+   No optical warning on a rigid, guided sled (§5, run 2).
+5. **Linear partly answered:** 1.0 holds within 0.2% on a guided push
+   (§5, run 2). Still open: the angular scalar, and does the foam-tuned
+   LUT help or hurt (0x0E bit 0)?
+6. Distance error against speed. Repeatability at slow push speed: 0.41%
+   standard deviation over 1 m (§5, run 2).
 7. What happens beyond ±10 m.
 8. Time from power-up to valid readings, and detecting a mid-run restart.
 9. IO9: is the falling edge really fresh data at 416 Hz?

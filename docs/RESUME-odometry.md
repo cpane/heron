@@ -1,6 +1,6 @@
 # Odometry workstream — resume point
 
-Last updated 2026-10-12. Branch **`feature/odometry`**.
+Last updated 2026-10-17. Branch **`feature/odometry`**.
 
 ## Read this first when resuming
 
@@ -21,7 +21,7 @@ shows 0x17 and nothing else.
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
-| `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 1: mixed, clean trials within 1.1% (reference §5) |
+| `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
 
 ## Picking up
 
@@ -35,10 +35,13 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    enough to move on; recalibrating while stopped, and LiDAR heading
    correction, are robot-design questions.
 3. **Moving, probe O3:** `scripts/deploy_cpp.sh <user>@<pi> otos_move`.
-   Run 1 was mixed: large heading changes and sideways travel (reference
-   §5). Next: pushes guided along a straight edge, with the probe's new
-   start-heading and direction columns.
-4. Later, a long `otos_bus` soak with the LiDAR and remote running.
+   Run 1 was mixed: the sled turned and tipped. Run 2, rigid and guided
+   along a straight edge: all five within 0.7%, mean +0.18%, status 0x00;
+   the linear scalar stays 1.0 (reference §5).
+4. **Next: the angular scalar.** Spin the sled about 10 full turns in
+   place and compare the reported heading with the true angle (reference
+   §5). Needs a probe that unwraps the heading across ±180°.
+5. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
@@ -46,7 +49,7 @@ command.
 
 ## Open questions
 
-- Mounting: not mounted yet (loose on the bench). Height must be 10–27 mm
+- Mounting: on a rigid test sled, not the robot yet. Height must be 10–27 mm
   above the floor, rigid and level; the offset from the robot's centre is
   written to the sensor.
 - The rest are in the reference, §10.
