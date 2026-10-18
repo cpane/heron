@@ -31,8 +31,15 @@
 // up the change between reads, taken every 20 ms. That holds as long as the
 // sled turns less than 180 deg between two reads, 25 turns a second.
 //
-// The true turns are entered unsigned; the sign is taken from the reported
-// angle, so either direction of spin works.
+// A trial can go one way, or out and back: N turns one way, then N turns
+// back to the mark. Out and back keeps a tethered sled's cable from winding
+// up (reference §5, O4 runs 1-2). The probe splits the trial at the
+// turnaround, the furthest the heading got from zero, into an out leg and a
+// back leg, and measures each against the true turns: one trial gives the
+// error in both directions. A back leg under half a turn counts as one way.
+//
+// The true turns are entered unsigned, per leg; the signs are taken from the
+// reported angles, so either direction of spin works.
 //
 // The x, y columns show how far the sensor moved during the spin: the
 // board's position follows the sensor, not the centre of the spin, unless an
@@ -213,7 +220,9 @@ bool lineReady(std::chrono::milliseconds timeout) {
 
 struct Trial {
   double reportedDeg;  // unwrapped, signed
-  double trueDeg;      // signed like reportedDeg; 0 when not entered
+  double outDeg;       // to the turnaround, signed
+  double backDeg;      // from the turnaround, signed; near 0 for one way
+  double trueDeg;      // per leg, unsigned; 0 when not entered
   double finalDeg;     // the register's own reading at the end, wrapped
   double xMm;
   double yMm;
@@ -241,6 +250,7 @@ bool runTrial(int fd, Trial &trial) {
   auto lastAt = Clock::now();
   const auto begin = lastAt;
   double turned = 0.0;
+  double peak = 0.0;
   double maxRate = 0.0;
   std::uint8_t statusSeen = start.status;
   std::uint64_t failed = 0;
@@ -256,6 +266,9 @@ bool runTrial(int fd, Trial &trial) {
     const double delta = wrappedDelta(last.h, p.h);
     const double dt = std::chrono::duration<double>(now - lastAt).count();
     turned += delta;
+    if (std::fabs(turned) > std::fabs(peak)) {
+      peak = turned;
+    }
     if (dt > 0.0) {
       maxRate = std::fmax(maxRate, std::fabs(delta) / dt);
     }
@@ -273,6 +286,8 @@ bool runTrial(int fd, Trial &trial) {
   readLine(discard);
 
   trial.reportedDeg = turned * 180.0 / kPi;
+  trial.outDeg = peak * 180.0 / kPi;
+  trial.backDeg = (turned - peak) * 180.0 / kPi;
   trial.finalDeg = last.h * 180.0 / kPi;
   trial.xMm = (last.x - start.x) * 1000.0;
   trial.yMm = (last.y - start.y) * 1000.0;
@@ -284,17 +299,50 @@ bool runTrial(int fd, Trial &trial) {
   return true;
 }
 
+// A back leg of under half a turn is lining up, not a leg.
+bool isOutAndBack(const Trial &t) {
+  return std::fabs(t.backDeg) >= 180.0;
+}
+
+// Error of one leg, and the scalar that would correct it, against the true
+// angle, which takes the reported angle's sign.
+double legError(double reportedDeg, double trueDeg) {
+  const double signedTrue = std::copysign(trueDeg, reportedDeg);
+  return (reportedDeg - signedTrue) / signedTrue * 100.0;
+}
+
+double legScalar(double reportedDeg, double trueDeg) {
+  return std::copysign(trueDeg, reportedDeg) / reportedDeg;
+}
+
+void printLeg(const char *label, double reportedDeg, double trueDeg) {
+  std::printf("  %-15s %+.2f deg, true %+.0f: error %+.2f %%  (angular scalar %.3f)\n", label,
+              reportedDeg, std::copysign(trueDeg, reportedDeg), legError(reportedDeg, trueDeg),
+              legScalar(reportedDeg, trueDeg));
+}
+
 void printTable(const std::vector<Trial> &trials) {
-  std::printf("\n  #  reported deg  true deg  error %%  scalar  final h     x mm     y mm"
-              "   time s  max deg/s  status  failed\n");
+  std::printf("\n  #   total deg     out deg    back deg  true/leg  out err%%  back err%%"
+              "  final h     x mm     y mm   time s  max deg/s  status  failed\n");
   for (std::size_t i = 0; i < trials.size(); ++i) {
     const Trial &t = trials[i];
-    std::printf("%3zu  %+11.2f", i + 1, t.reportedDeg);
-    if (t.trueDeg != 0.0) {
-      std::printf("  %+8.1f  %+7.2f  %6.3f", t.trueDeg,
-                  (t.reportedDeg - t.trueDeg) / t.trueDeg * 100.0, t.trueDeg / t.reportedDeg);
+    const bool both = isOutAndBack(t);
+    std::printf("%3zu  %+10.2f  %+10.2f", i + 1, t.reportedDeg, t.outDeg);
+    if (both) {
+      std::printf("  %+10.2f", t.backDeg);
     } else {
-      std::printf("  %8s  %7s  %6s", "-", "-", "-");
+      std::printf("  %10s", "-");
+    }
+    if (t.trueDeg > 0.0) {
+      std::printf("  %8.0f  %+8.2f", t.trueDeg,
+                  legError(both ? t.outDeg : t.reportedDeg, t.trueDeg));
+      if (both) {
+        std::printf("  %+9.2f", legError(t.backDeg, t.trueDeg));
+      } else {
+        std::printf("  %9s", "-");
+      }
+    } else {
+      std::printf("  %8s  %8s  %9s", "-", "-", "-");
     }
     std::printf("  %+7.2f  %+7.1f  %+7.1f  %7.1f  %9.0f   0x%02X  %6" PRIu64 "\n", t.finalDeg,
                 t.xMm, t.yMm, t.seconds, t.maxRateDps, t.statusSeen, t.failedReads);
@@ -365,6 +413,9 @@ int main(int argc, char **argv) {
     }
     std::printf("\n\n  reported        %+.2f deg (%+.3f turns) in %.1f s, fastest %.0f deg/s\n",
                 t.reportedDeg, t.reportedDeg / 360.0, t.seconds, t.maxRateDps);
+    if (isOutAndBack(t)) {
+      std::printf("  out and back    out %+.2f deg, back %+.2f deg\n", t.outDeg, t.backDeg);
+    }
     std::printf("  final heading   %+.2f deg as the register reads it\n", t.finalDeg);
     std::printf("  moved           x %+.1f, y %+.1f mm\n", t.xMm, t.yMm);
     std::printf("  status bits     0x%02X (bit 0 tilt, 1 optical tracking, 6 optical chip,"
@@ -374,17 +425,21 @@ int main(int argc, char **argv) {
       std::printf("  failed reads    %" PRIu64 "\n", t.failedReads);
     }
 
-    std::printf("\n  True whole turns (Enter to skip): ");
+    std::printf("\n  True whole turns%s (Enter to skip): ", isOutAndBack(t) ? " each way" : "");
     std::fflush(stdout);
     if (!readLine(line)) {
       trials.push_back(t);
       break;
     }
     const double turns = std::atof(line.c_str());
-    if (turns > 0.0 && t.reportedDeg != 0.0) {
-      t.trueDeg = std::copysign(turns * 360.0, t.reportedDeg);
-      std::printf("  error           %+.2f %%  (angular scalar %.3f)\n",
-                  (t.reportedDeg - t.trueDeg) / t.trueDeg * 100.0, t.trueDeg / t.reportedDeg);
+    if (turns > 0.0) {
+      t.trueDeg = turns * 360.0;
+      if (isOutAndBack(t)) {
+        printLeg("out leg", t.outDeg, t.trueDeg);
+        printLeg("back leg", t.backDeg, t.trueDeg);
+      } else if (t.reportedDeg != 0.0) {
+        printLeg("error", t.reportedDeg, t.trueDeg);
+      }
     }
     trials.push_back(t);
   }
