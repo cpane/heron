@@ -22,7 +22,7 @@ shows 0x17 and nothing else.
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean on the Pi: 2000 iterations, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
 | `otos_move`: probe O3, pushed a measured distance | `cpp/probes/OtosMove.cpp` | run 2, guided: within 0.7%, mean +0.18%; scalar stays 1.0 (reference §5) |
-| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | runs 1–2 invalid (cable); run 3, out and back: directions agree to ~0.15%; leg split not yet run (reference §5) |
+| `otos_spin`: probe O4, spun a counted number of turns | `cpp/probes/OtosSpin.cpp` | run 4, out and back: no direction difference, steadiest spins within 0.05%; scalar stays 1.0 (reference §5) |
 
 ## Picking up
 
@@ -40,13 +40,12 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    along a straight edge: all five within 0.7%, mean +0.18%, status 0x00;
    the linear scalar stays 1.0 (reference §5).
 4. **Angular, probe O4:** `scripts/deploy_cpp.sh <user>@<pi> otos_spin`.
-   Runs 1–2 are invalid: the cable wound up and pulled on the sled
-   (reference §5). Start over with out-and-back trials, 5 turns one way
-   and 5 back to the mark; the probe splits each trial at the turnaround
-   and gives the error of each direction. Run 3 used the build before the
-   split: net +5.4° mean over 3600°, so the asymmetry was the cable. Next:
-   the same with the current build, for each direction's scale.
-5. Later, a long `otos_bus` soak with the LiDAR and remote running.
+   Runs 1–2 were spoiled by the cable winding up. Run 4, out and back
+   (5 turns each way, Ethernet unplugged): no difference between
+   directions; the error fell trial by trial with steadier handling, to
+   0.05%. The angular scalar stays 1.0 (reference §5). Both scalars are
+   to be checked again on the robot.
+5. **Next:** a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh

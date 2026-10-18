@@ -264,6 +264,38 @@ build before the leg split, so only the net angle was recorded.
 - Each direction's own scale is still unmeasured: the leg split will give
   it.
 
+**Run 4, 2026-10-18** [ours]: out and back with the leg split. Each trial:
+5 turns positive, a brief pause on the mark, 5 turns negative back to the
+mark, smoothly. Wi-Fi, Ethernet unplugged. Default scalars.
+
+| # | Out deg | Back deg | Out err | Back err | Both legs | Net deg | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | +1767.06 | −1791.52 | −1.83% | −0.47% | −1.15% | −24.46 | 0x01 |
+| 2 | +1795.30 | −1785.67 | −0.26% | −0.80% | −0.53% | +9.64 | 0x01 |
+| 3 | +1796.36 | −1796.39 | −0.20% | −0.20% | −0.20% | −0.03 | 0x01 |
+| 4 | +1800.60 | −1797.78 | +0.03% | −0.12% | −0.05% | +2.82 | 0x01 |
+| 5 | +1798.33 | −1800.40 | −0.09% | +0.02% | −0.04% | −2.07 | 0x01 |
+
+"Both legs" is (|out| + |back|) / 3600 − 1. It does not depend on where
+the sled was reversed, which shifts one leg's error up and the other's
+down by the same amount [ours, arithmetic]. Each trial took 23–26 s,
+fastest 366–432°/s; moved under 0.21 m.
+
+- **The error shrank trial by trial:** −1.15%, −0.53%, −0.20%, −0.05%,
+  −0.04% [ours]. The sled turned the same 3600° each time, so what changed
+  was the handling, not the sensor: practice spinning it flat and smoothly
+  [ours, inference]. The tilt warning (0x01) was on in every trial, so the
+  sled was still tipping [ours].
+- **No difference between directions:** trials 2–5, positive −0.13%,
+  negative −0.28%, within the scatter and the turnaround's effect [ours].
+  Runs 1–2's asymmetry was the cable.
+- Trials 2–5, both legs: mean −0.20%, standard deviation 0.23% [ours].
+  The two smoothest trials were within 0.05%.
+- **Angular scalar stays at 1.0** [ours]. The remaining error is the size
+  of the handling error and falls with steadier spinning. The robot, which
+  turns under motor power and without tipping, is where to measure it
+  again.
+
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
 - **Angular first, then linear,** both starting from 1.0 [community: AR]:
   - **angular:** spin about 10 full turns; scalar = true angle / reported
@@ -401,9 +433,9 @@ optical chip.
    tracking warning appears.
    No optical warning on a rigid, guided sled (§5, run 2).
 5. **Partly answered:** the linear scalar stays at 1.0, within 0.2% (§5).
-   The angular scalar: O4 runs 1–2 were spoiled by the cable winding up;
-   out and back (run 3), the directions agree to about 0.15% (§5). Each
-   direction's own scale is still to measure. Also open: does the foam-tuned LUT
+   The angular scalar stays at 1.0: out and back, the steadiest spins
+   were within 0.05% in both directions (§5, O4 run 4). Runs 1–2 were
+   spoiled by the cable. Measure both scalars again on the robot. Also open: does the foam-tuned LUT
    help or hurt (0x0E bit 0)?
 6. Distance error against speed. Repeatability at slow push speed: 0.41%
    standard deviation over 1 m (§5, run 2).
