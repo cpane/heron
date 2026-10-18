@@ -1,6 +1,6 @@
 # Odometry workstream — resume point
 
-Last updated 2026-10-17. Branch **`feature/odometry`**.
+Last updated 2026-10-18. Branch **`feature/odometry-library`**.
 
 ## Read this first when resuming
 
@@ -17,7 +17,8 @@ shows 0x17 and nothing else.
 
 | Piece | Where | State |
 |---|---|---|
-| Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
+| Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; measured on the Pi |
+| Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | proposed, not built |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
@@ -47,9 +48,9 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    to be checked again on the robot.
 5. **Bus soak done:** 150 000 iterations in 977 s with the LiDAR and
    remote running, 0 errors (reference §3).
-6. **Next:** the exploration questions are answered well enough to design
-   the library (`OtosConfig` for scalars and offset; start-up sequence;
-   reader thread like `Lidar` and `RemoteControl`).
+6. **Library, branch `feature/odometry-library`:** design drafted in
+   [`odometry-cpp-design.md`](odometry-cpp-design.md), for review. Next:
+   build it, layer by layer, with the tests in its §8.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
