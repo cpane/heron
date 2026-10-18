@@ -4,7 +4,7 @@ Robot platform on a Raspberry Pi 3, in hardware bring-up. Each sensor or
 subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR and remote control workstreams each have a
-working C++ library and are paused; odometry is next.
+working C++ library and are paused; odometry is being explored.
 
 ## Workstreams
 
@@ -78,6 +78,25 @@ Remote-only facts:
 - No code from the iBUS sources may be copied; IBusBM and Betaflight are
   copyleft. The license table is in the protocol doc, §8.
 
+### Odometry — SparkFun OTOS (PAA5160E1) over I2C (active)
+
+Read before doing odometry work:
+
+- **`docs/RESUME-odometry.md`** — where the work stands and what is next.
+- `docs/odometry-otos-reference.md` — the sensor reference: wiring,
+  register map, start-up, calibration, mounting. Every fact is tagged
+  [ours], [community] or [unverified], as in the remote's protocol doc.
+
+Odometry-only facts:
+
+- The sensor is on the Pi's I2C bus 1 (`/dev/i2c-1`, SDA GPIO2, SCL
+  GPIO3), enabled at 100 kHz by provisioning; address 0x17. **3.3 V
+  only.** Nothing about it has been measured yet: do not state its
+  behaviour from general knowledge.
+- No code from the SparkFun sources may be copied without the user's
+  approval, even the MIT libraries; the schematic is CC BY-SA. The license
+  table is in the reference, §9.
+
 ## Development model
 
 Code is written on the host (macOS) and stored in git. **The Pi is a
@@ -109,8 +128,17 @@ Deployed code and binaries live under `~/heron` on the Pi; provisioning and
 deploy scripts need SSH to it, and provisioning needs `sudo` there.
 
 Attached: the RPLIDAR A1M8 (USB), and a FlySky FS-iA6B receiver (iBUS on the
-GPIO UART) for the FS-i6X remote. Planned, not yet attached or explored: an
-Arduino motor controller and I2C odometry.
+GPIO UART) for the FS-i6X remote. Being explored: a SparkFun OTOS optical
+odometry sensor on I2C. Planned, not yet attached or explored: an Arduino
+motor controller.
+
+GPIO header use, through a HAT that passes the Pi's pins through and adds
+spare 5 V and GND connections:
+
+- **iBUS receiver:** signal to pin 10 (GPIO15, RXD); power from any 5 V,
+  ground to any GND (pins 4 and 6 at present). Pin 8 (TXD) stays empty.
+- **OTOS:** 3.3 V, SDA (pin 3), SCL (pin 5), GND. **3.3 V only:** the 5 V
+  pins 2 and 4 sit beside pins 1 and 3.
 
 ## Common commands
 

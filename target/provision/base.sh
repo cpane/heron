@@ -204,7 +204,8 @@ apt-get install -y \
     ninja-build \
     pkg-config \
     rsync \
-    git
+    git \
+    i2c-tools
 
 #
 # Hostname
@@ -246,6 +247,11 @@ echo
 echo "Configuring serial-device access for ${TARGET_USER}..."
 
 usermod -aG dialout "${TARGET_USER}"
+
+# /dev/i2c-1 belongs to group i2c; without it the odometry sensor needs sudo.
+if getent group i2c >/dev/null; then
+    usermod -aG i2c "${TARGET_USER}"
+fi
 
 echo
 echo "Installing udev rules..."
@@ -310,6 +316,31 @@ if grep -qE 'console=(serial0|ttyAMA0|ttyS0),[0-9]+' "${BOOT_CMDLINE}"; then
     REBOOT_NEEDED=1
 fi
 
+echo
+echo "Enabling the I2C bus (/dev/i2c-1) for the odometry sensor..."
+
+I2C_MARKER="# heron: I2C bus for the odometry sensor"
+
+# The ARM I2C bus on GPIO2/GPIO3 (pins 3 and 5) is off on a stock image.
+# i2c_arm turns the controller on; i2c-dev is the module that gives user
+# space /dev/i2c-1, which our C++ talks to directly. 100 kHz is stated
+# rather than left to the default: the OTOS stretches the clock, SparkFun
+# advise 100 kHz, and the Pi 3's controller is known to mishandle clock
+# stretching (docs/odometry-otos-reference.md §3). [all] for the same
+# reason as above.
+if ! grep -qF "${I2C_MARKER}" "${BOOT_CONFIG}"; then
+    {
+        echo
+        echo "${I2C_MARKER}"
+        echo "[all]"
+        echo "dtparam=i2c_arm=on"
+        echo "dtparam=i2c_arm_baudrate=100000"
+    } >> "${BOOT_CONFIG}"
+    REBOOT_NEEDED=1
+fi
+
+echo "i2c-dev" > /etc/modules-load.d/heron-i2c.conf
+
 # With the controller's UART taken away, the Bluetooth service has nothing
 # to drive.
 if systemctl is-enabled --quiet bluetooth.service 2>/dev/null; then
@@ -327,6 +358,10 @@ id "${TARGET_USER}"
 echo
 echo "Serial devices by id:"
 ls -l /dev/serial/by-id/ 2>/dev/null || echo "  (none attached)"
+
+echo
+echo "I2C buses:"
+ls -l /dev/i2c-* 2>/dev/null || echo "  (none yet: reboot to apply i2c_arm)"
 
 echo
 echo "Heron device symlinks:"
@@ -375,6 +410,11 @@ if [[ -n "${THROTTLED}" && "${THROTTLED}" != "throttled=0x0" ]]; then
     echo "for at least 2.5 A, and consider a powered USB hub for the LiDAR."
 fi
 
+# Flush everything written above to the SD card now. Otherwise, if the Pi
+# loses power before the kernel writes it out, config.txt (FAT) keeps its old
+# contents and new files under /etc can come back empty.
+sync
+
 echo
 echo "========================================"
 echo " Provisioning complete"
@@ -385,7 +425,7 @@ echo "Group membership changes take effect on the user's next login."
 
 if [[ "${REBOOT_NEEDED}" -eq 1 ]]; then
     echo
-    echo "REBOOT REQUIRED: the boot configuration changed (GPIO UART)."
+    echo "REBOOT REQUIRED: the boot configuration changed (GPIO UART or I2C)."
     echo "  sudo reboot"
 fi
 
