@@ -36,3 +36,6 @@ reports/
 
 # Vendor documents fetched locally (see docs/lidar-references.md)
 docs/vendor/
+
+# Per-developer prompt drafts for Claude Code, kept locally
+docs/prompt.txt
