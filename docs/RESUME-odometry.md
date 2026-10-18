@@ -42,9 +42,10 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
 4. **Angular, probe O4:** `scripts/deploy_cpp.sh <user>@<pi> otos_spin`.
    Five spins of 10 turns each way: +0.11% spun negative, −0.72% spun
    positive. One scalar cannot fix both; it stays 1.0 until the cause is
-   known (reference §5). Next: out and back in one trial (10 turns one
-   way, 10 back to the mark, net 0), which needs no lining up and shows
-   the asymmetry directly; then the same at a slower speed.
+   known (reference §5). The cable wound up by turn 6 or 7 and may
+   have caused it. Next: out and back in one trial (5 turns one way, 5
+   back to the mark, net 0), so the cable never winds past 5 turns and
+   lining up hardly matters; then the same at a slower speed.
 5. Later, a long `otos_bus` soak with the LiDAR and remote running.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The

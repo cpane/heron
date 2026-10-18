@@ -224,6 +224,10 @@ heading), after a fresh start-up.
 - Tilt warning (0x01) in every trial, but no optical warning, and the
   position moved only 0.04–0.23 m, against 0.1–1.6 m in run 1. The sled
   may have been spun differently [unverified].
+- **The cable wound up in both runs:** by turn 6 or 7 the user was
+  fighting it [ours, the user's report]. Its pull may have tipped or
+  dragged the sled, which would fit the tilt warnings and some of the
+  error; runs 1–2 cannot separate it from the sensor.
 - **Angular scalar stays at 1.0** until the cause is known.
 
 - **Scalars:** 0.872 to 1.127, in 0.001 steps [community: RM, AR].
