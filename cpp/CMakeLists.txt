@@ -103,6 +103,16 @@ target_include_directories(heron_otos
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(heron_otos PRIVATE heron_warnings)
 
+# The sensor on a bus: I2cBus (an interface, so tests can fake the bus on the
+# host), LinuxI2cBus (i2c-dev; on other systems its constructor throws, so
+# everything above still builds), and OtosDevice, the start-up sequence. Its
+# headers are private too; tests and probes are given the path.
+add_library(heron_otos_device STATIC
+    src/odometry/LinuxI2cBus.cpp
+    src/odometry/OtosDevice.cpp)
+target_include_directories(heron_otos_device PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_otos_device PUBLIC heron_otos PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -126,6 +136,11 @@ add_executable(otos_codec_test tests/OtosCodecTest.cpp)
 target_include_directories(otos_codec_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(otos_codec_test PRIVATE heron_otos heron_warnings)
 add_test(NAME otos_codec_test COMMAND otos_codec_test)
+
+add_executable(otos_device_test tests/OtosDeviceTest.cpp)
+target_include_directories(otos_device_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(otos_device_test PRIVATE heron_otos_device heron_warnings)
+add_test(NAME otos_device_test COMMAND otos_device_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -201,6 +216,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Interactive: spin the sensor a counted number of turns, compare.
     add_executable(otos_spin probes/OtosSpin.cpp)
     target_link_libraries(otos_spin PRIVATE heron_warnings)
+
+    # OtosDevice on the real sensor: the library's start-up, then snapshots.
+    add_executable(otos_device probes/OtosDeviceLive.cpp)
+    target_include_directories(otos_device PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+    target_link_libraries(otos_device PRIVATE heron_otos_device heron_warnings)
 endif()
 
 # -- tools -----------------------------------------------------------------------
