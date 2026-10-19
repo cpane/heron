@@ -20,6 +20,8 @@ shows 0x17 and nothing else.
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; measured on the Pi |
 | Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | reviewed; being built |
 | `heron_otos`: register map and codec | `cpp/src/odometry/OtosCodec.*` | built; `otos_codec_test` passes on host and Pi |
+| `heron_otos_device`: bus and start-up | `cpp/src/odometry/` | built; `otos_device_test` passes on host and Pi |
+| `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | built, not yet run |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
@@ -55,8 +57,14 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
      map, scalings, snapshot decoding, scalar and offset encoding, angle
      wrapping) and `include/heron/odometry/Planar.h`. `otos_codec_test`
      passes on the host and the Pi, 63 checks.
-   - Next: `heron_otos_device` (`I2cBus`, `LinuxI2cBus`, `OtosDevice`)
-     and `otos_device_test`.
+   - **`heron_otos_device` built:** `I2cBus` (interface), `LinuxI2cBus`
+     (i2c-dev; throws off Linux), `OtosDevice` (start-up sequence,
+     snapshot reads), public `OtosConfig.h`. `otos_device_test` passes on
+     the host and the Pi, 29 checks, against `tests/FakeOtosBus.h`.
+   - Live check, probe O5: `scripts/deploy_cpp.sh <user>@<pi> otos_device`
+     (optional: seconds, then linear and angular scalars). Not yet run.
+   - Next: `heron_odometry` (`Odometry`, the reader thread) and
+     `odometry_test`.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh
