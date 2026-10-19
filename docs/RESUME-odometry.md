@@ -22,7 +22,7 @@ shows 0x17 and nothing else.
 | `heron_otos`: register map and codec | `cpp/src/odometry/OtosCodec.*` | built; `otos_codec_test` passes on host and Pi |
 | `heron_otos_device`: bus and start-up | `cpp/src/odometry/` | built; `otos_device_test` passes on host and Pi |
 | `heron_odometry`: `Odometry`, what robot code links | `cpp/include/heron/odometry/Odometry.h` | built; `odometry_test` passes on host and Pi |
-| `odometry_adapter`: probe O6, Odometry live | `cpp/probes/OdometryAdapter.cpp` | run 1: 100 Hz, 0 failures; unwrap not yet exercised live |
+| `odometry_adapter`: probe O6, Odometry live | `cpp/probes/OdometryAdapter.cpp` | runs 1–2: 100 Hz, 0 failures, unwrap correct live (reference §4) |
 | `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | run: start-up works on the board; scalars read back (reference §4) |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
@@ -74,8 +74,8 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    - Live check, probe O6: `scripts/deploy_cpp.sh <user>@<pi>
      odometry_adapter 30` (optional scalars after the seconds). Run 1,
      2026-10-18: 100 readings a second, 0 failures, 0 not OK at 1500
-     polls (reference §4). The turn stayed under 180°, so unwrapping is
-     still to be seen live: run again turning past half a turn.
+     polls (reference §4). Run 2 turned 1.5 turns and back:
+     `totalHeading` unwrapped correctly live, peaking at +549.9°.
    - Then: push and PR the library.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The

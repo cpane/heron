@@ -155,6 +155,15 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   13 s: heading +0.05°, about 0.23°/min, as after any calibration (§8).
   The heading never crossed ±180°, so `totalHeading` unwrapping was not
   exercised on the sensor in this run.
+  **Run 2:** turned by hand about 1.5 turns one way and back past the
+  start. `totalHeading` unwrapped correctly: it peaked at +549.9° while
+  the register read −170.1°, and at every report it differed from the
+  heading by a whole number of turns [ours]. It ended at −102.8°, so the
+  turn back went about 0.3 turn past the start; the true angle was not
+  measured. Tilt warning in 677 snapshots during the spin, and `isOk()`
+  stayed true throughout (0 not OK at 1500 polls), as designed. Still for
+  the last 11 s: heading +0.41°, about 2.2°/min, ten times run 1's rate
+  after a calibration; why is not known [unverified].
 
 ## 5. Calibration
 
