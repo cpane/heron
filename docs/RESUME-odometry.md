@@ -21,7 +21,7 @@ shows 0x17 and nothing else.
 | Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | reviewed; being built |
 | `heron_otos`: register map and codec | `cpp/src/odometry/OtosCodec.*` | built; `otos_codec_test` passes on host and Pi |
 | `heron_otos_device`: bus and start-up | `cpp/src/odometry/` | built; `otos_device_test` passes on host and Pi |
-| `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | built, not yet run |
+| `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | run: start-up works on the board; scalars read back (reference §4) |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
@@ -62,7 +62,9 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
      snapshot reads), public `OtosConfig.h`. `otos_device_test` passes on
      the host and the Pi, 29 checks, against `tests/FakeOtosBus.h`.
    - Live check, probe O5: `scripts/deploy_cpp.sh <user>@<pi> otos_device`
-     (optional: seconds, then linear and angular scalars). Not yet run.
+     (optional: seconds, then linear and angular scalars). Run
+     2026-10-18 with 0.995 and 1.002: scalars read back as written,
+     calibration 619 ms, status 0x00, 0 failed reads (reference §4).
    - Next: `heron_odometry` (`Odometry`, the reader thread) and
      `odometry_test`.
 

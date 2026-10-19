@@ -177,7 +177,9 @@ and remote running, no failures, 3.66–6.28 ms each (reference §3). A
 shorter read would be faster but is unproven, and the bus carries nothing
 else.
 
-- **Period 10 ms (100 Hz),** set by `pollPeriod`. The board updates every
+- **Period 10 ms (100 Hz),** set by `pollPeriod`, kept by deadline
+  (`sleep_until`), not by sleeping after each read: probe O5's
+  sleep-then-read loop managed only 65 a second (reference §4). The board updates every
   2.4 ms (reference §7), so faster polling gains little, and the 50 Hz
   control loop then sees a reading at most about 16 ms old. A read takes up
   to about 6 ms, so the bus is busy up to 60% of the time.

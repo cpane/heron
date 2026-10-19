@@ -135,6 +135,18 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   them: calibration took 619 ms and the reset 11 ms; status 0x00 for 30 s;
   pose stayed at 0; heading wandered within 0.04° and ended at 0.000°. One
   30 s run, sensor side down, still.
+- **The library's sequence works on the board [ours, probe O5, 2026-10-18].**
+  `OtosDevice::start()` with scalars 0.995 and 1.002: product ID and
+  versions read (HW 1.1, FW 1.0), calibration 619 ms, reset 11 ms, **both
+  scalars read back as written** (0xFB, 0x02). Then 10 s still: status 0x00
+  throughout, 651 reads with 0 failures, heading −0.027°.
+  - **Velocity read 0.3–1.1 mm/s in x and y while the pose stayed at
+    0.0000 m.** Integrated, that would be several millimetres in 10 s, so
+    the board does not simply integrate its reported velocity while still.
+    Why is not known [unverified].
+  - 651 reads in 10 s is 65 a second, not the 100 the 10 ms sleep
+    suggests: each loop is the sleep plus a read of about 5.8 ms (§3). The
+    reader thread must schedule by deadline, not sleep after each read.
 
 ## 5. Calibration
 
