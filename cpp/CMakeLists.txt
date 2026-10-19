@@ -90,6 +90,19 @@ target_link_libraries(heron_remote
     PUBLIC heron_ibus_port
     PRIVATE Threads::Threads heron_warnings)
 
+# -- odometry: SparkFun OTOS over I2C -----------------------------------------
+#
+# Independent of the LiDAR and the remote. heron_otos is pure: the register
+# map, its scalings and the conversions to SI units, with no I/O. Its codec
+# header is private (src/), so robot code never sees a register number; the
+# public headers in include/heron/odometry/ speak SI units only. See
+# docs/odometry-cpp-design.md.
+add_library(heron_otos STATIC src/odometry/OtosCodec.cpp)
+target_include_directories(heron_otos
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_otos PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -107,6 +120,12 @@ add_test(NAME failsafe_test COMMAND failsafe_test)
 add_executable(remote_control_test tests/RemoteControlTest.cpp)
 target_link_libraries(remote_control_test PRIVATE heron_remote Threads::Threads heron_warnings)
 add_test(NAME remote_control_test COMMAND remote_control_test)
+
+# The codec header is private to the library, so the test is given its path.
+add_executable(otos_codec_test tests/OtosCodecTest.cpp)
+target_include_directories(otos_codec_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(otos_codec_test PRIVATE heron_otos heron_warnings)
+add_test(NAME otos_codec_test COMMAND otos_codec_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
