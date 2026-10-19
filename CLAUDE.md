@@ -86,13 +86,19 @@ Read before doing odometry work:
 - `docs/odometry-otos-reference.md` — the sensor reference: wiring,
   register map, start-up, calibration, mounting. Every fact is tagged
   [ours], [community] or [unverified], as in the remote's protocol doc.
+- `docs/odometry-cpp-design.md` — the library design (proposed): layers,
+  `Odometry`, start-up, the reader thread.
 
 Odometry-only facts:
 
 - The sensor is on the Pi's I2C bus 1 (`/dev/i2c-1`, SDA GPIO2, SCL
   GPIO3), enabled at 100 kHz by provisioning; address 0x17. **3.3 V
-  only.** Nothing about it has been measured yet: do not state its
-  behaviour from general knowledge.
+  only.** Its behaviour is measured in the reference; check there, and
+  do not state it from general knowledge.
+- Robot code links **`heron_odometry`** (`Odometry`: reader thread,
+  `getLatest()`, shaped like `Lidar`). Below it, `heron_otos_device` (bus,
+  start-up) and the pure `heron_otos`, with private headers in
+  `src/odometry/`. Read `docs/odometry-cpp-design.md` before changing them.
 - No code from the SparkFun sources may be copied without the user's
   approval, even the MIT libraries; the schematic is CC BY-SA. The license
   table is in the reference, §9.

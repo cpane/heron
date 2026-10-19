@@ -1,6 +1,6 @@
 # Odometry workstream — resume point
 
-Last updated 2026-10-17. Branch **`feature/odometry`**.
+Last updated 2026-10-18. Branch **`feature/odometry-library`**.
 
 ## Read this first when resuming
 
@@ -17,7 +17,13 @@ shows 0x17 and nothing else.
 
 | Piece | Where | State |
 |---|---|---|
-| Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; address measured |
+| Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; measured on the Pi |
+| Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | built |
+| `heron_otos`: register map and codec | `cpp/src/odometry/OtosCodec.*` | built; `otos_codec_test` passes on host and Pi |
+| `heron_otos_device`: bus and start-up | `cpp/src/odometry/` | built; `otos_device_test` passes on host and Pi |
+| `heron_odometry`: `Odometry`, what robot code links | `cpp/include/heron/odometry/Odometry.h` | built; `odometry_test` passes on host and Pi |
+| `odometry_adapter`: probe O6, Odometry live | `cpp/probes/OdometryAdapter.cpp` | runs 1–2: 100 Hz, 0 failures, unwrap correct live (reference §4) |
+| `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | run: start-up works on the board; scalars read back (reference §4) |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
 | `otos_start`: probe O2, start-up then still | `cpp/probes/OtosStart.cpp` | run on the Pi: start-up needed; still drift measured (reference §4, §8) |
@@ -47,9 +53,30 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
    to be checked again on the robot.
 5. **Bus soak done:** 150 000 iterations in 977 s with the LiDAR and
    remote running, 0 errors (reference §3).
-6. **Next:** the exploration questions are answered well enough to design
-   the library (`OtosConfig` for scalars and offset; start-up sequence;
-   reader thread like `Lidar` and `RemoteControl`).
+6. **Library, branch `feature/odometry-library`:** design drafted in
+   [`odometry-cpp-design.md`](odometry-cpp-design.md), reviewed.
+   - **`heron_otos` built:** `src/odometry/OtosCodec.h` (private register
+     map, scalings, snapshot decoding, scalar and offset encoding, angle
+     wrapping) and `include/heron/odometry/Planar.h`. `otos_codec_test`
+     passes on the host and the Pi, 63 checks.
+   - **`heron_otos_device` built:** `I2cBus` (interface), `LinuxI2cBus`
+     (i2c-dev; throws off Linux), `OtosDevice` (start-up sequence,
+     snapshot reads), public `OtosConfig.h`. `otos_device_test` passes on
+     the host and the Pi, 29 checks, against `tests/FakeOtosBus.h`.
+   - Live check, probe O5: `scripts/deploy_cpp.sh <user>@<pi> otos_device`
+     (optional: seconds, then linear and angular scalars). Run
+     2026-10-18 with 0.995 and 1.002: scalars read back as written,
+     calibration 619 ms, status 0x00, 0 failed reads (reference §4).
+   - **`heron_odometry` built:** `include/heron/odometry/Odometry.h`
+     (`Odometry`, `OdometrySnapshot`, `OdometryHealth`) and
+     `src/odometry/Odometry.cpp`. `odometry_test` passes on the host and
+     the Pi, 44 checks, repeated runs stable.
+   - Live check, probe O6: `scripts/deploy_cpp.sh <user>@<pi>
+     odometry_adapter 30` (optional scalars after the seconds). Run 1,
+     2026-10-18: 100 readings a second, 0 failures, 0 not OK at 1500
+     polls (reference §4). Run 2 turned 1.5 turns and back:
+     `totalHeading` unwrapped correctly live, peaking at +549.9°.
+   - Then: push and PR the library.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh

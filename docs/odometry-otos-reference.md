@@ -135,6 +135,35 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   them: calibration took 619 ms and the reset 11 ms; status 0x00 for 30 s;
   pose stayed at 0; heading wandered within 0.04° and ended at 0.000°. One
   30 s run, sensor side down, still.
+- **The library's sequence works on the board [ours, probe O5, 2026-10-18].**
+  `OtosDevice::start()` with scalars 0.995 and 1.002: product ID and
+  versions read (HW 1.1, FW 1.0), calibration 619 ms, reset 11 ms, **both
+  scalars read back as written** (0xFB, 0x02). Then 10 s still: status 0x00
+  throughout, 651 reads with 0 failures, heading −0.027°.
+  - **Velocity read 0.3–1.1 mm/s in x and y while the pose stayed at
+    0.0000 m.** Integrated, that would be several millimetres in 10 s, so
+    the board does not simply integrate its reported velocity while still.
+    Why is not known [unverified].
+  - 651 reads in 10 s is 65 a second, not the 100 the 10 ms sleep
+    suggests: each loop is the sleep plus a read of about 5.8 ms (§3). The
+    reader thread must schedule by deadline, not sleep after each read.
+- **`Odometry` live [ours, probe O6, 2026-10-18]:** `start()` took 637 ms
+  (calibration 619). Then 30 s polled at 50 Hz: exactly 100 readings each
+  second, age 4.1–6.4 ms, 1500 polls with 0 not OK, 3002 readings with 0
+  failed, status 0x00 throughout; `stop()` took 10 ms. Moved by hand about
+  0.7 m and turned to +172°; pose and heading followed. Still for the last
+  13 s: heading +0.05°, about 0.23°/min, as after any calibration (§8).
+  The heading never crossed ±180°, so `totalHeading` unwrapping was not
+  exercised on the sensor in this run.
+  **Run 2:** turned by hand about 1.5 turns one way and back past the
+  start. `totalHeading` unwrapped correctly: it peaked at +549.9° while
+  the register read −170.1°, and at every report it differed from the
+  heading by a whole number of turns [ours]. It ended at −102.8°, so the
+  turn back went about 0.3 turn past the start; the true angle was not
+  measured. Tilt warning in 677 snapshots during the spin, and `isOk()`
+  stayed true throughout (0 not OK at 1500 polls), as designed. Still for
+  the last 11 s: heading +0.41°, about 2.2°/min, ten times run 1's rate
+  after a calibration; why is not known [unverified].
 
 ## 5. Calibration
 

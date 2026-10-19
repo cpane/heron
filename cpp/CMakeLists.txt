@@ -90,6 +90,38 @@ target_link_libraries(heron_remote
     PUBLIC heron_ibus_port
     PRIVATE Threads::Threads heron_warnings)
 
+# -- odometry: SparkFun OTOS over I2C -----------------------------------------
+#
+# Independent of the LiDAR and the remote. heron_otos is pure: the register
+# map, its scalings and the conversions to SI units, with no I/O. Its codec
+# header is private (src/), so robot code never sees a register number; the
+# public headers in include/heron/odometry/ speak SI units only. See
+# docs/odometry-cpp-design.md.
+add_library(heron_otos STATIC src/odometry/OtosCodec.cpp)
+target_include_directories(heron_otos
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_otos PRIVATE heron_warnings)
+
+# The sensor on a bus: I2cBus (an interface, so tests can fake the bus on the
+# host), LinuxI2cBus (i2c-dev; on other systems its constructor throws, so
+# everything above still builds), and OtosDevice, the start-up sequence. Its
+# headers are private too; tests and probes are given the path.
+add_library(heron_otos_device STATIC
+    src/odometry/LinuxI2cBus.cpp
+    src/odometry/OtosDevice.cpp)
+target_include_directories(heron_otos_device PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_otos_device PUBLIC heron_otos PRIVATE heron_warnings)
+
+# What robot code links: Odometry, a reader thread publishing the newest
+# reading, shaped like heron_lidar and heron_remote. Its public header,
+# include/heron/odometry/Odometry.h, names no register and no bus type.
+add_library(heron_odometry STATIC src/odometry/Odometry.cpp)
+target_include_directories(heron_odometry PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_odometry
+    PUBLIC heron_otos_device
+    PRIVATE Threads::Threads heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -107,6 +139,22 @@ add_test(NAME failsafe_test COMMAND failsafe_test)
 add_executable(remote_control_test tests/RemoteControlTest.cpp)
 target_link_libraries(remote_control_test PRIVATE heron_remote Threads::Threads heron_warnings)
 add_test(NAME remote_control_test COMMAND remote_control_test)
+
+# The codec header is private to the library, so the test is given its path.
+add_executable(otos_codec_test tests/OtosCodecTest.cpp)
+target_include_directories(otos_codec_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(otos_codec_test PRIVATE heron_otos heron_warnings)
+add_test(NAME otos_codec_test COMMAND otos_codec_test)
+
+add_executable(otos_device_test tests/OtosDeviceTest.cpp)
+target_include_directories(otos_device_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(otos_device_test PRIVATE heron_otos_device heron_warnings)
+add_test(NAME otos_device_test COMMAND otos_device_test)
+
+add_executable(odometry_test tests/OdometryTest.cpp)
+target_include_directories(odometry_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(odometry_test PRIVATE heron_odometry Threads::Threads heron_warnings)
+add_test(NAME odometry_test COMMAND odometry_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -163,6 +211,11 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 add_executable(remote_adapter probes/RemoteAdapter.cpp)
 target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
 
+# Odometry, live: what a 50 Hz robot loop sees. Links only heron_odometry and
+# includes only its public header, like robot code.
+add_executable(odometry_adapter probes/OdometryAdapter.cpp)
+target_link_libraries(odometry_adapter PRIVATE heron_odometry heron_warnings)
+
 # OTOS over I2C: does the Pi 3 read the odometry sensor reliably? Uses the
 # kernel's I2C interface (linux/i2c-dev.h), so it builds only for Linux --
 # the Pi -- and not on a macOS host. docs/odometry-otos-reference.md §10.
@@ -182,6 +235,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Interactive: spin the sensor a counted number of turns, compare.
     add_executable(otos_spin probes/OtosSpin.cpp)
     target_link_libraries(otos_spin PRIVATE heron_warnings)
+
+    # OtosDevice on the real sensor: the library's start-up, then snapshots.
+    add_executable(otos_device probes/OtosDeviceLive.cpp)
+    target_include_directories(otos_device PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+    target_link_libraries(otos_device PRIVATE heron_otos_device heron_warnings)
 endif()
 
 # -- tools -----------------------------------------------------------------------
