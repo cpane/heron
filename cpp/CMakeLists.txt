@@ -113,6 +113,15 @@ add_library(heron_otos_device STATIC
 target_include_directories(heron_otos_device PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(heron_otos_device PUBLIC heron_otos PRIVATE heron_warnings)
 
+# What robot code links: Odometry, a reader thread publishing the newest
+# reading, shaped like heron_lidar and heron_remote. Its public header,
+# include/heron/odometry/Odometry.h, names no register and no bus type.
+add_library(heron_odometry STATIC src/odometry/Odometry.cpp)
+target_include_directories(heron_odometry PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(heron_odometry
+    PUBLIC heron_otos_device
+    PRIVATE Threads::Threads heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -141,6 +150,11 @@ add_executable(otos_device_test tests/OtosDeviceTest.cpp)
 target_include_directories(otos_device_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(otos_device_test PRIVATE heron_otos_device heron_warnings)
 add_test(NAME otos_device_test COMMAND otos_device_test)
+
+add_executable(odometry_test tests/OdometryTest.cpp)
+target_include_directories(odometry_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(odometry_test PRIVATE heron_odometry Threads::Threads heron_warnings)
+add_test(NAME odometry_test COMMAND odometry_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -196,6 +210,11 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 # like robot code, so it also proves that library stands on its own.
 add_executable(remote_adapter probes/RemoteAdapter.cpp)
 target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
+
+# Odometry, live: what a 50 Hz robot loop sees. Links only heron_odometry and
+# includes only its public header, like robot code.
+add_executable(odometry_adapter probes/OdometryAdapter.cpp)
+target_link_libraries(odometry_adapter PRIVATE heron_odometry heron_warnings)
 
 # OTOS over I2C: does the Pi 3 read the odometry sensor reliably? Uses the
 # kernel's I2C interface (linux/i2c-dev.h), so it builds only for Linux --

@@ -12,6 +12,10 @@
 // calibration write, 0x07 clears after a reset, the offset always reads back
 // 0, and reads past 0x5F return 0. The counting is per poll rather than per
 // millisecond, so tests run fast.
+//
+// Thread-safe for one reader thread: read() and write() take `mutex`, and a
+// test that changes registers or switches while Odometry is running must
+// hold it too.
 
 #ifndef HERON_TESTS_FAKE_OTOS_BUS_H
 #define HERON_TESTS_FAKE_OTOS_BUS_H
@@ -19,6 +23,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <span>
 #include <system_error>
 #include <vector>
@@ -41,6 +46,7 @@ class FakeOtosBus : public I2cBus {
     }
 
     std::error_code read(std::uint8_t reg, std::span<std::uint8_t> out) override {
+      const std::lock_guard<std::mutex> lock(mutex);
       ++reads;
       if (failReadsFrom >= 0 && reads > static_cast<std::size_t>(failReadsFrom)) {
         return std::make_error_code(std::errc::io_error);
@@ -70,6 +76,7 @@ class FakeOtosBus : public I2cBus {
     }
 
     std::error_code write(std::uint8_t reg, std::span<const std::uint8_t> data) override {
+      const std::lock_guard<std::mutex> lock(mutex);
       writes.push_back(Write{reg, std::vector<std::uint8_t>(data.begin(), data.end())});
       if (failRegister >= 0 && reg == failRegister) {
         return std::make_error_code(std::errc::io_error);
@@ -93,7 +100,9 @@ class FakeOtosBus : public I2cBus {
       m_regs[reg + 1] = static_cast<std::uint8_t>(u >> 8);
     }
 
-    // Behaviour switches and records, open to the tests.
+    // Behaviour switches and records, open to the tests; hold `mutex` to
+    // touch them, or the registers, while a reader thread runs.
+    std::mutex mutex;
     std::uint8_t calibrationStep{64};   // 255 clears in 4 polls
     bool calibrationStuck{false};
     bool corruptScalars{false};
