@@ -18,9 +18,11 @@ shows 0x17 and nothing else.
 | Piece | Where | State |
 |---|---|---|
 | Sensor reference | [`odometry-otos-reference.md`](odometry-otos-reference.md) | researched and tagged; measured on the Pi |
-| Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | reviewed; being built |
+| Library design | [`odometry-cpp-design.md`](odometry-cpp-design.md) | built |
 | `heron_otos`: register map and codec | `cpp/src/odometry/OtosCodec.*` | built; `otos_codec_test` passes on host and Pi |
 | `heron_otos_device`: bus and start-up | `cpp/src/odometry/` | built; `otos_device_test` passes on host and Pi |
+| `heron_odometry`: `Odometry`, what robot code links | `cpp/include/heron/odometry/Odometry.h` | built; `odometry_test` passes on host and Pi |
+| `odometry_adapter`: probe O6, Odometry live | `cpp/probes/OdometryAdapter.cpp` | built, not yet run |
 | `otos_device`: probe O5, OtosDevice live | `cpp/probes/OtosDeviceLive.cpp` | run: start-up works on the board; scalars read back (reference §4) |
 | I2C bus enabled in provisioning, 100 kHz | `target/provision/base.sh` | run on the Pi; `/dev/i2c-1` present |
 | `otos_bus`: probe O1, read reliability | `cpp/probes/OtosBus.cpp` | clean: 150 000 iterations with the LiDAR and remote running, 0 errors (reference §3) |
@@ -65,8 +67,14 @@ Steps 1–3 are done: wired (reference §2), provisioned, 0x17 answers.
      (optional: seconds, then linear and angular scalars). Run
      2026-10-18 with 0.995 and 1.002: scalars read back as written,
      calibration 619 ms, status 0x00, 0 failed reads (reference §4).
-   - Next: `heron_odometry` (`Odometry`, the reader thread) and
-     `odometry_test`.
+   - **`heron_odometry` built:** `include/heron/odometry/Odometry.h`
+     (`Odometry`, `OdometrySnapshot`, `OdometryHealth`) and
+     `src/odometry/Odometry.cpp`. `odometry_test` passes on the host and
+     the Pi, 44 checks, repeated runs stable.
+   - Live check, probe O6: `scripts/deploy_cpp.sh <user>@<pi>
+     odometry_adapter 30` (optional scalars after the seconds). Not yet
+     run.
+   - Then: push and PR the library.
 
 Checking the bus by hand: `ssh <user>@<pi> /usr/sbin/i2cdetect -y 1`. The
 full path is needed: `/usr/sbin` is not on the PATH of a non-login ssh

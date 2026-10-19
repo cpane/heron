@@ -95,6 +95,10 @@ Odometry-only facts:
   GPIO3), enabled at 100 kHz by provisioning; address 0x17. **3.3 V
   only.** Its behaviour is measured in the reference; check there, and
   do not state it from general knowledge.
+- Robot code links **`heron_odometry`** (`Odometry`: reader thread,
+  `getLatest()`, shaped like `Lidar`). Below it, `heron_otos_device` (bus,
+  start-up) and the pure `heron_otos`, with private headers in
+  `src/odometry/`. Read `docs/odometry-cpp-design.md` before changing them.
 - No code from the SparkFun sources may be copied without the user's
   approval, even the MIT libraries; the schematic is CC BY-SA. The license
   table is in the reference, §9.

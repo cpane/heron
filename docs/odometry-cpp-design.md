@@ -1,7 +1,8 @@
 # Odometry C++ — design and intended use
 
-How the OTOS library is to be layered, and how the robot is meant to use
-it. **Proposed, not yet built.** The sensor itself is in
+How the OTOS library is layered, and how the robot is meant to use it.
+**Built 2026-10-18** on `feature/odometry-library`; the live check on the
+sensor is `odometry_adapter`. The sensor itself is in
 [`odometry-otos-reference.md`](odometry-otos-reference.md); every behaviour
 this design relies on is cited there by section.
 
@@ -39,10 +40,14 @@ opening a `LinuxI2cBus` fails with a clear error, so `Odometry(config)`
 still compiles everywhere and `start()` reports the failure through
 `lastError`, like a missing device.
 
-**Register numbers and scalings stay private.** They live in
-`src/odometry/`, like the LiDAR's `ScanBuilder.h`, and are visible to the
-tests but not to robot code. The public headers speak metres, radians and
-seconds only.
+**Register numbers and scalings stay private.** Every header below
+`Odometry` lives in `src/odometry/` (codec, `I2cBus`, `OtosDevice`), like
+the LiDAR's `ScanBuilder.h`: visible to tests and probes, which are given
+the path, but not to robot code. The public headers in
+`include/heron/odometry/` are `Planar.h`, `OtosConfig.h` and `Odometry.h`,
+and speak metres, radians and seconds only. `Odometry.h` names `I2cBus`
+only as a forward declaration, for the test constructor that takes a bus
+factory.
 
 ## 2. The robot's view: `Odometry`
 
@@ -131,8 +136,10 @@ struct OdometrySnapshot {
 ```cpp
 struct OdometryHealth {
   OdometryState state{OdometryState::Stopped};   // Stopped, Running, Failed
-  std::uint8_t hardwareVersion{0};               // 0x11 is 1.1
-  std::uint8_t firmwareVersion{0};
+  std::uint8_t hardwareMajor{0};                 // 1.1 on ours
+  std::uint8_t hardwareMinor{0};
+  std::uint8_t firmwareMajor{0};                 // 1.0 on ours
+  std::uint8_t firmwareMinor{0};
   Duration calibrationTime{};                    // the last start()
   std::uint64_t readings{0};
   std::uint64_t failedReads{0};
