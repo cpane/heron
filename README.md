@@ -24,7 +24,7 @@ Changes follow gitflow: work on a `feature/`, `bugfix/` or `chore/` branch from
 
 - Raspberry Pi 3 Model B
 - SLAMTEC RPLIDAR A1M8 over USB — attached, with a working C++ library
-- Arduino motor controller over USB serial — planned
+- Arduino motor controller over USB serial, 4 motors, holonomic drive — planned
 - SparkFun OTOS optical odometry sensor over I2C — attached, with a working C++ library
 - FlySky FS-i6X remote, FS-iA6B receiver, iBUS on the GPIO UART — attached, with a working C++ library
 
