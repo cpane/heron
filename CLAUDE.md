@@ -136,7 +136,7 @@ deploy scripts need SSH to it, and provisioning needs `sudo` there.
 Attached: the RPLIDAR A1M8 (USB), a FlySky FS-iA6B receiver (iBUS on the
 GPIO UART) for the FS-i6X remote, and a SparkFun OTOS optical odometry
 sensor on I2C. Planned, not yet attached or explored: an Arduino
-motor controller.
+motor controller over USB serial, driving 4 motors for a holonomic drive.
 
 GPIO header use, through a HAT that passes the Pi's pins through and adds
 spare 5 V and GND connections (the full build guide is `docs/wiring.md`;

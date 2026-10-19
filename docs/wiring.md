@@ -33,7 +33,7 @@ row, even pins on the board's outer edge.
    Pin 8 (TXD) stays empty.
 
    USB:    RPLIDAR A1M8 via its USB adapter board   → /dev/rplidar
-           Motor controller, RP2040 / Pico           (planned, not built)
+           Arduino motor controller, 4 motors        (planned, not built)
    Power:  5 V supply into the Pi's micro-USB port
    Network: Ethernet, or Wi-Fi
 ```
@@ -66,7 +66,7 @@ over can destroy the sensor.
 | SparkFun Optical Tracking Odometry Sensor (OTOS), PAA5160E1 | Qwiic cable to female jumpers, 4 wires | Either Qwiic socket; the other is for chaining |
 | Jumper wires, female to female | — | 3 for the receiver |
 | A pass-through GPIO HAT | The Pi header | Optional. Heron uses one for spare 5 V and ground connections; pins pass straight through |
-| RP2040 / Pico motor controller | USB | Planned, not built |
+| Arduino motor controller, driving 4 motors (holonomic) | USB serial | Planned, not built. The LiDAR's udev rule already allows for it (`target/udev/`) |
 
 ## Build steps
 
