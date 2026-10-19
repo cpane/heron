@@ -147,6 +147,14 @@ acceleration), 18 from 0x32 (standard deviations), or 36 from 0x20.
   - 651 reads in 10 s is 65 a second, not the 100 the 10 ms sleep
     suggests: each loop is the sleep plus a read of about 5.8 ms (§3). The
     reader thread must schedule by deadline, not sleep after each read.
+- **`Odometry` live [ours, probe O6, 2026-10-18]:** `start()` took 637 ms
+  (calibration 619). Then 30 s polled at 50 Hz: exactly 100 readings each
+  second, age 4.1–6.4 ms, 1500 polls with 0 not OK, 3002 readings with 0
+  failed, status 0x00 throughout; `stop()` took 10 ms. Moved by hand about
+  0.7 m and turned to +172°; pose and heading followed. Still for the last
+  13 s: heading +0.05°, about 0.23°/min, as after any calibration (§8).
+  The heading never crossed ±180°, so `totalHeading` unwrapping was not
+  exercised on the sensor in this run.
 
 ## 5. Calibration
 
