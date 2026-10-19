@@ -25,8 +25,10 @@ Changes follow gitflow: work on a `feature/`, `bugfix/` or `chore/` branch from
 - Raspberry Pi 3 Model B
 - SLAMTEC RPLIDAR A1M8 over USB — attached, with a working C++ library
 - Arduino motor controller over USB serial — planned
-- SparkFun OTOS optical odometry sensor over I2C — being explored
+- SparkFun OTOS optical odometry sensor over I2C — attached, with a working C++ library
 - FlySky FS-i6X remote, FS-iA6B receiver, iBUS on the GPIO UART — attached, with a working C++ library
+
+How to wire it all up: [`docs/wiring.md`](docs/wiring.md).
 
 ## Where work stands
 
@@ -39,7 +41,7 @@ together.
 |---|---|
 | LiDAR | reusable C++ library, a test program and a GUI backend, verified on recordings and live; paused 2026-10-04 ([`docs/RESUME-lidar.md`](docs/RESUME-lidar.md)) |
 | Remote control (FlySky iBUS) | reusable iBUS reader library and a diagnostic tool, verified live, including radio-loss detection; paused 2026-10-12 ([`docs/RESUME-remote.md`](docs/RESUME-remote.md)) |
-| Odometry (SparkFun OTOS) | being explored ([`docs/RESUME-odometry.md`](docs/RESUME-odometry.md)) |
+| Odometry (SparkFun OTOS) | reusable C++ library and diagnostic probes, verified live; paused 2026-10-18 ([`docs/RESUME-odometry.md`](docs/RESUME-odometry.md)) |
 
 C++ in this repository follows [`CPP_CODING_STANDARD.md`](CPP_CODING_STANDARD.md).
 The code is MIT-licensed; see [`LICENSE`](LICENSE).

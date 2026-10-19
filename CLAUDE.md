@@ -139,7 +139,8 @@ sensor on I2C. Planned, not yet attached or explored: an Arduino
 motor controller.
 
 GPIO header use, through a HAT that passes the Pi's pins through and adds
-spare 5 V and GND connections:
+spare 5 V and GND connections (the full build guide is `docs/wiring.md`;
+keep the two in step):
 
 - **iBUS receiver:** signal to pin 10 (GPIO15, RXD); power from any 5 V,
   ground to any GND (pins 4 and 6 at present). Pin 8 (TXD) stays empty.
