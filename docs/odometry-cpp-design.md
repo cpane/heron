@@ -233,6 +233,10 @@ Each can be added without changing the shape above.
   (reference §4), but only if they were set to something other than 1.0.
 - **The signal-processing register** (0x0E), left at its default 0x0F.
 - **IO9** as a data-ready line for timestamps (reference §7).
+- **A sensor-neutral interface.** `Odometry` is the OTOS reader; "heron_"
+  is the project prefix, not a tie to the robot's body. If a second
+  odometry source appears (wheel encoders), split out an interface then;
+  robot code would not change. Decided 2026-10-19: keep it simple for v1.
 
 ## 7. Open questions this design depends on
 
