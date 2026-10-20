@@ -1,0 +1,13 @@
+# Arduino motor controller: a Keyestudio Uno R3-compatible board.
+#
+# Its USB-serial bridge is a Silicon Labs CP2102, 10c4:ea60 with the generic
+# serial "0001" -- identical to the RPLIDAR's adapter, so the two can only be
+# told apart by the USB port they are plugged into. See
+# 99-heron-rplidar.rules for the full story; keep the two port assignments
+# in step:
+#
+#   KERNELS "1-1.3"   the Arduino (this file)
+#   KERNELS "1-1.4"   the LiDAR
+#
+# Code must open /dev/arduino, never /dev/ttyUSB*.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", KERNELS=="1-1.3", SYMLINK+="arduino", MODE="0660", GROUP="dialout"

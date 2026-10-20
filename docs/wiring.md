@@ -32,8 +32,10 @@ row, even pins on the board's outer edge.
                                          GND ──── pin 9
    Pin 8 (TXD) stays empty.
 
-   USB:    RPLIDAR A1M8 via its USB adapter board   → /dev/rplidar
-           Arduino motor controller, 4 motors        (planned, not built)
+   USB:    RPLIDAR A1M8 via its USB adapter board   → /dev/rplidar, port 1-1.4
+           Arduino motor controller, 4 motors        → /dev/arduino, port 1-1.3
+   The two USB adapters are identical (CP2102, serial 0001), so each is
+   named by the USB socket it is in. Label the two sockets.
    Power:  5 V supply into the Pi's micro-USB port
    Network: Ethernet, or Wi-Fi
 ```
@@ -61,12 +63,12 @@ over can destroy the sensor.
 |---|---|---|
 | Raspberry Pi 3B | — | Debian trixie, set up by `scripts/provision_pi.sh` |
 | 5 V power supply, micro-USB | Pi power port | A weak supply caused under-voltage while the LiDAR spun (`docs/rplidar-a1m8-findings.md`). Use one that keeps `vcgencmd get_throttled` at `0x0` with everything running |
-| SLAMTEC RPLIDAR A1M8, with its USB adapter board | USB cable to any Pi USB port | Powered from USB. The adapter is a CP2102 USB-serial bridge |
+| SLAMTEC RPLIDAR A1M8, with its USB adapter board | USB cable to the Pi's USB socket 1-1.4 | Powered from USB. The adapter is a CP2102 USB-serial bridge |
 | FlySky FS-iA6B receiver and FS-i6X transmitter | 3 jumper wires from the SERVO (i-BUS) port | Use the SERVO port, not SENS |
 | SparkFun Optical Tracking Odometry Sensor (OTOS), PAA5160E1 | Qwiic cable to female jumpers, 4 wires | Either Qwiic socket; the other is for chaining |
 | Jumper wires, female to female | — | 3 for the receiver |
 | A pass-through GPIO HAT | The Pi header | Optional. Heron uses one for spare 5 V and ground connections; pins pass straight through |
-| Arduino motor controller, driving 4 motors (holonomic) | USB serial | Planned, not built. The LiDAR's udev rule already allows for it (`target/udev/`) |
+| Arduino motor controller, driving 4 motors (holonomic) | USB serial, socket 1-1.3 | Firmware planned, not built. Bench board: Keyestudio Uno R3-compatible, with an L293D shield. Its USB bridge is also a CP2102 |
 
 ## Build steps
 
@@ -84,8 +86,12 @@ over can destroy the sensor.
    with − at the board edge; check the labels on yours.
 5. **Check pins 1 to 6** against the table, especially that nothing 5 V
    touches pin 1 or 3.
-6. **LiDAR.** Plug its USB adapter board into the sensor, and the USB cable
-   into any Pi USB port.
+6. **LiDAR and Arduino.** They must go in specific USB sockets: their
+   adapters are identical, so the Pi tells them apart by socket (LiDAR
+   1-1.4, Arduino 1-1.3; the rules are in `target/udev/`). To find a
+   socket, plug the LiDAR in alone and run
+   `udevadm info -q path -n /dev/ttyUSB0`: the path contains `1-1.N`.
+   Label both sockets.
 7. **Mount the odometry sensor** rigid and level, within 3°, sensor face
    down, 10–27 mm above the floor. It must not tip or rise as the robot
    moves.

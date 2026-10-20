@@ -114,8 +114,10 @@ Probes write to `~/heron/captures` on the target (exported as
 ### Devices
 
 Refer to `/dev/rplidar`, never `/dev/ttyUSB0`. `ttyUSB` numbering is assigned
-in enumeration order and changes as soon as a second USB serial device — such
-as the Arduino motor controller — is attached.
+in enumeration order and changes as soon as a second USB serial device is
+attached. The LiDAR and the Arduino motor controller (`/dev/arduino`) have
+identical USB bridges, so each is named by the USB socket it is plugged into:
+LiDAR in 1-1.4, Arduino in 1-1.3 (`target/udev/`, `docs/wiring.md`).
 
 ### Target dependencies
 
