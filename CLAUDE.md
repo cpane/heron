@@ -46,7 +46,7 @@ LiDAR-only facts:
 - **Use `/dev/rplidar`, never `/dev/ttyUSB0`** — `ttyUSB` numbering is
   enumeration order. The LiDAR and the Arduino use identical CP2102 bridges
   (10c4:ea60, serial 0001), so the udev rules in `target/udev/` match the
-  **USB port**: LiDAR in 1-1.4, Arduino (`/dev/arduino`) in 1-1.3. A device
+  **USB port**: LiDAR in 1-1.4, Arduino (`/dev/arduino`) in 1-1.2. A device
   in another port gets no name.
 - `python/heron/lidar/protocol.py` and `express.py` are written as C++
   transliteration targets: no I/O, integer fixed point, explicit shifts. Keep

@@ -19,7 +19,7 @@
 # the physical USB port instead, and the LiDAR must stay in that port:
 #
 #   KERNELS "1-1.4"   the LiDAR (this file)
-#   KERNELS "1-1.3"   the Arduino (99-heron-arduino.rules)
+#   KERNELS "1-1.2"   the Arduino (99-heron-arduino.rules)
 #
 # Label both ports on the Pi. A device moved to another port loses its name,
 # which is the safe failure: the program finds no device, rather than the
