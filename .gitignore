@@ -13,6 +13,9 @@ build/
 # need no hardware; build-pi/ holds the aarch64 binaries from the container.
 build-host/
 build-pi/
+# build-firmware/ holds PlatformIO's downloaded toolchain and the built .hex
+# (scripts/build_firmware.sh).
+build-firmware/
 cmake-build-*/
 compile_commands.json
 
