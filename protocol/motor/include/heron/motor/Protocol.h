@@ -7,18 +7,96 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-// Compiled by both sides: the Pi's heron_motor and the Arduino firmware. The
-// AVR compiler has no C++ standard library, so this header uses only the C
-// headers <stdint.h> and <stddef.h>, plain arrays, and no exceptions; a bad
+// What this is
+// ------------
+// The Pi drives Heron's four wheels through an Arduino on a USB serial port
+// (/dev/arduino). The Pi does all the motion maths and sends the Arduino
+// four wheel values; the Arduino turns them into PWM on the motor driver.
+// This header defines the bytes they exchange, and is the contract between
+// the two programs: both compile this same file, so they cannot disagree.
+//
+// Messages
+// --------
+//   Pi to Arduino   Drive        four wheel values, sent every 20 ms
+//                   Stop         release all four motors now
+//                   InfoRequest  "send me a Boot"
+//   Arduino to Pi   Status       what the motors are doing, every 100 ms
+//                   Boot         firmware version, platform and reset cause;
+//                                once at start-up and on InfoRequest
+//
+// If the Arduino receives no valid Drive for 250 ms (a crashed program, a
+// pulled cable), it stops the motors by itself: the watchdog. That is why
+// the Pi sends Drive every 20 ms even when nothing has changed.
+//
+// Frames
+// ------
+// A serial port carries a stream of bytes with no boundaries, and noise or
+// a dropped byte can corrupt it. So every message travels inside a frame:
+//
+//   start  length  type  version  payload ...  checksum
+//    C5     0B      01    01      9 bytes      2 bytes
+//
+//   start     always 0xC5: where a frame may begin
+//   length    how many bytes follow, up to the checksum (type, version and
+//             payload), so the receiver knows where the frame ends
+//   type      which message (MessageType)
+//   version   kProtocolVersion; a frame from another version is ignored and
+//             counted, so a mismatched Pi and firmware fail visibly
+//   payload   the message's fields, multi-byte ones little-endian
+//   checksum  CRC-16 over everything before it. A frame whose checksum does
+//             not match is thrown away
+//
+// The receiver hunts for the start byte, reads the length, waits for the
+// rest, and checks the CRC. If anything is wrong it drops one byte and hunts
+// again, so it finds the next good frame after any corruption. That is
+// FrameParser.h.
+//
+// How the pieces fit
+// ------------------
+// Sending, on either side: fill in a message struct, encode it into a byte
+// buffer, write the bytes.
+//
+//   DriveCommand cmd;
+//   cmd.sequence = next++;
+//   cmd.wheels[0] = 500;                 // front-left at half duty, forward
+//   uint8_t buf[kMaxFrameLen];
+//   const size_t n = encodeDrive(cmd, buf, sizeof(buf));
+//   write(fd, buf, n);                   // or Serial.write(buf, n) on the Arduino
+//
+// Receiving: feed the bytes to a FrameParser. It calls back with a Frame for
+// each good one; a Frame is the checked frame's type and a pointer to its
+// payload, still undecoded. Pass it to the decode function for the message
+// you expect, which checks the type and the length and fills in the struct.
+//
+//   FrameParser parser;
+//   parser.feed(byte, [&](const Frame &frame) {
+//     DriveCommand cmd;
+//     StopCommand stop;
+//     if (decodeDrive(frame, cmd)) {
+//       applyWheels(cmd.wheels);
+//     } else if (decodeStop(frame, stop)) {
+//       releaseMotors();
+//     }
+//   });
+//
+// Nothing here does I/O or keeps time: the caller reads and writes the port
+// and runs the 20 ms and 250 ms timers. That is what lets the tests drive
+// all of it with plain byte arrays (cpp/tests/MotorProtocolTest.cpp).
+//
+// Constraints, because the Arduino compiles it too
+// --------------------------------------------------
+// The AVR compiler has no C++ standard library, so this header uses only the
+// C headers <stdint.h> and <stddef.h>, plain arrays, and no exceptions: a bad
 // input is reported by a return value. That is the AVR exception in
-// CPP_CODING_STANDARD.md. No I/O: bytes in, bytes out.
+// CPP_CODING_STANDARD.md.
 //
 // On the AVR an int is 16 bits. A uint8_t promotes to that int, so
 // `byte << 8` can overflow it; a uint16_t promotes to unsigned int. Every
 // shift here therefore widens to uint16_t or uint32_t first. The host tests
 // cannot catch a mistake there, since the host's int is 32 bits.
 //
-// The wire format, and why, is docs/motor-protocol.md.
+// The wire format in full, field by field, with the reasons behind each
+// choice, is docs/motor-protocol.md.
 
 #ifndef HERON_MOTOR_PROTOCOL_H
 #define HERON_MOTOR_PROTOCOL_H
@@ -116,24 +194,49 @@ inline constexpr uint8_t kResetBrownOut = 0x04;
 inline constexpr uint8_t kResetWatchdog = 0x08;
 
 // -- messages -------------------------------------------------------------------
+//
+// One struct per message, holding its fields as the program uses them. The
+// encode*() and decode*() functions below turn each into its payload bytes
+// and back; the order and size of every field on the wire is in
+// docs/motor-protocol.md §4 and §5.
+//
+// Every message from the Pi carries a sequence number, which the Pi
+// increments for each one it sends, wrapping at 255. The Arduino echoes the
+// newest it accepted in Status, so the Pi can tell that its commands are
+// arriving, and how long they take.
 
-/** Pi to Arduino, every 20 ms. */
+/**
+ * Pi to Arduino, every 20 ms, even when nothing has changed: it is also the
+ * heartbeat that keeps the watchdog from stopping the motors.
+ *
+ * wheels[] is in motor order (kMotorCount), each -1000..1000 for full
+ * reverse to full forward duty, positive driving the robot forward.
+ */
 struct DriveCommand {
   uint8_t sequence{0};
   int16_t wheels[kMotorCount]{};
 };
 
-/** Pi to Arduino: release all four motors. */
+/** Pi to Arduino: release all four motors now, without waiting for the
+ *  watchdog. The motors stay released until the next Drive. */
 struct StopCommand {
   uint8_t sequence{0};
 };
 
-/** Pi to Arduino: answered with Boot. */
+/** Pi to Arduino: asks for a Boot, for when the Pi starts or reconnects
+ *  after the Arduino has been running and its first Boot was missed. */
 struct InfoRequest {
   uint8_t sequence{0};
 };
 
-/** Arduino to Pi, every 100 ms. Counters count up and wrap; take differences. */
+/**
+ * Arduino to Pi, every 100 ms: what the motors are doing and how healthy
+ * the link is. The Pi learns from it that the firmware is alive, whether its
+ * commands arrive (lastSequence), and why the motors stopped if they did.
+ *
+ * Counters are 16 bits, count up since boot and wrap; the Pi takes the
+ * difference between two Status messages, which stays right across a wrap.
+ */
 struct Status {
   uint8_t lastSequence{0};  // of the newest valid command
   MotorState state{MotorState::Stopped};
@@ -170,13 +273,22 @@ inline constexpr size_t kBootPayloadLen = 12;
 static_assert(kStatusPayloadLen <= kMaxPayloadLen, "Status must fit a frame");
 
 /**
- * One received frame, as the parser hands it over. payload points into the
- * parser's buffer and is valid only during the callback.
+ * One received frame whose checksum and version were good, as FrameParser
+ * hands it to its callback: the halfway point between bytes and a message.
+ *
+ * The parser knows framing but not messages, so it does not decode the
+ * payload. The decode*() functions below do that: each checks that the type
+ * and the payload length are what its message needs, and fills in the
+ * struct. The type is not checked against the list in MessageType, so an
+ * unknown type can arrive here; no decode function accepts it.
+ *
+ * payload points into the parser's buffer, which is reused for the next
+ * frame: it is valid only during the callback. Decode it there, or copy it.
  */
 struct Frame {
   MessageType type{MessageType::Drive};
-  uint8_t version{0};
-  const uint8_t *payload{nullptr};
+  uint8_t version{0};               // always kProtocolVersion, for now
+  const uint8_t *payload{nullptr};  // the bytes between version and checksum
   size_t payloadLen{0};
 };
 
@@ -246,6 +358,12 @@ inline uint16_t crc16(const uint8_t *data, size_t count) {
 }
 
 // -- encoding -----------------------------------------------------------------------
+//
+// Each encode*() writes one complete frame, ready to send, into the caller's
+// buffer and returns its length. A buffer of kMaxFrameLen bytes always
+// suffices; a smaller one that does not fit gets nothing written and a
+// return of 0. encodeFrame() is the shared part; the others lay out their
+// message's payload and call it.
 
 /**
  * Writes a whole frame: header, payload and checksum.

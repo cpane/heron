@@ -7,10 +7,28 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-// Used by both sides: the firmware feeds it what Serial.read() returns, the
-// Pi what read() on /dev/arduino returns. No C++ standard library, as in
-// Protocol.h; the callback is a template parameter, so a lambda works on the
-// AVR without std::function.
+// The receiving half of the protocol. A serial port delivers bytes in
+// whatever pieces it likes: half a frame, three frames at once, or noise
+// before the first. FrameParser collects them, finds where each frame
+// starts and ends, checks it, and hands each good one to a callback as a
+// Frame. What a frame is, and what the callback does with it, is the
+// overview at the top of Protocol.h.
+//
+// Used by both sides, one parser per direction:
+//
+//   Arduino   while (Serial.available() > 0) {
+//               parser.feed(static_cast<uint8_t>(Serial.read()), onFrame);
+//             }
+//
+//   Pi        const ssize_t n = read(fd, buf, sizeof(buf));
+//             parser.feed(buf, static_cast<size_t>(n), onFrame);
+//
+// It keeps the counters the Arduino reports in Status (getStats()): good
+// frames, checksum errors, version mismatches and bytes thrown away. A
+// healthy link shows only the first rising.
+//
+// No C++ standard library, as in Protocol.h; the callback is a template
+// parameter, so a lambda works on the AVR without std::function.
 //
 // Resync is byte by byte, as in the iBUS parser: whenever the front of the
 // buffer cannot start a valid frame -- no start byte, a length out of range,
