@@ -1,7 +1,8 @@
 // File        : MotorControllerTest.cpp
 // Author      : Chris Pane
 // Description : Behaviour of the motor firmware's logic -- commands, the
-//               watchdog, Status -- on the host, with made-up frames and times.
+//               watchdog, the ramp, Status, the output mapping -- on the host,
+//               with made-up frames and times.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -10,7 +11,9 @@
 // MotorController is the firmware's decision-making, compiled here from the
 // same file that goes into the Arduino (firmware/motor/lib/). Frames are built
 // with Protocol.h's encoders and fed through a real FrameParser, as on the
-// board; time is whatever each test says it is. Same style as
+// board; time is whatever each test says it is. Most tests use no ramp, so
+// applied follows the target on the next update(); the ramp has its own
+// section. Same style as
 // IBusParserTest.cpp -- deliberately no test framework yet.
 
 #include <cinttypes>
@@ -20,6 +23,7 @@
 #include <vector>
 
 #include "MotorController.h"
+#include "MotorOutput.h"
 #include "heron/motor/FrameParser.h"
 #include "heron/motor/Protocol.h"
 
@@ -36,9 +40,14 @@ void check(const char *what, bool ok) {
   }
 }
 
+constexpr RampConfig kNoRamp{0};
+
 // The firmware's receive path, minus the serial port: bytes through a
-// parser into the controller, all stamped with one time.
+// parser into the controller, all stamped with one time. drive() then runs
+// update() at the same time, as the loop does after reading the port.
 struct Board {
+  explicit Board(const RampConfig &ramp = kNoRamp) : controller(ramp) {}
+
   FrameParser parser;
   MotorController controller;
 
@@ -57,6 +66,7 @@ struct Board {
     cmd.wheels[3] = m4;
     std::uint8_t out[kMaxFrameLen];
     receive(out, encodeDrive(cmd, out, sizeof(out)), nowMs);
+    controller.update(nowMs);
   }
 
   void stop(std::uint8_t sequence, std::uint32_t nowMs) {
@@ -196,7 +206,7 @@ int main() {
   std::printf("Status timing\n");
 
   {
-    MotorController c;
+    MotorController c(kNoRamp);
     check("the first is due at once", c.isStatusDue(5000));
     check("not again in the same period", !c.isStatusDue(5000) && !c.isStatusDue(5099));
     check("due 100 ms later", c.isStatusDue(5100));
@@ -204,14 +214,14 @@ int main() {
   }
 
   {
-    MotorController c;
+    MotorController c(kNoRamp);
     c.isStatusDue(5000);
     check("a late loop still sends", c.isStatusDue(5130));
     check("on schedule again, not drifting", !c.isStatusDue(5199) && c.isStatusDue(5200));
   }
 
   {
-    MotorController c;
+    MotorController c(kNoRamp);
     c.isStatusDue(5000);
     check("after a 1 s stall: one Status", c.isStatusDue(6000));
     check("after a 1 s stall: not a burst of the missed ones",
@@ -219,11 +229,118 @@ int main() {
   }
 
   {
-    MotorController c;
+    MotorController c(kNoRamp);
     const std::uint32_t nearWrap = 0xFFFFFFC0;
     c.isStatusDue(nearWrap);
     check("across the millis() wrap: due 100 ms later",
           !c.isStatusDue(nearWrap + 99) && c.isStatusDue(nearWrap + 100));
+  }
+
+  std::printf("Ramp\n");
+
+  {
+    Board b(RampConfig{4});
+    b.controller.update(1000);
+    b.drive(1, 1000, -1000, 400, 0, 1000);
+    check("a Drive alone moves nothing in the same millisecond",
+          appliedIs(b.controller, 0, 0, 0, 0) && b.status().target[0] == 1000);
+    b.controller.update(1010);
+    check("10 ms at 4 per ms: 40 toward each target", appliedIs(b.controller, 40, -40, 40, 0));
+    b.controller.update(1100);
+    check("100 ms: 400; a target of 400 is reached and held",
+          appliedIs(b.controller, 400, -400, 400, 0));
+    b.controller.update(1250);
+    b.drive(2, 1000, -1000, 400, 0, 1250);  // keep the watchdog fed
+    check("250 ms: full", appliedIs(b.controller, 1000, -1000, 400, 0));
+  }
+
+  {
+    Board b(RampConfig{4});
+    b.controller.update(1000);
+    std::uint32_t t = 1000;
+    for (std::uint8_t seq = 0; t <= 1300; ++seq, t += 20) {
+      b.drive(seq, 1000, 0, 0, 0, t);
+    }
+    check("full forward after 300 ms", b.controller.getApplied(0) == 1000);
+    bool smooth = true;
+    std::int16_t previous = b.controller.getApplied(0);
+    for (std::uint8_t seq = 100; t <= 1900; ++seq, t += 20) {
+      b.drive(seq, -1000, 0, 0, 0, t);
+      const std::int16_t now = b.controller.getApplied(0);
+      smooth = smooth && now <= previous && previous - now <= 80;  // 20 ms at 4 per ms
+      previous = now;
+    }
+    check("a reversal ramps down through zero, never jumping", smooth && previous == -1000);
+  }
+
+  {
+    Board b(RampConfig{4});
+    b.controller.update(1000);
+    b.drive(1, 1000, 1000, 1000, 1000, 1000);
+    b.controller.update(1100);
+    b.stop(2, 1100);
+    check("Stop releases at once, not on the ramp", appliedIs(b.controller, 0, 0, 0, 0));
+    b.drive(3, 1000, 1000, 1000, 1000, 1200);
+    b.controller.update(1210);
+    check("after a Stop the next Drive ramps up from zero",
+          appliedIs(b.controller, 40, 40, 40, 40));
+  }
+
+  {
+    Board b(RampConfig{4});
+    b.controller.update(1000);
+    b.drive(1, 800, 800, 800, 800, 1000);
+    b.controller.update(1240);
+    b.controller.update(1251);
+    check("the watchdog releases at once too", !b.controller.isRunning() &&
+                                                  appliedIs(b.controller, 0, 0, 0, 0));
+  }
+
+  {
+    Board b(RampConfig{4});
+    b.controller.update(1000);
+    b.drive(1, -1000, 0, 0, 0, 1000);
+    b.drive(2, -1000, 0, 0, 0, 1200);  // a 200 ms stall between loop passes
+    check("a stalled loop moves only as far as the ramp allows",
+          b.controller.getApplied(0) == -800);
+  }
+
+  {
+    Board b(RampConfig{4});
+    const std::uint32_t nearWrap = 0xFFFFFFF0;
+    b.controller.update(nearWrap);
+    b.drive(1, 1000, 0, 0, 0, nearWrap);
+    b.drive(2, 1000, 0, 0, 0, nearWrap + 0x20);  // 32 ms later, past the wrap
+    check("across the millis() wrap: 32 ms is 128", b.controller.getApplied(0) == 128);
+  }
+
+  std::printf("Output: value to duty and direction\n");
+
+  {
+    const MotorOutput zero = toMotorOutput(0, 1, 70);
+    check("0: released, duty 0", zero.direction == Direction::Release && zero.duty == 0);
+    const MotorOutput one = toMotorOutput(1, 1, 70);
+    check("1: the dead band's edge, forward", one.direction == Direction::Forward &&
+                                                  one.duty == 70);
+    check("500: halfway through the band", toMotorOutput(500, 1, 70).duty == 162);
+    const MotorOutput full = toMotorOutput(-1000, 1, 70);
+    check("-1000: full, backward", full.direction == Direction::Backward && full.duty == 255);
+    check("sign -1 reverses the direction, not the duty",
+          toMotorOutput(-1000, -1, 70).direction == Direction::Forward &&
+              toMotorOutput(300, -1, 70).direction == Direction::Backward &&
+              toMotorOutput(300, -1, 70).duty == toMotorOutput(300, 1, 70).duty);
+    check("out of range clamps", toMotorOutput(30000, 1, 70).duty == 255 &&
+                                     toMotorOutput(-30000, 1, 70).direction ==
+                                         Direction::Backward);
+    check("no dead band: 1..1000 spread over 0..255",
+          toMotorOutput(1000, 1, 0).duty == 255 && toMotorOutput(500, 1, 0).duty == 127 &&
+              toMotorOutput(1, 1, 0).duty == 0 &&
+              toMotorOutput(1, 1, 0).direction == Direction::Forward);
+    bool rising = true;
+    for (std::int16_t v = 2; v <= 1000; ++v) {
+      rising = rising && toMotorOutput(v, 1, 70).duty >= toMotorOutput(v - 1, 1, 70).duty;
+    }
+    check("duty never falls as the value rises", rising);
   }
 
   std::printf("Status contents\n");

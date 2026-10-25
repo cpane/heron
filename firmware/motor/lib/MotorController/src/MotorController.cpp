@@ -18,6 +18,18 @@ bool isAtOrAfter(uint32_t a, uint32_t b) {
   return static_cast<int32_t>(a - b) >= 0;
 }
 
+// One applied value moved toward its target by at most maxStep.
+int16_t stepToward(int16_t applied, int16_t target, int32_t maxStep) {
+  const int32_t diff = static_cast<int32_t>(target) - applied;
+  if (diff > maxStep) {
+    return static_cast<int16_t>(applied + maxStep);
+  }
+  if (diff < -maxStep) {
+    return static_cast<int16_t>(applied - maxStep);
+  }
+  return target;
+}
+
 }  // namespace
 
 void MotorController::onFrame(const Frame &frame, uint32_t nowMs) {
@@ -27,11 +39,16 @@ void MotorController::onFrame(const Frame &frame, uint32_t nowMs) {
   if (decodeDrive(frame, drive)) {
     m_lastSequence = drive.sequence;
     m_lastDriveMs = nowMs;
+    if (m_state != MotorState::Running) {
+      // Starting: the ramp runs from this Drive, not from the last update()
+      // before it, so time spent stopped is not counted as ramp time.
+      m_lastUpdateMs = nowMs;
+      m_updateStarted = true;
+    }
     m_state = MotorState::Running;
     m_stopReason = StopReason::None;
     for (size_t i = 0; i < kMotorCount; ++i) {
-      m_target[i] = drive.wheels[i];
-      m_applied[i] = drive.wheels[i];  // no ramp until step 3
+      m_target[i] = drive.wheels[i];  // applied follows in update(), on the ramp
     }
   } else if (decodeStop(frame, stopCmd)) {
     m_lastSequence = stopCmd.sequence;
@@ -51,6 +68,13 @@ void MotorController::update(uint32_t nowMs) {
   if (m_state == MotorState::Running && nowMs - m_lastDriveMs > kWatchdogMs) {
     ++m_watchdogStops;
     stop(StopReason::Watchdog);  // the target keeps the last commanded values
+  }
+
+  const uint32_t elapsed = m_updateStarted ? nowMs - m_lastUpdateMs : 0;
+  m_lastUpdateMs = nowMs;
+  m_updateStarted = true;
+  if (m_state == MotorState::Running) {
+    ramp(elapsed);
   }
 }
 
@@ -96,6 +120,23 @@ Status MotorController::makeStatus(const ParserStats &link, uint16_t batteryMill
   status.bytesDiscarded = link.bytesDiscarded;
   status.longestLoopMicros = longestLoopMicros;
   return status;
+}
+
+void MotorController::ramp(uint32_t elapsedMs) {
+  // The widest move is -1000 to 1000. Capping the step there first keeps the
+  // product below in range however long the loop stalled.
+  const int32_t fullSwing = static_cast<int32_t>(kWheelMax) - kWheelMin;
+  int32_t maxStep = fullSwing;
+  if (m_ramp.rampPerMs != 0) {
+    const uint32_t elapsed = elapsedMs > static_cast<uint32_t>(fullSwing)
+                                 ? static_cast<uint32_t>(fullSwing)
+                                 : elapsedMs;
+    const uint32_t step = elapsed * m_ramp.rampPerMs;
+    maxStep = step > static_cast<uint32_t>(fullSwing) ? fullSwing : static_cast<int32_t>(step);
+  }
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    m_applied[i] = stepToward(m_applied[i], m_target[i], maxStep);
+  }
 }
 
 void MotorController::stop(StopReason reason) {
