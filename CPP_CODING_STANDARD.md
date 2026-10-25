@@ -780,6 +780,29 @@ The same block heads every `.h` and `.cpp` file, with `File` naming the file
 itself. The full license text lives once, in `LICENSE`; the SPDX line is the
 machine-readable form that tools such as REUSE and license scanners look for.
 
+### File Overviews
+Assume the reader has never seen the code and is learning to use it from
+the file itself. Below the header block, a header file that others use
+starts with an overview in `//` comments that teaches, not just labels:
+
+- **What it is:** what the code is for and where it sits in the robot.
+- **The ideas behind it:** anything a reader must understand first, and why
+  it is done this way. A reader should not have to ask "what is a Frame?"
+- **How the pieces fit:** the main types and functions, and the order in
+  which they are used.
+- **Usage:** a short example for each kind of caller, in `//` comments.
+- **Constraints and pitfalls:** threading, lifetimes, platform limits,
+  anything easy to get wrong.
+- **Where to read more:** the design or reference document in `docs/`.
+
+Short sections with underlined titles keep a long overview readable. Each
+struct and class then documents its purpose and its caveats (such as a
+pointer valid only during a callback), not only its fields. A `.cpp` file
+needs an overview only for what its header does not already explain.
+
+`protocol/motor/include/heron/motor/Protocol.h` and `FrameParser.h` are the
+model.
+
 ### Function Documentation
 Document public APIs using multi-line comments:
 
