@@ -5,7 +5,8 @@ subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR, remote control and odometry workstreams
 each have a working C++ library and are paused. The motor controller
-workstream is active: its protocol is written, its firmware is next.
+workstream is active: its protocol and link firmware are written and
+checked on the bench, and the driver layer is next.
 
 ## Workstreams
 
@@ -127,6 +128,10 @@ Motor-only facts:
   or firmware, never on the wire.
 - The bench shield's PWR jumper must be off, or the Pi's USB 5 V back-feeds
   the motor supply.
+- The firmware is built in a container (`scripts/build_firmware.sh`) and
+  flashed through the Pi; nothing for it is installed on the host. Its
+  logic (`firmware/motor/lib/`) has no Arduino code and is tested by
+  `ctest`, like the Pi's code.
 - The wire format is code in `protocol/motor/`, header-only and compiled
   by both sides. It uses no C++ standard library: the board's compiler has
   none (`CPP_CODING_STANDARD.md`, "Shared code for the AVR").
@@ -183,6 +188,8 @@ scripts/deploy_pi.sh       <user>@<pi>         # rsync python/
 scripts/deploy_pi.sh       <user>@<pi> probes/lidar_01_port.py
 scripts/build_cpp.sh                                    # C++ for the Pi, in a container
 scripts/deploy_cpp.sh      <user>@<pi> <binary> [args]
+scripts/build_firmware.sh                               # Arduino firmware, in a container
+scripts/flash_firmware.sh  <user>@<pi>         # avrdude on the Pi
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
 ```
 

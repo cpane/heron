@@ -138,6 +138,26 @@ add_library(heron_motor_protocol_nostd OBJECT
 target_compile_options(heron_motor_protocol_nostd PRIVATE -nostdinc++)
 target_link_libraries(heron_motor_protocol_nostd PRIVATE heron_motor_protocol heron_warnings)
 
+# The firmware's logic: MotorController, in firmware/motor/lib/ because
+# PlatformIO compiles it into the Arduino firmware. CMake compiles the same
+# file for the host, so the tests run with ctest like everything else. It is
+# shared AVR code too, so it is built with -nostdinc++ here as well.
+add_library(heron_motor_controller STATIC
+    "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src/MotorController.cpp")
+target_include_directories(heron_motor_controller PUBLIC
+    "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src")
+target_compile_options(heron_motor_controller PRIVATE -nostdinc++)
+target_link_libraries(heron_motor_controller
+    PUBLIC heron_motor_protocol
+    PRIVATE heron_warnings)
+
+# The Pi's serial port to the Arduino: termios, read and write. POSIX, so it
+# builds on Linux and macOS but never for the AVR. The motor library of
+# step 4 (heron_motor) will be built on it.
+add_library(heron_motor_port STATIC src/motor/MotorPort.cpp)
+target_include_directories(heron_motor_port PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_motor_port PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -175,6 +195,10 @@ add_test(NAME odometry_test COMMAND odometry_test)
 add_executable(motor_protocol_test tests/MotorProtocolTest.cpp)
 target_link_libraries(motor_protocol_test PRIVATE heron_motor_protocol heron_warnings)
 add_test(NAME motor_protocol_test COMMAND motor_protocol_test)
+
+add_executable(motor_controller_test tests/MotorControllerTest.cpp)
+target_link_libraries(motor_controller_test PRIVATE heron_motor_controller heron_warnings)
+add_test(NAME motor_controller_test COMMAND motor_controller_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -274,3 +298,9 @@ target_link_libraries(lidar_gui_server PRIVATE heron_lidar heron_warnings)
 # Pi's UART. Links the two iBUS libraries above, as robot code would.
 add_executable(ibus_reader tools/IBusReader.cpp)
 target_link_libraries(ibus_reader PRIVATE heron_ibus_port heron_warnings)
+
+# The motor link's bench tool: sends commands to the Arduino and runs the
+# link checks (docs/RESUME-motor.md). Built for the host as well as the Pi,
+# so an Uno can be checked from either.
+add_executable(motor_link tools/MotorLink.cpp)
+target_link_libraries(motor_link PRIVATE heron_motor_port heron_motor_protocol heron_warnings)

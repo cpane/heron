@@ -1,0 +1,23 @@
+# Build environment for the Arduino firmware (firmware/motor/).
+#
+# The firmware counterpart of Dockerfile.build: the AVR compiler lives in
+# this image, never on the host, so a Mac or Linux developer needs only
+# Docker. PlatformIO is pinned here; the board platform, the compiler and the
+# libraries it downloads are pinned in platformio.ini. The downloads land in
+# build-firmware/ in the bind-mounted repository (git-ignored), so they are
+# fetched once, not on every build. See docs/motor-design.md §3.
+FROM debian:trixie
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# A venv, because trixie's python is EXTERNALLY-MANAGED (PEP 668).
+ARG PLATFORMIO_VERSION=6.1.19
+RUN python3 -m venv /opt/platformio \
+    && /opt/platformio/bin/pip install --no-cache-dir "platformio==${PLATFORMIO_VERSION}"
+ENV PATH="/opt/platformio/bin:${PATH}"
+
+WORKDIR /src

@@ -177,7 +177,7 @@ example when the Pi opens the port after the Arduino is already running.
 | Firmware version | 3 | Major, minor, patch |
 | Protocol version | 1 | The highest this firmware speaks |
 | Platform ID | 1 | 0 unknown, 1 bench, 2 mini, 3 full-size |
-| Reset cause | 1 | Bits: `0x01` power-on, `0x02` external, `0x04` brown-out, `0x08` watchdog. A brown-out means motor current pulled the Uno's supply down. The bits are the ATmega328P's MCUSR, so the Uno sends it as it is |
+| Reset cause | 1 | Bits: `0x01` power-on, `0x02` external, `0x04` brown-out, `0x08` watchdog. A brown-out means motor current pulled the Uno's supply down. The bits are the ATmega328P's MCUSR, so the Uno sends it as it is. The bench Uno's bootloader clears MCUSR before the firmware reads it, so it always sends 0 **[ours]** |
 | Uptime | 4 | Milliseconds since boot |
 | Free RAM | 2 | Bytes between the heap and the stack, of 2 KB |
 

@@ -194,6 +194,9 @@ echo "Installing Heron baseline packages..."
 # venv that still inherits these apt packages rather than replacing them:
 #
 #   python3 -m venv --system-site-packages ~/heron/.venv
+#
+# avrdude flashes the Arduino motor controller (scripts/flash_firmware.sh).
+# The firmware is built on the host, in a container; the Pi only writes it.
 apt-get install -y \
     python3 \
     python3-venv \
@@ -205,7 +208,8 @@ apt-get install -y \
     pkg-config \
     rsync \
     git \
-    i2c-tools
+    i2c-tools \
+    avrdude
 
 #
 # Hostname
