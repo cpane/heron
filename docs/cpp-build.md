@@ -182,6 +182,10 @@ heron_ibus_port           receive-only termios port, and IBusReceiver
   ^
 heron_remote              RemoteControl: reader thread, latest-wins; what
                           robot code links (remote-cpp-design.md)
+
+heron_motor_protocol      the motor link's wire format: header-only, in
+                          protocol/motor/, shared with the Arduino firmware;
+                          no C++ standard library (motor-protocol.md §8)
 ```
 
 `heron_lidar` links the SDK and the channels **privately**, so anything
@@ -195,6 +199,8 @@ include path. The boundary is enforced by the build. Rationale in
 |---|---|---|
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
 | `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
+| `motor_protocol_test` | `cpp/tests/` | the motor link protocol and frame parser, run by `ctest` |
+| `heron_motor_protocol_nostd` | `protocol/motor/check/` | not a program: compiles the shared protocol with `-nostdinc++`, so a C++ standard header in it fails the build |
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
 | `lidar_info`, `lidar_record`, `lidar_adapter`, `lidar_nearest` | `cpp/probes/` | on-target programs |
 | `lidar_gui_server` | `cpp/tools/` | serves the library to the viewer |

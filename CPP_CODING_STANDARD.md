@@ -854,6 +854,26 @@ This project has no foundation class library. Use the C++ standard library
 Before adding a helper library of your own, check that the standard does not
 already provide it; when in doubt, discuss it in review.
 
+### Shared code for the AVR
+
+The one exception. Code compiled by both the Pi and the Arduino firmware,
+such as the motor protocol in `protocol/motor/`, is built by the AVR
+compiler, which has no C++ standard library. Such code:
+
+- includes only the C headers `<stdint.h>` and `<stddef.h>`, and uses the
+  types as `uint8_t`, `size_t` rather than `std::uint8_t`;
+- uses plain arrays and structs, not `std::array`, `std::span` or
+  containers, and allocates nothing;
+- reports bad input by return value, never by exception;
+- takes callbacks as template parameters, not `std::function`;
+- stays within C++17, which the board's compiler (avr-gcc 7) supports;
+- widens to `uint16_t` or `uint32_t` before shifting: the AVR's `int` is
+  16 bits, so `byte << 8` on a promoted `uint8_t` can overflow it.
+
+Everything else in this standard applies. Each such library is compiled
+on the host with `-nostdinc++` as well, so a standard header slipping in
+fails the host build, not only the firmware's.
+
 ## Performance Guidelines
 
 ### General Principles

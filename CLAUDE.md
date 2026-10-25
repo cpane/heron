@@ -5,7 +5,7 @@ subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR, remote control and odometry workstreams
 each have a working C++ library and are paused. The motor controller
-workstream is planned, with nothing built yet.
+workstream is active: its protocol is written, its firmware is next.
 
 ## Workstreams
 
@@ -106,7 +106,7 @@ Odometry-only facts:
   approval, even the MIT libraries; the schematic is CC BY-SA. The license
   table is in the reference, §9.
 
-### Motor controller — Arduino, 4 motors, over USB serial (planned)
+### Motor controller — Arduino, 4 motors, over USB serial (active)
 
 Read before doing motor work:
 
@@ -127,8 +127,9 @@ Motor-only facts:
   or firmware, never on the wire.
 - The bench shield's PWR jumper must be off, or the Pi's USB 5 V back-feeds
   the motor supply.
-- Shared code for the AVR uses no C++ standard library: the board's
-  compiler has none.
+- The wire format is code in `protocol/motor/`, header-only and compiled
+  by both sides. It uses no C++ standard library: the board's compiler has
+  none (`CPP_CODING_STANDARD.md`, "Shared code for the AVR").
 
 ## Development model
 
