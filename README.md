@@ -42,6 +42,7 @@ together.
 | LiDAR | reusable C++ library, a test program and a GUI backend, verified on recordings and live; paused 2026-10-04 ([`docs/RESUME-lidar.md`](docs/RESUME-lidar.md)) |
 | Remote control (FlySky iBUS) | reusable iBUS reader library and a diagnostic tool, verified live, including radio-loss detection; paused 2026-10-12 ([`docs/RESUME-remote.md`](docs/RESUME-remote.md)) |
 | Odometry (SparkFun OTOS) | reusable C++ library and diagnostic probes, verified live; paused 2026-10-18 ([`docs/RESUME-odometry.md`](docs/RESUME-odometry.md)) |
+| Motor controller (Arduino) | protocol and plan written, nothing built ([`docs/RESUME-motor.md`](docs/RESUME-motor.md)) |
 
 C++ in this repository follows [`CPP_CODING_STANDARD.md`](CPP_CODING_STANDARD.md).
 The code is MIT-licensed; see [`LICENSE`](LICENSE).
