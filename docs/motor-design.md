@@ -54,27 +54,46 @@ board until the firmware drives each motor in turn.
 
 ## 3. The firmware
 
-### Toolchain: PlatformIO Core, on the Mac
+### Toolchain: PlatformIO Core, in a container
 
-- `platformio.ini` pins the board, compiler, platform and library versions:
-  the firmware version of "reproducible from scripts in this repository".
-- `pio test -e native` runs the firmware's pure logic on the Mac, as
-  `ctest` does for the other libraries.
-- Installed from `requirements-host.txt` into the existing `.venv`. The Pi
-  build and its container are not touched.
-- Considered and not chosen: `arduino-cli` (imposes the sketch layout, no
-  host test runner) and avr-gcc driven from our CMake (much work for no
-  gain).
+Decided 2026-10-25, to mirror the Pi build: the compiler for a target lives
+in a container, never on the host, so a Mac or Linux developer needs only
+Docker.
+
+| | Pi C++ | Arduino firmware |
+|---|---|---|
+| Compiler | `heron-build:trixie` (`docker/Dockerfile.build`) | `heron-firmware:trixie` (`docker/Dockerfile.firmware`) |
+| Build | `scripts/build_cpp.sh` | `scripts/build_firmware.sh` |
+| Versions pinned in | the image (Debian trixie, as on the Pi) | the image (PlatformIO 6.1.19) and `platformio.ini` (atmelavr 5.3.0, Arduino core 5.4.0, avr-gcc 7.3.0) |
+| Tests | `ctest` | `ctest`: the firmware's logic has no Arduino code, so CMake builds it for the host too |
+| Onto the target | `scripts/deploy_cpp.sh`: rsync, run | `scripts/flash_firmware.sh`: rsync the `.hex`, run `avrdude` on the Pi |
+| On the Pi | nothing but provisioning | `avrdude`, from provisioning |
+
+- **PlatformIO's downloads** (the compiler and the Arduino core, about
+  290 MB) go to `build-firmware/platformio/` in the repository, git-ignored
+  like `build-pi/`, so they are fetched once. The firmware lands in
+  `build-firmware/motor/<platform>/firmware.hex`.
+- **The container runs at the host's own architecture.** The output is AVR
+  code either way, and PlatformIO's AVR compiler runs natively in an arm64
+  container (checked on an Apple Silicon Mac, 2026-10-25).
+- **The Arduino stays plugged into the Pi,** on the bench as on the robot,
+  so there is one way to flash and one way to talk to it. Docker Desktop on
+  macOS cannot reach USB devices anyway.
+- Considered and not chosen: PlatformIO installed on the host (a second kind
+  of host setup); `arduino-cli` (imposes the sketch layout); avr-gcc driven
+  from our CMake (much work for no gain).
 
 ### Layers
 
-- **`main.cpp`:** the serial port and the loop; nothing else.
+- **`main.cpp`:** the serial port, the clock, and what only the chip knows
+  (reset cause, free RAM, loop time). Nothing else.
 - **A thin driver over AFMotor,** Adafruit's Motor Shield Library v1
   (`AF_DCMotor`, `setSpeed(0..255)`, `run(FORWARD / BACKWARD / RELEASE)`).
   This is the swap point when a platform changes driver (§6).
-- **Arduino-free logic,** tested on the Mac: the protocol (shared, §5),
-  −1000..1000 to a duty and a direction, the per-index sign, the dead band,
-  the ramp and the watchdog. Stop and the watchdog both mean `run(RELEASE)`
+- **Arduino-free logic,** `MotorController` in `lib/`, tested by `ctest`:
+  what each command does, the watchdog and the Status schedule (step 2);
+  then −1000..1000 to a duty and a direction, the per-index sign, the dead
+  band and the ramp (step 3). Stop and the watchdog both mean `run(RELEASE)`
   on all four motors.
 
 The dead band and the ramp stay on the Arduino: the Pi sends the values it
@@ -99,13 +118,12 @@ library only", written into the standard ("Shared code for the AVR").
 
 | Step | Where | How |
 |---|---|---|
-| Build | Mac | `scripts/build_firmware.sh`, wrapping `pio run` |
-| Test | Mac | `pio test -e native`, and `ctest` for the shared protocol |
-| Flash at the bench | Mac | `pio run -t upload`, the Arduino on the Mac's USB |
-| Flash on the robot | through the Pi | `scripts/flash_firmware.sh <user>@<pi>`: copies the `.hex` and runs `avrdude` on the Pi |
+| Build | host, in a container | `scripts/build_firmware.sh` |
+| Test | host | `ctest --test-dir build-host` (`motor_protocol_test`, `motor_controller_test`) |
+| Flash | through the Pi | `scripts/flash_firmware.sh <user>@<pi>` |
+| Talk to it | the Pi | `scripts/deploy_cpp.sh <user>@<pi> motor_link <command>` |
 
-The Pi never builds anything; it only runs `avrdude`. Provisioning gains
-`avrdude` in its apt list.
+The Pi never builds anything; it only runs `avrdude` and `motor_link`.
 
 ## 4. Holonomic mixing, on the Pi
 
@@ -182,18 +200,21 @@ full-size robot, and changes with battery and load. A loop on the Pi,
 from the OTOS, makes 0.3 m/s mean 0.3 m/s on every platform, keeps the
 firmware identical across them, and keeps all the motion maths on the Pi.
 
-## 5. Repository layout (planned)
+## 5. Repository layout
 
 ```
-firmware/motor/              PlatformIO project
-  platformio.ini             board, platform version, libraries; envs: board + native
-  src/main.cpp               setup()/loop(): serial, nothing else
-  lib/                       motor logic, Arduino-free where possible
-  test/                      native tests, run on the Mac
-protocol/motor/include/      the wire format: header-only, pure, compiled by both sides (written)
-cpp/ ... heron_motor         the Pi side: port + link object, like heron_remote
-scripts/build_firmware.sh    wraps pio run
+protocol/motor/include/      the wire format: header-only, compiled by both sides
+firmware/motor/              the PlatformIO project
+  platformio.ini             pinned versions; one environment per platform
+  src/main.cpp               setup()/loop(): serial, clock, Boot and Status
+  lib/MotorController/       the logic, no Arduino code; also built by CMake
+cpp/include/heron/motor/     MotorPort: the Pi's serial port to the Arduino
+cpp/tools/MotorLink.cpp      motor_link: the bench tool
+cpp/tests/Motor*Test.cpp     ctest: the protocol and the controller
+docker/Dockerfile.firmware   the AVR toolchain
+scripts/build_firmware.sh    pio run, in the container
 scripts/flash_firmware.sh    copies the .hex to the Pi, runs avrdude there
+(step 4) heron_motor         the Pi's motor library, like heron_remote
 ```
 
 - **`protocol/motor/`** is written once and compiled by both sides: CMake

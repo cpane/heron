@@ -42,7 +42,7 @@ together.
 | LiDAR | reusable C++ library, a test program and a GUI backend, verified on recordings and live; paused 2026-10-04 ([`docs/RESUME-lidar.md`](docs/RESUME-lidar.md)) |
 | Remote control (FlySky iBUS) | reusable iBUS reader library and a diagnostic tool, verified live, including radio-loss detection; paused 2026-10-12 ([`docs/RESUME-remote.md`](docs/RESUME-remote.md)) |
 | Odometry (SparkFun OTOS) | reusable C++ library and diagnostic probes, verified live; paused 2026-10-18 ([`docs/RESUME-odometry.md`](docs/RESUME-odometry.md)) |
-| Motor controller (Arduino) | protocol code written and tested on the host, no firmware yet ([`docs/RESUME-motor.md`](docs/RESUME-motor.md)) |
+| Motor controller (Arduino) | protocol and link firmware written and tested on the host; bench checks next ([`docs/RESUME-motor.md`](docs/RESUME-motor.md)) |
 
 C++ in this repository follows [`CPP_CODING_STANDARD.md`](CPP_CODING_STANDARD.md).
 The code is MIT-licensed; see [`LICENSE`](LICENSE).
@@ -104,6 +104,14 @@ hardware, build natively and run the test suites:
 
     cmake --preset host && cmake --build --preset host
     ctest --test-dir build-host
+
+### Build and flash the Arduino firmware (see `docs/motor-design.md` §3)
+
+    scripts/build_firmware.sh                               # AVR, in a container
+    scripts/flash_firmware.sh <user>@<pi>                   # avrdude on the Pi
+
+The compiler lives in a container, as for the Pi, so this needs only
+Docker. The Arduino is plugged into the Pi, which writes the firmware to it.
 
 ### Retrieve captured data
 
