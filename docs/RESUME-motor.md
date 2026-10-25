@@ -30,6 +30,7 @@ checked on the Pi).
 | Board | Keyestudio Uno R3-compatible, ATmega328P |
 | Driver | L293D shield, through Adafruit's Motor Shield Library v1 (AFMotor) |
 | Encoders | None on the bench: open loop |
+| What 1.0 means | Full PWM duty, open loop, on every platform; speed control closed on the Pi from the OTOS, later (2026-10-25) |
 | Who writes it | Chris, both sides |
 | Where the mixing runs | On the Pi; the protocol carries four wheel values |
 | Motor order | 1 front-left, 2 front-right, 3 back-right, 4 back-left |
@@ -41,15 +42,12 @@ checked on the Pi).
 
 ## Still open
 
-1. **What 1.0 means on the robot** ([`motor-protocol.md`](motor-protocol.md)
-   §7). Suggested: full duty on the Arduino, with the loop closed on the Pi
-   from the OTOS's measured velocity.
-2. **Start byte, type codes and checksum,** to choose when the protocol
+1. **Start byte, type codes and checksum,** to choose when the protocol
    code is written.
-3. **AFMotor's licence,** to check and record before it is used.
-4. **The bench pin table** is from the Adafruit design, unverified on the
+2. **AFMotor's licence,** to check and record before it is used.
+3. **The bench pin table** is from the Adafruit design, unverified on the
    HW-130.
-5. **The full-size robot's motor driver**, not chosen.
+4. **The full-size robot's motor driver**, not chosen.
 
 ## Picking up: the first steps
 
@@ -57,7 +55,7 @@ As with the other workstreams, the link comes first: define it, then
 measure it on the hardware before building motor logic on top.
 
 1. **`protocol/motor/`:** the shared, header-only protocol, with its
-   `ctest` tests on the host. Settle open question 2 there.
+   `ctest` tests on the host. Settle open question 1 there.
 2. **`firmware/motor/`:** the PlatformIO project, with the protocol,
    watchdog and Status, but motors released. Check on the bench that the
    link and watchdog behave.

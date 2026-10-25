@@ -31,8 +31,13 @@ the motor driver reaches the wire.
   drives the robot forward. A motor that spins the wrong way is fixed by
   swapping its two wires or by a per-index sign in the firmware, **never on
   the wire**.
-- **Meaning of 1.0: open** (§7, question 1). On the bench it can only be
-  full PWM duty, since the bench motors have no encoders.
+- **1.0 means full PWM duty, open loop,** on all three platforms
+  (decided 2026-10-25). The firmware maps |value| to a duty above its dead
+  band (on the bench, for example, 70–255; the real band is measured per
+  platform) plus a direction. It never tries to hold a speed. Speed
+  control, when it comes, is closed on the Pi ([`motor-design.md`](motor-design.md)
+  §4): the fields stay the same, only what the Pi feeds into the mixing
+  changes.
 
 ## 2. Integers on the wire
 
@@ -53,8 +58,9 @@ Why integers rather than floats:
 - **Smaller:** 8 bytes for four motors instead of 16.
 - **Exact tests,** with no tolerances.
 
-If closed-loop control ever needs finer steps, the scale can grow to
-±32767 under a new protocol version (§3).
+If finer steps are ever needed, the scale can grow to ±32767 under a new
+protocol version (§3). Since speed control is closed on the Pi, not on the
+Arduino (§1), that is unlikely.
 
 ## 3. Frames
 
@@ -148,11 +154,6 @@ watchdog stops.
 
 ## 7. Open questions
 
-1. **What does 1.0 mean on the robot?** Full PWM duty (open loop), or a
-   fraction of a maximum wheel speed held by a control loop? Suggested:
-   keep 1.0 as full duty on the Arduino, and close the loop on the Pi,
-   comparing the commanded body velocity with the OTOS's measured velocity
-   before mixing. Then no wheel encoders are needed, and the same speed in
-   m/s means the same on every platform. The fields would not change, only
-   their meaning, which must be written down here.
-2. The start byte, type codes and checksum (§3).
+1. The start byte, type codes and checksum (§3).
+
+Answered: what 1.0 means (2026-10-25): full duty, open loop; §1.

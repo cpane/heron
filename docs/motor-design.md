@@ -159,6 +159,29 @@ m4 = vx + vy - wz;   // back-left
   without any error, the same failure the LiDAR's frame conversion guards
   against.
 
+### Speed control: open loop first, then closed on the Pi
+
+Decided 2026-10-25. On the wire and in the firmware, 1.0 is full PWM duty
+on every platform ([`motor-protocol.md`](motor-protocol.md) §1); the
+Arduino never holds a speed.
+
+- **Phase 1, remote driving, runs open loop:** stick × throttle gives a
+  body velocity as a fraction of full drive, which is mixed into wheel
+  values.
+- **Later, once the mini robot drives,** the loop is closed on the Pi:
+  the commanded body velocity (vx, vy in m/s, wz in rad/s, REP 103) is
+  compared with the OTOS's measured velocity, and the command is corrected
+  before the mixing. No wheel encoders are needed.
+- **The protocol does not change,** only the meaning of the Pi's inputs:
+  today a fraction of full drive, later a real velocity. Turning m/s into
+  wheel values uses the per-platform configuration (§6): wheel radius,
+  track, wheelbase and maximum speed.
+
+Why: the same 0.5 is a different speed on the bench, the mini and the
+full-size robot, and changes with battery and load. A loop on the Pi,
+from the OTOS, makes 0.3 m/s mean 0.3 m/s on every platform, keeps the
+firmware identical across them, and keeps all the motion maths on the Pi.
+
 ## 5. Repository layout (planned)
 
 ```
@@ -200,7 +223,7 @@ driver.
 
 | Setting | Why it differs | Side |
 |---|---|---|
-| Wheel radius, track and wheelbase | Needed to turn m/s and rad/s into wheel values once the loop is closed; the rotation term grows with size | Pi |
+| Wheel radius, track and wheelbase | Needed to turn m/s and rad/s into wheel values once the loop is closed (§4); the rotation term grows with size | Pi |
 | Maximum speed and acceleration | A 4-foot robot is heavier and slower to stop | Pi |
 | Stop and slow zones | Stopping distance grows with speed and mass | Pi |
 | LiDAR and OTOS mounting offsets | Different positions on each body | Pi |
