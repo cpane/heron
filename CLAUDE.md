@@ -4,7 +4,8 @@ Robot platform on a Raspberry Pi 3, in hardware bring-up. Each sensor or
 subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR, remote control and odometry workstreams
-each have a working C++ library and are paused.
+each have a working C++ library and are paused. The motor controller
+workstream is planned, with nothing built yet.
 
 ## Workstreams
 
@@ -104,6 +105,30 @@ Odometry-only facts:
 - No code from the SparkFun sources may be copied without the user's
   approval, even the MIT libraries; the schematic is CC BY-SA. The license
   table is in the reference, §9.
+
+### Motor controller — Arduino, 4 motors, over USB serial (planned)
+
+Read before doing motor work:
+
+- **`docs/RESUME-motor.md`** — what is decided, what is open, and the
+  first steps.
+- `docs/motor-protocol.md` — the Pi-to-Arduino wire format and the
+  watchdog. The contract between the two sides: change it only with a new
+  protocol version.
+- `docs/motor-design.md` — hardware, firmware layers and toolchain, the
+  holonomic mixing on the Pi, the three test platforms.
+
+Motor-only facts:
+
+- The Arduino is `/dev/arduino`, named by USB port 1-1.2 because its CP2102
+  is identical to the LiDAR's (`target/udev/`).
+- Motor order 1 front-left, 2 front-right, 3 back-right, 4 back-left;
+  positive drives the robot forward. A wrong-way motor is fixed in wiring
+  or firmware, never on the wire.
+- The bench shield's PWR jumper must be off, or the Pi's USB 5 V back-feeds
+  the motor supply.
+- Shared code for the AVR uses no C++ standard library: the board's
+  compiler has none.
 
 ## Development model
 
