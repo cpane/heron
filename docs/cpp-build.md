@@ -205,7 +205,7 @@ include path. The boundary is enforced by the build. Rationale in
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
 | `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
 | `motor_protocol_test`, `motor_controller_test` | `cpp/tests/` | the motor link protocol and frame parser, and the firmware's logic, run by `ctest` |
-| `motor_link` | `cpp/tools/` | the motor link's bench tool: commands to the Arduino, and the link checks in `RESUME-motor.md` |
+| `motor_link` | `cpp/tools/` | the motor link's bench tool: commands to the Arduino, the dead-band sweep, and the bench checks in `RESUME-motor.md` |
 | `heron_motor_protocol_nostd` | `protocol/motor/check/` | not a program: compiles the shared protocol with `-nostdinc++`, so a C++ standard header in it fails the build |
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
 | `lidar_info`, `lidar_record`, `lidar_adapter`, `lidar_nearest` | `cpp/probes/` | on-target programs |

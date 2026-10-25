@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Protocol and the step 2 firmware done, and checked on the bench; the driver layer (step 3) is next.
+Last updated 2026-10-25. Protocol and the step 2 firmware done and checked on the bench; the step 3 driver layer written, its bench checks next.
 
 ## Read this first when resuming
 
@@ -28,7 +28,7 @@ checked on the Pi).
 | Question | Answer |
 |---|---|
 | Board | Keyestudio Uno R3-compatible, ATmega328P |
-| Driver | L293D shield, through Adafruit's Motor Shield Library v1 (AFMotor) |
+| Driver | L293D shield, through our own driver, `L293DShield`; not AFMotor (2026-10-25; [`motor-design.md`](motor-design.md) §3 says why) |
 | Encoders | None on the bench: open loop |
 | What 1.0 means | Full PWM duty, open loop, on every platform; speed control closed on the Pi from the OTOS, later (2026-10-25) |
 | Who writes it | Chris, both sides |
@@ -44,10 +44,14 @@ checked on the Pi).
 
 ## Still open
 
-1. **AFMotor's licence,** to check and record before it is used.
-2. **The bench pin table** is from the Adafruit design, unverified on the
-   HW-130.
+1. **The bench pin table** is from the Adafruit design, unverified on the
+   HW-130: the step 3 checklist verifies it.
+2. **The bench's dead band, terminal map and signs:** measured by the
+   step 3 checklist, then written into `PlatformConfig.h`.
 3. **The full-size robot's motor driver**, not chosen.
+
+AFMotor's licence, once open here, was checked 2026-10-25: public domain.
+It is not used ([`motor-design.md`](motor-design.md) §3).
 
 ## Picking up: the first steps
 
@@ -61,8 +65,13 @@ measure it on the hardware before building motor logic on top.
    Boot and Status; no motor is driven. `MotorController` passes
    `motor_controller_test`; the firmware builds with avr-gcc (303 of 2048
    bytes of RAM, 3.5 KB of flash) and passed the bench checklist below.
-3. **The driver layer:** drive each motor alone, to verify the pin table,
-   the order and the sign (protocol §1). Bench rig PWR jumper off first.
+3. **The driver layer: written, bench checks next** (2026-10-25). Our own
+   driver for the shield (`L293DShield`), the ramp (4 units per ms) and
+   the dead band and sign mapping (`MotorOutput`, tested by
+   `motor_controller_test`), and `motor_link sweep`. Firmware 0.2.0: 339
+   bytes of RAM, 4.9 KB of flash. The step 3 checklist below verifies the
+   pin table, fills in `PlatformConfig.h`, and checks the ramp and
+   stopping with the motors turning.
 4. **`heron_motor`** on the Pi, then the stick mapping and mixing.
 
 ## Step 2 bench checklist
@@ -111,3 +120,19 @@ Open questions the checklist answers:
   bootloader hands the flags on some other way (later Optiboot versions
   pass them in a register) is **[unverified]**; until then, a brown-out
   shows only as an unexpected Boot.
+
+## Step 3 bench checklist
+
+**Wheels off the ground; the shield's PWR jumper off; the motor battery on
+EXT_PWR.** Build and flash 0.2.0 as for step 2, then, with
+`scripts/deploy_cpp.sh <user>@<pi> motor_link ...`:
+
+| # | Check | Command | Expect, and record |
+|---|---|---|---|
+| 1 | Nothing moves at start-up | flash, then `motor_link info` | No twitch during the 1.5 s reset or after; firmware 0.2.0 |
+| 2 | Which wheel each motor turns, and which way | `drive 600 0 0 0 --seconds 2`, then `0 600 0 0`, `0 0 600 0`, `0 0 0 600` | Record wheel and direction for each. Should be 1 front-left, 2 front-right, 3 back-right, 4 back-left, all forward |
+| 3 | Fix the map | edit `kMotorTerminal` and `kMotorSign` in `PlatformConfig.h`, rebuild, flash, repeat 2 | All four right |
+| 4 | Dead band | `sweep 1 --step 20`, and each other motor | The value where each starts to turn; the slowest one, as a duty, is `kMinDuty` |
+| 5 | Ramp | `drive 1000 1000 1000 1000 --seconds 2` | Status shows applied climbing over about 250 ms; no unexpected Boot (a jolt that reset the Uno) |
+| 6 | Stop and watchdog with motors turning | Ctrl-C during a drive; `watchdog 600 600 600 600` | Wheels coast to a stop at once, not on the ramp; wd counts 1 |
+| 7 | Loop time and free RAM | the Status and Boot above | Record them |
