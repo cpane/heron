@@ -1,7 +1,8 @@
 // File        : main.cpp
 // Author      : Chris Pane
 // Description : The motor firmware's Arduino half: serial port, clock,
-//               Boot and Status. The decisions are in MotorController.
+//               motor driver, Boot and Status. The decisions are in
+//               MotorController.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -14,16 +15,22 @@
 //
 //   Serial (USB, /dev/arduino on the Pi)
 //     -> FrameParser            bytes to checked frames
-//     -> MotorController        what each command means, the watchdog
+//     -> MotorController        what each command means, the watchdog, the ramp
+//     -> toMotorOutput()        applied value to duty and direction, with the
+//                               platform's sign and dead band
+//     -> L293DShield            the pins
+//   and back:
 //     -> Status and Boot        encoded with Protocol.h, written to Serial
 //
 // Anything here can only be tested on the bench, so this file does as little
-// as possible: read bytes, read the clock, write frames, and gather the few
-// facts only the chip knows (reset cause, free RAM, loop time).
+// as possible: read bytes, read the clock, hand the applied values to the
+// driver, write frames, and gather the few facts only the chip knows (reset
+// cause, free RAM, loop time). The numbers that differ between platforms are
+// in PlatformConfig.h.
 //
-// Step 2 of the motor workstream: the link without the motors. Nothing here
-// touches a motor pin, so a bug cannot turn a wheel. Step 3 adds the driver
-// and drives controller.getApplied(). docs/RESUME-motor.md.
+// Step 3 of the motor workstream: the motors are driven. With the shield's
+// PWR jumper off and the motor battery on EXT_PWR, a Drive turns wheels.
+// docs/RESUME-motor.md.
 //
 // Build and flash
 // ---------------
@@ -46,7 +53,10 @@
 #include <Arduino.h>
 #include <avr/io.h>
 
+#include "L293DShield.h"
 #include "MotorController.h"
+#include "MotorOutput.h"
+#include "PlatformConfig.h"
 #include "heron/motor/FrameParser.h"
 #include "heron/motor/Protocol.h"
 
@@ -68,7 +78,8 @@ using namespace Heron::Motor;
 constexpr uint32_t kBaud = 115200;
 
 FrameParser s_parser;
-MotorController s_controller;
+MotorController s_controller(RampConfig{kRampPerMs});
+L293DShield s_shield;
 uint8_t s_resetFlags = 0;
 uint16_t s_longestLoopMicros = 0;
 uint32_t s_lastLoopMicros = 0;
@@ -110,9 +121,22 @@ void sendStatus() {
   s_longestLoopMicros = 0;  // the field is "since the previous Status"
 }
 
+// The applied values, through the platform's terminal map, sign and dead
+// band, onto the shield. apply() writes only what changed.
+void driveMotors() {
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    s_shield.set(kMotorTerminal[i],
+                 toMotorOutput(s_controller.getApplied(i), kMotorSign[i], kMinDuty));
+  }
+  s_shield.apply();
+}
+
 }  // namespace
 
 void setup() {
+  // The motor pins first: until this runs they float (L293DShield.h).
+  s_shield.begin();
+
   // MCUSR holds why the chip last reset; clear it so the next reset reports
   // only its own cause. On the bench Uno this reads 0: its bootloader runs
   // first and clears it [ours, measured 2026-10-25]. Kept for a board
@@ -133,6 +157,7 @@ void loop() {
                   [now](const Frame &frame) { s_controller.onFrame(frame, now); });
   }
   s_controller.update(now);
+  driveMotors();
 
   if (s_controller.takeBootRequest()) {
     sendBoot();
