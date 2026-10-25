@@ -114,8 +114,9 @@ void sendStatus() {
 
 void setup() {
   // MCUSR holds why the chip last reset; clear it so the next reset reports
-  // only its own cause. The Uno's bootloader runs first and may already
-  // have cleared it, in which case this reads 0 [unverified on our board].
+  // only its own cause. On the bench Uno this reads 0: its bootloader runs
+  // first and clears it [ours, measured 2026-10-25]. Kept for a board
+  // whose bootloader leaves it alone.
   s_resetFlags = MCUSR & (kResetPowerOn | kResetExternal | kResetBrownOut | kResetWatchdog);
   MCUSR = 0;
 

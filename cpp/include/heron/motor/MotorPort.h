@@ -30,8 +30,9 @@
 // Opening a USB serial port raises its DTR line, and on an Uno DTR is wired
 // to the chip's reset, so the firmware restarts: the bootloader waits
 // briefly for a new program, then the firmware sends Boot. Frames sent in
-// that window are lost. A program should wait for Boot after opening, or
-// send InfoRequest until one arrives [community; to measure on our board].
+// that window are lost. On the bench Uno Boot arrives about 1.5 s after
+// opening [ours, measured 2026-10-25], so a program must wait for Boot
+// before driving.
 //
 // This is the Pi side only: it uses POSIX termios and poll, which the AVR
 // does not have. It builds on Linux and macOS, so the same tool runs at the

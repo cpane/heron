@@ -5,8 +5,8 @@ subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR, remote control and odometry workstreams
 each have a working C++ library and are paused. The motor controller
-workstream is active: its protocol and link firmware are written, and
-the firmware's bench checks are next.
+workstream is active: its protocol and link firmware are written and
+checked on the bench, and the driver layer is next.
 
 ## Workstreams
 

@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Protocol and the step 2 firmware written and tested on the host; the bench checks below are next.
+Last updated 2026-10-25. Protocol and the step 2 firmware done, and checked on the bench; the driver layer (step 3) is next.
 
 ## Read this first when resuming
 
@@ -57,12 +57,10 @@ measure it on the hardware before building motor logic on top.
 1. **`protocol/motor/`: done** (2026-10-25). The shared, header-only
    protocol and its frame parser, tested by `motor_protocol_test` on the
    host and built warning-free by Clang and GCC 14. Protocol §8.
-2. **`firmware/motor/`: built, not yet run on the board** (2026-10-25).
-   The protocol, watchdog, Boot and Status; no motor is driven.
-   `MotorController` passes `motor_controller_test`; the firmware builds
-   with avr-gcc (303 of 2048 bytes of RAM, 3.5 KB of flash), and
-   `motor_link` was checked against a simulated board. What remains is the
-   bench checklist below.
+2. **`firmware/motor/`: done** (2026-10-25). The protocol, watchdog,
+   Boot and Status; no motor is driven. `MotorController` passes
+   `motor_controller_test`; the firmware builds with avr-gcc (303 of 2048
+   bytes of RAM, 3.5 KB of flash) and passed the bench checklist below.
 3. **The driver layer:** drive each motor alone, to verify the pin table,
    the order and the sign (protocol §1). Bench rig PWR jumper off first.
 4. **`heron_motor`** on the Pi, then the stick mapping and mixing.
@@ -88,11 +86,28 @@ scripts/build_cpp.sh
 | 5 | Noise | `... motor_link noise` | PASS: errors counted, the link kept running |
 | 6 | Loop time and free RAM | the Status and Boot above | Record them |
 
+Results, 2026-10-25, on the bench Uno through the Pi **[ours]**: all six
+pass.
+
+| # | Measured |
+|---|---|
+| 1 | Boot 1519 and 1521 ms after opening (two runs); firmware 0.1.0, protocol 1, platform bench. InfoRequest answered within 4 ms |
+| 2 | `drive 500 -500 1000 -1000`: Status every 100 ms, target and applied as sent, crc, ver and disc 0 |
+| 3 | stopped, reason stop, wheels 0 |
+| 4 | Watchdog stop reported 303 ms after the last Drive; wd 1 |
+| 5 | PASS: crc +10, disc +200 for 10 injections; all 100 good Drives received |
+| 6 | Longest loop 572–620 µs (the loop that sends a Status); free RAM 1507 bytes |
+
 Open questions the checklist answers:
 
-- **Does opening the port reset the Uno?** A USB serial port raises DTR on
-  open, and an Uno resets on DTR, so the bootloader runs first and the
-  firmware's Boot follows. Check 1 measures the delay **[unverified]**.
-- **Does the reset cause survive the bootloader?** Optiboot may clear the
-  chip's reset flags before the firmware reads them, in which case Boot
-  reports none **[unverified]**.
+- **Does opening the port reset the Uno?** Yes **[ours]**: Boot's uptime
+  starts at 0, and Boot arrives about 1.5 s after opening, most of it the
+  bootloader waiting for a new program. A program must wait for Boot
+  before driving.
+- **Does the reset cause survive the bootloader?** No **[ours]**: Boot
+  reports no cause after the reset on opening, so the bootloader clears
+  the flags first. The reset-cause field is always 0 with this
+  bootloader, so a brown-out cannot be seen through it. Whether the
+  bootloader hands the flags on some other way (later Optiboot versions
+  pass them in a register) is **[unverified]**; until then, a brown-out
+  shows only as an unexpected Boot.
