@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Planned; nothing built.
+Last updated 2026-10-25. Protocol written and tested on the host; nothing on the hardware yet.
 
 ## Read this first when resuming
 
@@ -36,26 +36,26 @@ checked on the Pi).
 | Motor order | 1 front-left, 2 front-right, 3 back-right, 4 back-left |
 | Sign | Positive drives the robot forward; fixed in wiring or firmware, never on the wire |
 | Command rate | 50 Hz, always; watchdog 250 ms |
+| Framing | Start byte `0xC5`, type codes with the high bit for Arduino to Pi, CRC-16/CCITT-FALSE (2026-10-25; protocol §3) |
 | What comes back | Status at 10 Hz, Boot on start and on request |
 | Toolchain | PlatformIO Core on the Mac; flash through the Pi with `avrdude` |
 | Platforms | Bench, then a 3D-printed mini robot, then the full-size robot (about 4 ft) |
 
 ## Still open
 
-1. **Start byte, type codes and checksum,** to choose when the protocol
-   code is written.
-2. **AFMotor's licence,** to check and record before it is used.
-3. **The bench pin table** is from the Adafruit design, unverified on the
+1. **AFMotor's licence,** to check and record before it is used.
+2. **The bench pin table** is from the Adafruit design, unverified on the
    HW-130.
-4. **The full-size robot's motor driver**, not chosen.
+3. **The full-size robot's motor driver**, not chosen.
 
 ## Picking up: the first steps
 
 As with the other workstreams, the link comes first: define it, then
 measure it on the hardware before building motor logic on top.
 
-1. **`protocol/motor/`:** the shared, header-only protocol, with its
-   `ctest` tests on the host. Settle open question 1 there.
+1. **`protocol/motor/`: done** (2026-10-25). The shared, header-only
+   protocol and its frame parser, tested by `motor_protocol_test` on the
+   host and built warning-free by Clang and GCC 14. Protocol §8.
 2. **`firmware/motor/`:** the PlatformIO project, with the protocol,
    watchdog and Status, but motors released. Check on the bench that the
    link and watchdog behave.
@@ -63,5 +63,7 @@ measure it on the hardware before building motor logic on top.
    the order and the sign (protocol §1). Bench rig PWR jumper off first.
 4. **`heron_motor`** on the Pi, then the stick mapping and mixing.
 
-The coding standard needs its "no standard library on the AVR" exception
-written in when step 1 lands ([`motor-design.md`](motor-design.md) §3).
+Not yet checked, for step 2: opening `/dev/arduino` normally resets an
+Uno (DTR), and its bootloader listens briefly before the firmware starts.
+The Pi's first frames may be lost, which Boot and the Info request
+already allow for **[unverified]**.

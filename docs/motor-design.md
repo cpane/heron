@@ -93,7 +93,7 @@ AVR is the family of 8-bit chips on classic Arduino boards. Their compiler
 has no C++ standard library: no `std::array`, `std::span` or exceptions. The
 shared protocol code uses `<stdint.h>`, fixed-size buffers and plain
 structs. This is an exception to `CPP_CODING_STANDARD.md`'s "standard
-library only", to be written into the standard when the code lands.
+library only", written into the standard ("Shared code for the AVR").
 
 ### Building and flashing
 
@@ -190,7 +190,7 @@ firmware/motor/              PlatformIO project
   src/main.cpp               setup()/loop(): serial, nothing else
   lib/                       motor logic, Arduino-free where possible
   test/                      native tests, run on the Mac
-protocol/motor/              the wire format: header-only, pure, compiled by both sides
+protocol/motor/include/      the wire format: header-only, pure, compiled by both sides (written)
 cpp/ ... heron_motor         the Pi side: port + link object, like heron_remote
 scripts/build_firmware.sh    wraps pio run
 scripts/flash_firmware.sh    copies the .hex to the Pi, runs avrdude there
