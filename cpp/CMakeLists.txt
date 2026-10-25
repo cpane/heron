@@ -122,6 +122,22 @@ target_link_libraries(heron_odometry
     PUBLIC heron_otos_device
     PRIVATE Threads::Threads heron_warnings)
 
+# -- motor link: the shared protocol ------------------------------------------
+#
+# Header-only, in protocol/motor/ at the top of the repository, because the
+# Arduino firmware compiles the same headers. heron_motor_protocol is how the
+# Pi side takes them. The AVR compiler has no C++ standard library, so the
+# headers must not use it: heron_motor_protocol_nostd compiles them with
+# -nostdinc++, and fails the host build if one does. docs/motor-protocol.md.
+add_library(heron_motor_protocol INTERFACE)
+target_include_directories(heron_motor_protocol INTERFACE
+    "${PROJECT_SOURCE_DIR}/protocol/motor/include")
+
+add_library(heron_motor_protocol_nostd OBJECT
+    "${PROJECT_SOURCE_DIR}/protocol/motor/check/NoStdCheck.cpp")
+target_compile_options(heron_motor_protocol_nostd PRIVATE -nostdinc++)
+target_link_libraries(heron_motor_protocol_nostd PRIVATE heron_motor_protocol heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -155,6 +171,10 @@ add_executable(odometry_test tests/OdometryTest.cpp)
 target_include_directories(odometry_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(odometry_test PRIVATE heron_odometry Threads::Threads heron_warnings)
 add_test(NAME odometry_test COMMAND odometry_test)
+
+add_executable(motor_protocol_test tests/MotorProtocolTest.cpp)
+target_link_libraries(motor_protocol_test PRIVATE heron_motor_protocol heron_warnings)
+add_test(NAME motor_protocol_test COMMAND motor_protocol_test)
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
