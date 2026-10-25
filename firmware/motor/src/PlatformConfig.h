@@ -54,9 +54,10 @@ namespace Heron::Motor {
 inline constexpr uint16_t kRampPerMs = 4;
 // Not measured yet: 0 until motor_link sweep finds the dead band.
 inline constexpr uint8_t kMinDuty = 0;
-// Not checked yet: protocol motor n on terminal Mn, all the same way round,
-// until the bench drives each motor alone.
-inline constexpr uint8_t kMotorTerminal[kMotorCount] = {0, 1, 2, 3};
+// Checked on the bench 2026-10-25: front-left on M1, front-right on M2,
+// back-left on M3, back-right on M4, all turning forward for a positive
+// value. So protocol motors 3 (back-right) and 4 (back-left) are on M4 and M3.
+inline constexpr uint8_t kMotorTerminal[kMotorCount] = {0, 1, 3, 2};
 inline constexpr int8_t kMotorSign[kMotorCount] = {1, 1, 1, 1};
 
 #else
