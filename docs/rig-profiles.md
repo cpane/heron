@@ -1,9 +1,9 @@
-# Rig profiles — design (proposed)
+# Rig profiles — design
 
 How each physical Heron is described and calibrated, so the same code runs
-on every one of them. **Proposed, for review; nothing built** (2026-10-25).
-Decided so far: the calibration lives on the Pi and is sent to the Arduino
-at connect (option A below), and every Pi has its own name (PR #23).
+on every one of them. **Agreed 2026-10-25, nothing built yet.** The
+calibration lives on the Pi and is sent to the Arduino at connect (§4);
+every Pi has its own name (PR #23); the review points are settled (§9).
 
 ## 1. Platforms and rigs
 
@@ -75,7 +75,7 @@ supply = AA cells on EXT_PWR
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own
-  edge. Eight bytes on the wire; recommended.
+  edge, for eight bytes on the wire.
 
 ## 3. Which rig a Pi is
 
@@ -184,15 +184,13 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
    place.
 4. Then motor step 4, `heron_motor`, on top.
 
-## 9. Open for review
+## 9. Decisions from review (2026-10-25)
 
-1. **Per-motor, per-direction dead band** (§2), or keep one value?
-   Recommended: per motor and direction.
-2. **Strict files** (§2): unknown keys and sections are errors.
-   Recommended.
-3. **Configure only while stopped** (§4), or also while running?
-   Recommended: only while stopped; a calibration tool stops first.
-4. **Where this is tracked.** Profiles cross workstreams, so this document
-   and the profile format are shared, like `cpp-build.md`; the motor parts
-   (protocol v2, the firmware) are done as motor steps and recorded in
-   `RESUME-motor.md`.
+1. **Dead band per motor and direction:** eight values, not one (§2).
+2. **Strict files:** unknown keys and sections, missing keys and values
+   out of range are errors (§2).
+3. **Configure only while stopped** (§4): a calibration tool stops first.
+4. **Tracking:** profiles cross workstreams, so this document and the
+   profile format are shared, like `cpp-build.md`, and listed in
+   `CLAUDE.md`. The motor parts (protocol v2, the firmware) are motor steps,
+   recorded in `RESUME-motor.md`.
