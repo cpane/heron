@@ -159,6 +159,16 @@ add_library(heron_motor_port STATIC src/motor/MotorPort.cpp)
 target_include_directories(heron_motor_port PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(heron_motor_port PRIVATE heron_warnings)
 
+# What robot code links to drive: Motors -- the start-up handshake, a reader
+# thread publishing the newest Status, drive() for the control loop -- shaped
+# like heron_remote and heron_odometry. Links heron_profile publicly: its
+# configuration holds the rig profile's [motor] section.
+# docs/motor-cpp-design.md.
+add_library(heron_motor STATIC src/motor/Motors.cpp)
+target_link_libraries(heron_motor
+    PUBLIC heron_motor_port heron_motor_protocol heron_profile
+    PRIVATE Threads::Threads heron_warnings)
+
 # -- rig profiles ---------------------------------------------------------------
 #
 # Each physical rig's measured numbers, read from profiles/<rig>.conf and
@@ -210,6 +220,13 @@ add_test(NAME motor_protocol_test COMMAND motor_protocol_test)
 add_executable(motor_controller_test tests/MotorControllerTest.cpp)
 target_link_libraries(motor_controller_test PRIVATE heron_motor_controller heron_warnings)
 add_test(NAME motor_controller_test COMMAND motor_controller_test)
+
+# Motors against a fake Arduino on a pty, which runs the firmware's own
+# logic (heron_motor_controller) on the host.
+add_executable(motors_test tests/MotorsTest.cpp)
+target_link_libraries(motors_test
+    PRIVATE heron_motor heron_motor_controller Threads::Threads heron_warnings)
+add_test(NAME motors_test COMMAND motors_test)
 
 add_executable(rig_profile_test tests/RigProfileTest.cpp)
 target_link_libraries(rig_profile_test PRIVATE heron_profile heron_warnings)
@@ -276,6 +293,11 @@ target_link_libraries(lidar_nearest PRIVATE heron_lidar heron_warnings)
 add_executable(remote_adapter probes/RemoteAdapter.cpp)
 target_link_libraries(remote_adapter PRIVATE heron_remote heron_warnings)
 
+# Motors, live: what a 50 Hz robot loop sees, driving the board. Links only
+# heron_motor, like robot code. Loads this Pi's rig profile.
+add_executable(motor_adapter probes/MotorAdapter.cpp)
+target_link_libraries(motor_adapter PRIVATE heron_motor heron_warnings)
+
 # Odometry, live: what a 50 Hz robot loop sees. Links only heron_odometry and
 # includes only its public header, like robot code.
 add_executable(odometry_adapter probes/OdometryAdapter.cpp)
@@ -322,11 +344,12 @@ target_link_libraries(ibus_reader PRIVATE heron_ibus_port heron_warnings)
 
 # The motor link's bench tool: sends commands to the Arduino and runs the
 # link checks (docs/RESUME-motor.md). It configures the Arduino from the
-# rig's profile, hence heron_profile. Built for the host as well as the Pi,
+# rig's profile, converting it with heron_motor's toMotorConfig(), so the
+# tool and the library cannot convert differently. Built for the host as well as the Pi,
 # so an Uno can be checked from either.
 add_executable(motor_link tools/MotorLink.cpp)
 target_link_libraries(motor_link
-    PRIVATE heron_motor_port heron_motor_protocol heron_profile heron_warnings)
+    PRIVATE heron_motor heron_motor_port heron_motor_protocol heron_profile heron_warnings)
 
 # Checks profile files on the host, and shows a Pi's own profile there.
 add_executable(rig_profile tools/RigProfileTool.cpp)

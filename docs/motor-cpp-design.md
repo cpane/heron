@@ -1,7 +1,9 @@
 # Motors C++ — design and intended use
 
 How the Pi's motor library, `heron_motor`, is layered, and how the robot
-is meant to use it. **Agreed 2026-10-25, not built** (motor step 5). The
+is meant to use it. **Built 2026-10-25** on `feature/heron-motor` (motor
+step 5): `motors_test` passes on the host and the Pi, and `motor_adapter`
+ran it on the bench rig (`RESUME-motor.md`). The
 wire format it speaks is [`motor-protocol.md`](motor-protocol.md); the
 rig's numbers it sends come from its profile
 ([`rig-profiles.md`](rig-profiles.md)).
@@ -193,7 +195,7 @@ configured.
 
 | Test | Covers |
 |---|---|
-| `motors_test` (`ctest`) | `Motors` against a **fake Arduino on a pseudo-terminal**, as `remote_control_test` fakes the receiver. The fake runs the firmware's own `MotorController` and `FrameParser` on the host, so it refuses, configures and reports exactly as the board does. Cases: start-up and its checksum; no Boot; another protocol version; another platform; an invalid profile; `drive()` scaling, clamping and NaN to Stop; `drive()` before `start()`; stale when the fake goes quiet; a reset mid-run, configured again; a lost Configure, sent again; `stop()` sends Stop |
+| `motors_test` (`ctest`) | `Motors` against a **fake Arduino on a pseudo-terminal**, as `remote_control_test` fakes the receiver. The fake's loop must not sleep holding its lock: `std::mutex` is not fair, and on the Pi that starved the test's own calls for seconds (found 2026-10-25). The fake runs the firmware's own `MotorController` and `FrameParser` on the host, so it refuses, configures and reports exactly as the board does. Cases: start-up and its checksum; no Boot; another protocol version; another platform; an invalid profile; `drive()` scaling, clamping and NaN to Stop; `drive()` before `start()`; stale when the fake goes quiet; a reset mid-run, configured again; a lost Configure, sent again; `stop()` sends Stop |
 | `motor_adapter` (probe) | `Motors` on the real board: the snapshot and health once a second, and optionally four wheel values driven at 50 Hz |
 
 The conversion `toMotorConfig()` gets its own checks in the same test.

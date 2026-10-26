@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Next: `heron_motor` (step 5), designed in `motor-cpp-design.md`.
+Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Step 5, `heron_motor`, built and checked on the bench rig. Next: the stick mapping and holonomic mixing on the Pi, so the remote drives the wheels.
 
 ## Read this first when resuming
 
@@ -85,8 +85,15 @@ measure it on the hardware before building motor logic on top.
    (2026-10-25): [`rig-calibration.md`](rig-calibration.md), the bench's
    calibration as steps for the next rig. Open: measuring the dead band
    under load, settled when the mini robot is calibrated.
-5. **`heron_motor`: designed, not built** (2026-10-25):
-   [`motor-cpp-design.md`](motor-cpp-design.md). `Motors`: `start()` blocks
+5. **`heron_motor`: built** (2026-10-25):
+   [`motor-cpp-design.md`](motor-cpp-design.md). `motors_test` (45 checks,
+   against a fake board running the firmware's logic) passes on the host
+   and the Pi. On the bench rig **[ours]**: `motor_adapter` started it in
+   1627 and 1633 ms; driving all four at 0.3 for 15 s with the shield's
+   reset pressed mid-run, the snapshot went not OK (stale, age 384 ms),
+   the reset was counted, the library configured the board again, and the
+   wheels ran on: 47 of 750 polls not OK, about 0.94 s from the press to
+   configured, nearly all of it the bootloader. `Motors`: `start()` blocks
    until the Arduino is configured; the robot's loop calls `drive()` every
    20 ms (no heartbeat thread); a reader thread publishes Status and
    configures again after a reset. Then the stick mapping and mixing.
