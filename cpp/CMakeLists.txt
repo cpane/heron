@@ -138,12 +138,13 @@ add_library(heron_motor_protocol_nostd OBJECT
 target_compile_options(heron_motor_protocol_nostd PRIVATE -nostdinc++)
 target_link_libraries(heron_motor_protocol_nostd PRIVATE heron_motor_protocol heron_warnings)
 
-# The firmware's logic: MotorController, in firmware/motor/lib/ because
+# The firmware's logic: MotorController and MotorOutput, in firmware/motor/lib/ because
 # PlatformIO compiles it into the Arduino firmware. CMake compiles the same
 # file for the host, so the tests run with ctest like everything else. It is
 # shared AVR code too, so it is built with -nostdinc++ here as well.
 add_library(heron_motor_controller STATIC
-    "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src/MotorController.cpp")
+    "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src/MotorController.cpp"
+    "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src/MotorOutput.cpp")
 target_include_directories(heron_motor_controller PUBLIC
     "${PROJECT_SOURCE_DIR}/firmware/motor/lib/MotorController/src")
 target_compile_options(heron_motor_controller PRIVATE -nostdinc++)

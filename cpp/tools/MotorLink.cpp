@@ -1,7 +1,7 @@
 // File        : MotorLink.cpp
 // Author      : Chris Pane
 // Description : Bench tool for the Arduino motor link: sends commands, prints
-//               what the firmware reports, and runs the step 2 link checks.
+//               what the firmware reports, and runs the bench checks.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -16,6 +16,7 @@
 //
 //     scripts/deploy_cpp.sh <user>@<pi> motor_link info
 //     scripts/deploy_cpp.sh <user>@<pi> motor_link drive 100 0 0 0 --seconds 2
+//     scripts/deploy_cpp.sh <user>@<pi> motor_link sweep 1 --step 20
 //     build-host/bin/motor_link watch --device /dev/cu.usbserial-0001   (an Uno on a Mac)
 //
 // Commands, each one of the bench checks in docs/RESUME-motor.md:
@@ -24,9 +25,13 @@
 //              resets the Uno), then again on an InfoRequest
 //   watch      print every Status and Boot; sends nothing
 //   drive      send Drive at 50 Hz for --seconds, printing Status, then Stop
-//   watchdog   Drive for 1 s, then go silent: when does the firmware stop?
+//   watchdog   Drive for 1 s (at 0, or the wheels given), then go silent:
+//              when does the firmware stop?
 //   noise      Drive while injecting junk and corrupted frames: do the
 //              counters see them, and does the link carry on?
+//   sweep      one motor, stepped from low to full, forward then backward,
+//              holding each value: where does it start to turn? That is
+//              the platform's dead band (firmware/motor/src/PlatformConfig.h)
 //
 // Every command except watch first waits for the Boot that opening the port
 // causes, so its first frames are not lost while the Uno restarts.
@@ -38,8 +43,9 @@
 // three together with a clock, and each command is a function that sends on
 // a schedule and prints what Link receives.
 //
-// A bench tool, so it prints. In step 2 the firmware drives no motors, so
-// drive is safe with any values; from step 3 the wheels turn.
+// A bench tool, so it prints. From step 3 the firmware drives the motors:
+// drive and sweep turn wheels, so the robot must be on the bench, wheels
+// off the ground. Ctrl-C sends Stop.
 
 #include <chrono>
 #include <csignal>
@@ -80,6 +86,8 @@ struct Options {
   double seconds{3.0};
   bool secondsGiven{false};
   std::int16_t wheels[kMotorCount]{};
+  std::size_t sweepMotor{0};      // 1..4; 0 until given
+  std::int16_t sweepStep{50};
 };
 
 [[noreturn]] void usage(int status) {
@@ -92,12 +100,16 @@ struct Options {
                "  drive M1 M2 M3 M4    Drive at 50 Hz for --seconds (default 3), then Stop.\n"
                "                       Wheels -1000..1000: front-left, front-right,\n"
                "                       back-right, back-left; positive drives forward\n"
-               "  watchdog             Drive 1 s, then stop sending: when does it stop?\n"
+               "  watchdog [M1..M4]    Drive 1 s (default all 0), then stop sending:\n"
+               "                       when does it stop?\n"
                "  noise                Drive while injecting junk and corrupted frames\n"
+               "  sweep MOTOR          one motor (1..4) from --step to 1000, then backward,\n"
+               "                       holding each value --seconds (default 1)\n"
                "\n"
                "Options:\n"
                "  --device PATH        serial device (default /dev/arduino)\n"
-               "  --seconds S          how long drive and watch run\n"
+               "  --seconds S          how long drive and watch run; sweep: per value\n"
+               "  --step N             sweep: the value step, 1..1000 (default 50)\n"
                "  -h, --help           this text\n");
   std::exit(status);
 }
@@ -123,7 +135,7 @@ Options parse(int argc, char **argv) {
     const std::string arg = argv[i];
     if (arg == "-h" || arg == "--help") {
       usage(0);
-    } else if (arg == "--device" || arg == "--seconds") {
+    } else if (arg == "--device" || arg == "--seconds" || arg == "--step") {
       if (i + 1 >= argc) {
         std::fprintf(stderr, "ERROR: %s needs a value\n", arg.c_str());
         usage(2);
@@ -131,6 +143,12 @@ Options parse(int argc, char **argv) {
       const std::string value = argv[++i];
       if (arg == "--device") {
         options.port.device = value;
+      } else if (arg == "--step") {
+        options.sweepStep = toWheel(value);
+        if (options.sweepStep < 1) {
+          std::fprintf(stderr, "ERROR: --step must be 1..1000\n");
+          usage(2);
+        }
       } else {
         try {
           options.seconds = std::stod(value);
@@ -145,8 +163,16 @@ Options parse(int argc, char **argv) {
       }
     } else if (options.command.empty() && !arg.empty() && arg[0] != '-') {
       options.command = arg;
-    } else if (options.command == "drive" && wheelsGiven < kMotorCount) {
+    } else if ((options.command == "drive" || options.command == "watchdog") &&
+               wheelsGiven < kMotorCount) {
       options.wheels[wheelsGiven++] = toWheel(arg);  // negative values start with '-'
+    } else if (options.command == "sweep" && options.sweepMotor == 0) {
+      const std::int16_t motor = toWheel(arg);
+      if (motor < 1 || motor > static_cast<std::int16_t>(kMotorCount)) {
+        std::fprintf(stderr, "ERROR: sweep needs a motor 1..4, got '%s'\n", arg.c_str());
+        usage(2);
+      }
+      options.sweepMotor = static_cast<std::size_t>(motor);
     } else {
       std::fprintf(stderr, "ERROR: unexpected argument '%s'\n", arg.c_str());
       usage(2);
@@ -155,9 +181,17 @@ Options parse(int argc, char **argv) {
   if (options.command.empty()) {
     usage(2);
   }
-  if (options.command == "drive" && wheelsGiven != kMotorCount) {
-    std::fprintf(stderr, "ERROR: drive needs four wheel values\n");
+  if ((options.command == "drive" && wheelsGiven != kMotorCount) ||
+      (options.command == "watchdog" && wheelsGiven != 0 && wheelsGiven != kMotorCount)) {
+    std::fprintf(stderr, "ERROR: %s needs four wheel values\n", options.command.c_str());
     usage(2);
+  }
+  if (options.command == "sweep" && options.sweepMotor == 0) {
+    std::fprintf(stderr, "ERROR: sweep needs a motor, 1..4\n");
+    usage(2);
+  }
+  if (options.command == "sweep" && !options.secondsGiven) {
+    options.seconds = 1.0;
   }
   return options;
 }
@@ -406,11 +440,11 @@ int runDrive(Link &link, const Options &options) {
   return 0;
 }
 
-int runWatchdog(Link &link) {
+int runWatchdog(Link &link, const Options &options) {
   waitForStartup(link);
-  const std::int16_t zero[kMotorCount] = {0, 0, 0, 0};
-  std::printf("Drive 0 0 0 0 for 1 s...\n");
-  driveFor(link, zero, std::chrono::seconds(1), false, [] {});
+  std::printf("Drive %d %d %d %d for 1 s...\n", options.wheels[0], options.wheels[1],
+              options.wheels[2], options.wheels[3]);
+  driveFor(link, options.wheels, std::chrono::seconds(1), false, [] {});
   const std::int64_t lastDriveMs = link.sinceOpen();
   std::printf("Silent from %lld ms. The firmware should stop about 250 ms later; Status\n"
               "comes every 100 ms, so it shows within 100 ms after that.\n",
@@ -486,6 +520,42 @@ int runNoise(Link &link) {
   return ok ? 0 : 1;
 }
 
+int runSweep(Link &link, const Options &options) {
+  waitForStartup(link);
+  const std::size_t index = options.sweepMotor - 1;
+  const auto hold = std::chrono::duration_cast<Clock::duration>(
+      std::chrono::duration<double>(options.seconds));
+  std::printf("Motor %zu from %d to 1000, then backward, %.1f s per value. Note the value\n"
+              "where the wheel starts to turn. While the firmware's dead band is off\n"
+              "(kMinDuty 0), the duty is about value x 255 / 1000. Ctrl-C to end.\n\n",
+              options.sweepMotor, options.sweepStep, options.seconds);
+  for (const int direction : {1, -1}) {
+    for (int value = options.sweepStep; value <= kWheelMax && s_stopRequested == 0;
+         value += options.sweepStep) {
+      std::int16_t wheels[kMotorCount] = {0, 0, 0, 0};
+      wheels[index] = static_cast<std::int16_t>(direction * value);
+      driveFor(link, wheels, hold, true, [] {});
+      const auto &s = link.lastStatus();
+      std::printf("  value %5d  duty about %3d  applied %5d  %s\n", wheels[index],
+                  (value * 255 + 500) / 1000, s ? s->applied[index] : 0,
+                  s ? toText(s->state) : "no Status");
+    }
+    if (s_stopRequested != 0) {
+      break;
+    }
+    // Stop between the two directions, so the reversal is not part of it.
+    std::printf("\n");
+    link.sendStop();
+    const auto until = Clock::now() + milliseconds(500);
+    while (Clock::now() < until) {
+      link.pump(milliseconds(20), true);
+    }
+  }
+  std::printf("Stop.\n");
+  stopAndReport(link);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -503,9 +573,11 @@ int main(int argc, char **argv) {
     } else if (options.command == "drive") {
       result = runDrive(link, options);
     } else if (options.command == "watchdog") {
-      result = runWatchdog(link);
+      result = runWatchdog(link, options);
     } else if (options.command == "noise") {
       result = runNoise(link);
+    } else if (options.command == "sweep") {
+      result = runSweep(link, options);
     } else {
       std::fprintf(stderr, "ERROR: unknown command '%s'\n", options.command.c_str());
       usage(2);

@@ -2,8 +2,9 @@
 
 How Heron's motor control is to be organised, built and tested: the
 Arduino firmware, the Pi side, the holonomic mixing and the test
-platforms. **Agreed plan, nothing built yet** (2026-10-25). The wire format
-is in [`motor-protocol.md`](motor-protocol.md).
+platforms. Steps 1 to 3 (protocol, link firmware, driver layer) are
+built and checked on the bench (2026-10-25). The wire format is in
+[`motor-protocol.md`](motor-protocol.md).
 
 ## 1. The pieces
 
@@ -24,15 +25,17 @@ is in [`motor-protocol.md`](motor-protocol.md).
 
 ### Pins the shield takes
 
-From the Adafruit v1 design the HW-130 copies; **[unverified]** on this
-board until the firmware drives each motor in turn.
+From the Adafruit v1 design the HW-130 copies, as its library (AFMotor)
+wires it; **checked on the bench** 2026-10-25: each terminal drives its
+own motor, the right way. The full table, with the shift register's bits, is in
+`firmware/motor/src/L293DShield.h`.
 
 | Uno pins | Used for | Note |
 |---|---|---|
 | 0, 1 | USB serial to the Pi | The only hardware UART |
-| 11, 3 | PWM, shield motors M1, M2 | Timer 2; AFMotor sets the frequency per motor |
-| 6, 5 | PWM, shield motors M3, M4 | Timer 0, about 980 Hz. Timer 0 also runs `millis()`; AFMotor is expected to leave its prescaler alone, so the watchdog's timing holds **[unverified]** |
-| 4, 7, 8, 12 | Directions, through the 74HC595 | Clock, enable, data, latch |
+| 11, 3 | PWM, shield motors M1, M2 | Timer 2, about 490 Hz (the Arduino core's setting, through `analogWrite()`) |
+| 6, 5 | PWM, shield motors M3, M4 | Timer 0, about 980 Hz. Timer 0 also runs `millis()`; `analogWrite()` leaves its prescaler alone, so the watchdog's timing holds |
+| 4, 7, 8, 12 | Directions, through the 74HC595 | Clock, output enable (active low), data, latch |
 | 9, 10 | Servo headers | Free if no servos are used |
 | A0 | Motor battery voltage | A resistor divider from EXT_PWR, scaled so full battery voltage stays under 5 V |
 | 2, 13, A1–A5 | Free | Pin 2 is the one interrupt pin left |
@@ -46,8 +49,9 @@ board until the firmware drives each motor in turn.
   ([`rplidar-a1m8-findings.md`](rplidar-a1m8-findings.md), power). Jumper
   off: the Pi powers only the Uno, and the motors run from their battery
   on EXT_PWR.
-- **Speed:** 8-bit PWM, so −1000..1000 maps to a duty of 0..255 plus a
-  direction.
+- **Speed:** 8-bit PWM, so −1000..1000 maps to a duty plus a direction:
+  1..1000 to the dead band's minimum..255, and 0 to released
+  (`MotorOutput.h`).
 - **The L293D's limits:** roughly 0.6 A per motor continuous and a drop of
   1.5–2 V **[community: datasheet figures, unverified here]**. The bench
   motors' stall current should stay under that.
@@ -87,24 +91,36 @@ Docker.
 
 - **`main.cpp`:** the serial port, the clock, and what only the chip knows
   (reset cause, free RAM, loop time). Nothing else.
-- **A thin driver over AFMotor,** Adafruit's Motor Shield Library v1
-  (`AF_DCMotor`, `setSpeed(0..255)`, `run(FORWARD / BACKWARD / RELEASE)`).
-  This is the swap point when a platform changes driver (§6).
-- **Arduino-free logic,** `MotorController` in `lib/`, tested by `ctest`:
-  what each command does, the watchdog and the Status schedule (step 2);
-  then −1000..1000 to a duty and a direction, the per-index sign, the dead
-  band and the ramp (step 3). Stop and the watchdog both mean `run(RELEASE)`
-  on all four motors.
+- **Our own driver, `L293DShield`** in `src/`: `begin()`, `set(terminal,
+  duty and direction)`, `apply()`. The only code that knows the shield's
+  wiring, and the swap point when a platform changes driver (§6): another
+  driver is another class with the same three calls.
+- **Platform settings, `PlatformConfig.h`** in `src/`: the ramp rate, the
+  dead band, and each protocol motor's shield terminal and sign, one block
+  per `HERON_PLATFORM`.
+- **Arduino-free logic** in `lib/`, tested by `ctest`: `MotorController`
+  (what each command does, the watchdog, the Status schedule, the ramp)
+  and `MotorOutput` (a value to a duty and a direction, with the sign and
+  the dead band). Stop and the watchdog release all four motors at once,
+  without the ramp.
 
 The dead band and the ramp stay on the Arduino: the Pi sends the values it
 wants, and the firmware skips the duty range where a motor only hums and
 limits how fast each motor changes, which protects the L293D.
 
-AFMotor is pinned in `platformio.ini`. **Its licence must be checked and
-recorded before use**, in a licence table like the remote's
-([`remote-ibus-protocol.md`](remote-ibus-protocol.md) §8). The Arduino core
-is LGPL: linking it into the firmware is fine, and creates obligations only
-if firmware binaries are distributed.
+**Why our own driver, not AFMotor** (decided 2026-10-25). AFMotor,
+Adafruit's library for the v1 shield, was the first plan. Checked
+2026-10-25: its files say "this code is public domain", so its licence is
+no obstacle, but the repository is archived and its README calls it
+deprecated, with the hardware discontinued. It knows only this shield, so
+it would not carry to the full-size robot's driver; the growth happens
+behind our own driver interface either way. Our driver is about 100 lines,
+keeps the timers under our control, and the wiring it needs is checked on
+the bench regardless. AFMotor does leave Timer 0's prescaler alone (the
+line that would change it is commented out), so that was not the reason.
+
+The Arduino core is LGPL: linking it into the firmware is fine, and
+creates obligations only if firmware binaries are distributed.
 
 ### No C++ standard library in shared code
 
@@ -207,7 +223,10 @@ protocol/motor/include/      the wire format: header-only, compiled by both side
 firmware/motor/              the PlatformIO project
   platformio.ini             pinned versions; one environment per platform
   src/main.cpp               setup()/loop(): serial, clock, Boot and Status
-  lib/MotorController/       the logic, no Arduino code; also built by CMake
+  src/L293DShield.*          the bench shield's driver
+  src/PlatformConfig.h       ramp, dead band, terminal and sign per platform
+  lib/MotorController/       the logic, no Arduino code; also built by CMake:
+                             MotorController, MotorOutput
 cpp/include/heron/motor/     MotorPort: the Pi's serial port to the Arduino
 cpp/tools/MotorLink.cpp      motor_link: the bench tool
 cpp/tests/Motor*Test.cpp     ctest: the protocol and the controller
