@@ -179,7 +179,7 @@ Settled when it was built (2026-10-25):
 
 | Control | Channel | Gives |
 |---|---|---|
-| Right stick up and down | CH2 | vx = +stick (up is forward) |
+| Right stick up and down | CH2 | vx: up is forward. Up reads **low** on our transmitter (measured 2026-10-25, `heron_teleop`), so vx = −stick (`StickConfig::forwardReadsLow`) |
 | Right stick left and right | CH1 | vy = −stick (stick right is positive; REP 103 y is left) |
 | Left stick left and right | CH4 | wz = −stick (stick right turns clockwise; REP 103 positive is anticlockwise) |
 | Left stick up and down | CH3 | Speed limit, 0 to 1; the stick does not spring back |

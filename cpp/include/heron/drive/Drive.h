@@ -27,9 +27,14 @@
 //   robot can do all three at once: drive, strafe and turn.
 //
 //   The sticks (FS-i6X, mode 2; docs/remote-ibus-protocol.md §4):
-//     right stick up-down      CH2   vx = +stick (up is forward)
-//     right stick left-right   CH1   vy = -stick (right is +, y is left)
-//     left stick left-right    CH4   wz = -stick (right turns clockwise)
+//     right stick up-down      CH2   vx: up is forward. Up reads LOW on our
+//                                    transmitter (measured 2026-10-25), so
+//                                    this axis is reversed: vx = -stick
+//     right stick left-right   CH1   vy = -stick (right reads high; y is left)
+//     left stick left-right    CH4   wz = -stick (right reads high, and turns
+//                                    clockwise)
+//   Which end of a stick reads high is the transmitter's setting, so each
+//   axis has a reverse flag in StickConfig, set from what was measured.
 //     left stick up-down       CH3   throttle, 0..1: a speed limit that
 //                                    scales all three. It does not spring back
 //   A dead zone around each stick's centre (30 counts, 3% of its travel)
@@ -99,6 +104,14 @@ struct StickConfig {
   std::size_t sideChannel{0};      // CH1, right stick left-right
   std::size_t turnChannel{3};      // CH4, left stick left-right
   std::size_t throttleChannel{2};  // CH3, left stick up-down
+  /** Whether pushing a stick toward forward, left or anticlockwise reads
+   *  LOW on its channel. Measured on our FS-i6X 2026-10-25 with
+   *  heron_teleop: right stick up reads low on CH2; right stick left and
+   *  left stick left read low on CH1 and CH4, as the sign flips below
+   *  already expect for those two. */
+  bool forwardReadsLow{true};
+  bool leftReadsLow{true};
+  bool anticlockwiseReadsLow{true};
   /** The three self-centring sticks: 1000..2000 about 1500, 30 counts of
    *  dead zone, 3% of the travel. */
   Heron::Remote::AxisConfig axis{1000, 1500, 2000, 30};

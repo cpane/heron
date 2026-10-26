@@ -63,10 +63,16 @@ int main() {
   std::printf("Sticks to body velocity\n");
 
   {
-    const BodyVelocity v = sticksToVelocity(frame(1500, 2000, kFullThrottle, 1500), sticks);
-    check("right stick up: forward", near(v.vx, 1.0) && near(v.vy, 0.0) && near(v.wz, 0.0));
-    const BodyVelocity b = sticksToVelocity(frame(1500, 1000, kFullThrottle, 1500), sticks);
-    check("right stick down: backward", near(b.vx, -1.0));
+    // Our transmitter: right stick up reads low on CH2 (measured).
+    const BodyVelocity v = sticksToVelocity(frame(1500, 1000, kFullThrottle, 1500), sticks);
+    check("right stick up (CH2 low): forward", near(v.vx, 1.0) && near(v.vy, 0.0) &&
+                                                   near(v.wz, 0.0));
+    const BodyVelocity b = sticksToVelocity(frame(1500, 2000, kFullThrottle, 1500), sticks);
+    check("right stick down (CH2 high): backward", near(b.vx, -1.0));
+    StickConfig other = sticks;
+    other.forwardReadsLow = false;
+    check("a transmitter whose up reads high: forwardReadsLow false",
+          near(sticksToVelocity(frame(1500, 2000, kFullThrottle, 1500), other).vx, 1.0));
   }
 
   {
@@ -84,9 +90,9 @@ int main() {
   }
 
   {
-    const BodyVelocity half = sticksToVelocity(frame(1500, 2000, 1500, 1500), sticks);
+    const BodyVelocity half = sticksToVelocity(frame(1500, 1000, 1500, 1500), sticks);
     check("throttle half way: half the speed", near(half.vx, 0.5));
-    const BodyVelocity none = sticksToVelocity(frame(1000, 2000, 1000, 2000), sticks);
+    const BodyVelocity none = sticksToVelocity(frame(1000, 1000, 1000, 2000), sticks);
     check("throttle at the bottom: no movement at all",
           near(none.vx, 0.0) && near(none.vy, 0.0) && near(none.wz, 0.0));
     check("throttle read 0..1", near(readThrottle(frame(1500, 1500, 1000, 1500), sticks), 0.0) &&
@@ -97,7 +103,7 @@ int main() {
     const BodyVelocity rest = sticksToVelocity(frame(1525, 1475, kFullThrottle, 1530), sticks);
     check("within 30 counts of centre: nothing (the dead zone)",
           near(rest.vx, 0.0) && near(rest.vy, 0.0) && near(rest.wz, 0.0));
-    const BodyVelocity edge = sticksToVelocity(frame(1500, 1531, kFullThrottle, 1500), sticks);
+    const BodyVelocity edge = sticksToVelocity(frame(1500, 1469, kFullThrottle, 1500), sticks);
     check("just past the dead zone: a small value, no jump",
           edge.vx > 0.0 && edge.vx < 0.01);
   }

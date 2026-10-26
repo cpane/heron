@@ -44,11 +44,14 @@ double readThrottle(const Heron::Remote::IBusFrame &frame, const StickConfig &co
 BodyVelocity sticksToVelocity(const Heron::Remote::IBusFrame &frame, const StickConfig &config) {
   const double throttle = readThrottle(frame, config);
   BodyVelocity v;
-  // Stick right reads +, but REP 103's y is left and its positive turn is
-  // anticlockwise: both are negated (header, "The sticks").
-  v.vx = throttle * axis(frame, config.forwardChannel, config.axis);
-  v.vy = -throttle * axis(frame, config.sideChannel, config.axis);
-  v.wz = -throttle * config.turnGain * axis(frame, config.turnChannel, config.axis);
+  // A stick pushed toward forward, left or anticlockwise reads low or high
+  // depending on the transmitter; the config says which, per axis (header,
+  // "The sticks").
+  const auto toward = [](bool readsLow) { return readsLow ? -1.0 : 1.0; };
+  v.vx = toward(config.forwardReadsLow) * throttle * axis(frame, config.forwardChannel, config.axis);
+  v.vy = toward(config.leftReadsLow) * throttle * axis(frame, config.sideChannel, config.axis);
+  v.wz = toward(config.anticlockwiseReadsLow) * throttle * config.turnGain *
+         axis(frame, config.turnChannel, config.axis);
   return v;
 }
 
