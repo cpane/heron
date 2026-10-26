@@ -159,6 +159,16 @@ add_library(heron_motor_port STATIC src/motor/MotorPort.cpp)
 target_include_directories(heron_motor_port PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(heron_motor_port PRIVATE heron_warnings)
 
+# -- rig profiles ---------------------------------------------------------------
+#
+# Each physical rig's measured numbers, read from profiles/<rig>.conf and
+# checked, and which rig a Pi is (~/heron/rig). Shared by every workstream
+# that needs per-rig values; the motor section is the first. Pure apart from
+# reading files. docs/rig-profiles.md.
+add_library(heron_profile STATIC src/profile/RigProfile.cpp)
+target_include_directories(heron_profile PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_profile PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -200,6 +210,16 @@ add_test(NAME motor_protocol_test COMMAND motor_protocol_test)
 add_executable(motor_controller_test tests/MotorControllerTest.cpp)
 target_link_libraries(motor_controller_test PRIVATE heron_motor_controller heron_warnings)
 add_test(NAME motor_controller_test COMMAND motor_controller_test)
+
+add_executable(rig_profile_test tests/RigProfileTest.cpp)
+target_link_libraries(rig_profile_test PRIVATE heron_profile heron_warnings)
+add_test(NAME rig_profile_test COMMAND rig_profile_test)
+
+# Every profile in the repository must load, so a broken edit fails the tests
+# rather than a robot's start-up. CONFIGURE_DEPENDS: a new profile is picked
+# up without re-running CMake by hand.
+file(GLOB HERON_PROFILES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/profiles/*.conf")
+add_test(NAME rig_profiles_check COMMAND rig_profile check ${HERON_PROFILES})
 
 add_executable(scan_test tests/ScanTest.cpp)
 target_link_libraries(scan_test PRIVATE heron_lidar_types heron_warnings)
@@ -305,3 +325,7 @@ target_link_libraries(ibus_reader PRIVATE heron_ibus_port heron_warnings)
 # so an Uno can be checked from either.
 add_executable(motor_link tools/MotorLink.cpp)
 target_link_libraries(motor_link PRIVATE heron_motor_port heron_motor_protocol heron_warnings)
+
+# Checks profile files on the host, and shows a Pi's own profile there.
+add_executable(rig_profile tools/RigProfileTool.cpp)
+target_link_libraries(rig_profile PRIVATE heron_profile heron_warnings)
