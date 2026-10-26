@@ -2,9 +2,8 @@
 
 How Heron's motor control is to be organised, built and tested: the
 Arduino firmware, the Pi side, the holonomic mixing and the test
-platforms. Steps 1 and 2 (protocol and link firmware) are built and
-checked on the bench; step 3 (the driver layer) is written, its bench
-checks next (2026-10-25). The wire format is in
+platforms. Steps 1 to 3 (protocol, link firmware, driver layer) are
+built and checked on the bench (2026-10-25). The wire format is in
 [`motor-protocol.md`](motor-protocol.md).
 
 ## 1. The pieces
@@ -27,8 +26,8 @@ checks next (2026-10-25). The wire format is in
 ### Pins the shield takes
 
 From the Adafruit v1 design the HW-130 copies, as its library (AFMotor)
-wires it; **[unverified]** on this board until the firmware drives each
-motor in turn. The full table, with the shift register's bits, is in
+wires it; **checked on the bench** 2026-10-25: each terminal drives its
+own motor, the right way. The full table, with the shift register's bits, is in
 `firmware/motor/src/L293DShield.h`.
 
 | Uno pins | Used for | Note |

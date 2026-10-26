@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Protocol and the step 2 firmware done and checked on the bench; the step 3 driver layer written, its bench checks next.
+Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench: the protocol, the link firmware and the driver layer. `heron_motor` (step 4) is next.
 
 ## Read this first when resuming
 
@@ -44,11 +44,9 @@ checked on the Pi).
 
 ## Still open
 
-1. **The bench pin table** is from the Adafruit design, unverified on the
-   HW-130: the step 3 checklist verifies it.
-2. **The bench's dead band, terminal map and signs:** measured by the
-   step 3 checklist, then written into `PlatformConfig.h`.
-3. **The full-size robot's motor driver**, not chosen.
+1. **The full-size robot's motor driver**, not chosen.
+2. **Does the shield twitch a motor during the 1.5 s reset,** while the
+   pins float? Not observed either way during step 3.
 
 AFMotor's licence, once open here, was checked 2026-10-25: public domain.
 It is not used ([`motor-design.md`](motor-design.md) §3).
@@ -65,13 +63,12 @@ measure it on the hardware before building motor logic on top.
    Boot and Status; no motor is driven. `MotorController` passes
    `motor_controller_test`; the firmware builds with avr-gcc (303 of 2048
    bytes of RAM, 3.5 KB of flash) and passed the bench checklist below.
-3. **The driver layer: written, bench checks next** (2026-10-25). Our own
-   driver for the shield (`L293DShield`), the ramp (4 units per ms) and
-   the dead band and sign mapping (`MotorOutput`, tested by
-   `motor_controller_test`), and `motor_link sweep`. Firmware 0.2.0: 339
-   bytes of RAM, 4.9 KB of flash. The step 3 checklist below verifies the
-   pin table, fills in `PlatformConfig.h`, and checks the ramp and
-   stopping with the motors turning.
+3. **The driver layer: done** (2026-10-25). Our own driver for the shield
+   (`L293DShield`), the ramp (4 units per ms) and the dead band and sign
+   mapping (`MotorOutput`, tested by `motor_controller_test`), and
+   `motor_link sweep`. Firmware 0.2.0: 339 bytes of RAM, 4.9 KB of flash.
+   Passed the step 3 checklist below; the bench's terminal map and dead
+   band are in `PlatformConfig.h`.
 4. **`heron_motor`** on the Pi, then the stick mapping and mixing.
 
 ## Step 2 bench checklist
@@ -136,3 +133,16 @@ EXT_PWR.** Build and flash 0.2.0 as for step 2, then, with
 | 5 | Ramp | `drive 1000 1000 1000 1000 --seconds 2` | Status shows applied climbing over about 250 ms; no unexpected Boot (a jolt that reset the Uno) |
 | 6 | Stop and watchdog with motors turning | Ctrl-C during a drive; `watchdog 600 600 600 600` | Wheels coast to a stop at once, not on the ramp; wd counts 1 |
 | 7 | Loop time and free RAM | the Status and Boot above | Record them |
+
+Results, 2026-10-25, on the bench rig through the Pi, AA cells on
+EXT_PWR **[ours]**:
+
+| # | Measured |
+|---|---|
+| 1 | Firmware 0.2.0, Boot 1519 ms after opening. A twitch during the reset was not watched for (open item 2) |
+| 2 | Each terminal drives one motor, forward for a positive value: the HW-130 matches the Adafruit pin table. Wired: front-left M1, front-right M2, back-left M3, back-right M4 |
+| 3 | `kMotorTerminal` {M1, M2, M4, M3}, all signs +1; the re-run turned front-left, front-right, back-right, back-left, all forward |
+| 4 | First steady turn from rest, as a duty, forward / backward: motor 1 66 / 61, motor 2 71 / 66, motor 3 77 / 66, motor 4 82 / 92. `kMinDuty` 100; at value 1 all four turn |
+| 5 | 0 to 1000: applied 368, 768, 1000 at 100 ms intervals; a smooth spin-up, no reset |
+| 6 | `watchdog 600 600 600 600`: stop reported 303 ms after the last Drive, applied straight to 0, wd 1; the wheels coasted to a stop |
+| 7 | Longest loop about 810 µs while driving, 620 µs stopped (the duty arithmetic: 32-bit division, four times a pass); free RAM 1461 bytes |
