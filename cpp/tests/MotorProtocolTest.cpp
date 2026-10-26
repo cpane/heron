@@ -112,9 +112,10 @@ int main() {
 
   {
     // Built independently in Python (docs/motor-protocol.md §3): sequence 7,
-    // wheels 1000, -1000, 197 (0xC5, the start byte inside the payload), -1.
-    const Bytes golden = {0xC5, 0x0B, 0x01, 0x01, 0x07, 0xE8, 0x03, 0x18,
-                          0xFC, 0xC5, 0x00, 0xFF, 0xFF, 0x16, 0x98};
+    // wheels 1000, -1000, 197 (0xC5, the start byte inside the payload), -1;
+    // protocol version 2.
+    const Bytes golden = {0xC5, 0x0B, 0x01, 0x02, 0x07, 0xE8, 0x03, 0x18,
+                          0xFC, 0xC5, 0x00, 0xFF, 0xFF, 0xD9, 0x29};
     check("drive: matches the reference frame byte for byte", drive(7, 1000, -1000, 197, -1) == golden);
   }
 
@@ -123,9 +124,10 @@ int main() {
     std::uint8_t out[kMaxFrameLen];
     check("stop: 7 bytes", encodeStop(StopCommand{3}, out, sizeof(out)) == 7);
     check("info request: 7 bytes", encodeInfoRequest(InfoRequest{4}, out, sizeof(out)) == 7);
-    check("status: 39 bytes", encodeStatus(Status{}, out, sizeof(out)) == 39);
+    check("configure: 22 bytes", encodeConfigure(MotorConfig{}, out, sizeof(out)) == 22);
+    check("status: 41 bytes", encodeStatus(Status{}, out, sizeof(out)) == 41);
     check("boot: 18 bytes", encodeBoot(BootInfo{}, out, sizeof(out)) == 18);
-    check("too small a buffer: nothing written", encodeStatus(Status{}, out, 38) == 0);
+    check("too small a buffer: nothing written", encodeStatus(Status{}, out, 40) == 0);
     check("too long a payload: refused",
           encodeFrame(MessageType::Status, out, kMaxPayloadLen + 1, out, sizeof(out)) == 0);
   }
@@ -155,6 +157,72 @@ int main() {
     const bool ok = c.frames.size() == 1 && decodeDrive(view(c.frames[0]), cmd);
     check("drive: out of range clamps when decoded",
           ok && cmd.wheels[0] == 1000 && cmd.wheels[1] == -1000);
+  }
+
+  {
+    // Built independently in Python, as the Drive above: sequence 9,
+    // terminals 1 2 4 3, motor 3 reversed, ramp 4, the bench's dead band.
+    const Bytes golden = {0xC5, 0x12, 0x04, 0x02, 0x09, 0x01, 0x02, 0x04, 0x03, 0x04, 0x04,
+                          0x00, 0x4C, 0x51, 0x57, 0x5C, 0x47, 0x4C, 0x4C, 0x66, 0x4E, 0x12};
+    MotorConfig config;
+    config.sequence = 9;
+    const std::uint8_t terminal[] = {1, 2, 4, 3};
+    const std::uint8_t forward[] = {76, 81, 87, 92};
+    const std::uint8_t backward[] = {71, 76, 76, 102};
+    for (std::size_t i = 0; i < kMotorCount; ++i) {
+      config.terminal[i] = terminal[i];
+      config.minDutyForward[i] = forward[i];
+      config.minDutyBackward[i] = backward[i];
+    }
+    config.reversed = 0x04;
+    config.rampPerMs = 4;
+    std::uint8_t out[kMaxFrameLen];
+    const Bytes frame(out, out + encodeConfigure(config, out, sizeof(out)));
+    check("configure: matches the reference frame byte for byte", frame == golden);
+    check("configure: its checksum matches the reference (Python: 0x6A5C)",
+          configChecksum(config) == 0x6A5C);
+    MotorConfig other = config;
+    other.sequence = 200;
+    check("configure: the checksum ignores the sequence",
+          configChecksum(other) == configChecksum(config));
+    other.minDutyBackward[3] = 101;
+    check("configure: any calibration change changes it",
+          configChecksum(other) != configChecksum(config));
+
+    FrameParser p;
+    Collector c;
+    c.feed(p, frame);
+    MotorConfig r;
+    const bool ok = c.frames.size() == 1 && decodeConfigure(view(c.frames[0]), r);
+    bool arrays = true;
+    for (std::size_t i = 0; i < kMotorCount; ++i) {
+      arrays = arrays && r.terminal[i] == terminal[i] && r.minDutyForward[i] == forward[i] &&
+               r.minDutyBackward[i] == backward[i];
+    }
+    check("configure: every field round trips",
+          ok && arrays && r.sequence == 9 && r.reversed == 0x04 && r.rampPerMs == 4);
+  }
+
+  {
+    MotorConfig good;
+    check("valid: the defaults (identity map, no ramp)", isValidConfig(good));
+    MotorConfig c = good;
+    c.terminal[3] = 1;
+    check("invalid: a terminal used twice", !isValidConfig(c));
+    c = good;
+    c.terminal[0] = 0;
+    check("invalid: terminal 0", !isValidConfig(c));
+    c = good;
+    c.terminal[0] = 5;
+    check("invalid: terminal 5", !isValidConfig(c));
+    c = good;
+    c.reversed = 0x10;
+    check("invalid: a reversed bit beyond the four motors", !isValidConfig(c));
+    c = good;
+    c.rampPerMs = kMaxRampPerMs;
+    check("valid: the fastest ramp", isValidConfig(c));
+    c.rampPerMs = kMaxRampPerMs + 1;
+    check("invalid: faster than that", !isValidConfig(c));
   }
 
   std::printf("Round trips\n");
@@ -202,6 +270,7 @@ int main() {
     s.versionMismatches = 4;
     s.bytesDiscarded = 5;
     s.longestLoopMicros = 1234;
+    s.configChecksum = 0x6A5C;
     std::uint8_t out[kMaxFrameLen];
     FrameParser p;
     Collector c;
@@ -216,7 +285,8 @@ int main() {
           ok && motors && r.lastSequence == 0xAB && r.state == MotorState::Running &&
               r.stopReason == StopReason::Watchdog && r.batteryMillivolts == 7400 &&
               r.watchdogStops == 2 && r.framesReceived == 65535 && r.checksumErrors == 3 &&
-              r.versionMismatches == 4 && r.bytesDiscarded == 5 && r.longestLoopMicros == 1234);
+              r.versionMismatches == 4 && r.bytesDiscarded == 5 && r.longestLoopMicros == 1234 &&
+              r.configChecksum == 0x6A5C);
   }
 
   {
@@ -224,7 +294,7 @@ int main() {
     b.firmwareMajor = 1;
     b.firmwareMinor = 2;
     b.firmwarePatch = 3;
-    b.platform = Platform::Mini;
+    b.platform = Platform::UnoL293d;
     b.resetFlags = kResetBrownOut | kResetExternal;
     b.uptimeMillis = 0x89ABCDEF;
     b.freeRamBytes = 1500;
@@ -236,7 +306,7 @@ int main() {
     const bool ok = c.frames.size() == 1 && decodeBoot(view(c.frames[0]), r);
     check("boot: every field",
           ok && r.firmwareMajor == 1 && r.firmwareMinor == 2 && r.firmwarePatch == 3 &&
-              r.protocolVersion == kProtocolVersion && r.platform == Platform::Mini &&
+              r.protocolVersion == kProtocolVersion && r.platform == Platform::UnoL293d &&
               r.resetFlags == (kResetBrownOut | kResetExternal) && r.uptimeMillis == 0x89ABCDEF &&
               r.freeRamBytes == 1500);
   }

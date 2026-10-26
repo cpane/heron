@@ -133,6 +133,10 @@ Motor-only facts:
   flashed through the Pi; nothing for it is installed on the host. Its
   logic (`firmware/motor/lib/`) has no Arduino code and is tested by
   `ctest`, like the Pi's code.
+- The firmware holds no rig-specific numbers: after every reset it refuses
+  Drive until the Pi sends Configure with the rig's profile
+  (`profiles/<rig>.conf`, `docs/rig-profiles.md`). One build per platform
+  (`uno-l293d` covers the bench rig and the mini robot).
 - The wire format is code in `protocol/motor/`, header-only and compiled
   by both sides. It uses no C++ standard library: the board's compiler has
   none (`CPP_CODING_STANDARD.md`, "Shared code for the AVR").

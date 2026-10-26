@@ -22,7 +22,16 @@
 //
 // The rules
 // ---------
-//   Drive         Running, with its four wheel values as the target (already
+//   Start-up      Stopped, reason Unconfigured: Drive is refused until a
+//                 Configure is accepted.
+//   Configure     The rig's calibration (MotorConfig): terminals, signs,
+//                 ramp, dead band. Accepted only while stopped and only if
+//                 isValidConfig(); then held, and its configChecksum() goes
+//                 out in every Status. An unconfigured controller becomes
+//                 stopped with reason Boot: ready, no Drive yet. Ignored
+//                 otherwise, which the Pi sees as an unchanged checksum.
+//   Drive         Refused while unconfigured (its sequence is still echoed).
+//                 Otherwise running, with its four wheel values as the target (already
 //                 clamped to -1000..1000 by decodeDrive()). Refreshes the
 //                 watchdog. The applied values ramp toward the target.
 //   Stop          Stopped at once, reason StopMessage, wheels zero: no ramp
@@ -33,9 +42,8 @@
 //                 target keeps the last commanded values, so Status shows
 //                 what the motors were doing when the link went quiet. Like
 //                 Stop, no ramp: the motors are released at once.
-//   Start-up      Stopped, reason Boot, until the first Drive.
 //
-// Only Drive keeps the motors running. Stop and InfoRequest are commands
+// Only Drive keeps the motors running. Stop, InfoRequest and Configure are commands
 // too, and their sequence is echoed, but they do not feed the watchdog.
 // A frame whose type is unknown, or whose payload is the wrong length, is
 // ignored: the parser has already checked its checksum, so it can only come
@@ -49,7 +57,7 @@
 // ways:
 //
 //   The ramp      While running, each applied value moves toward its target
-//                 by at most rampPerMs for every millisecond that passes, in
+//                 by at most the configured rampPerMs for every millisecond that passes, in
 //                 update(). A step from 0 to 1000 at 4 per ms takes 250 ms;
 //                 a reversal from +1000 to -1000 takes 500 ms, passing
 //                 through zero. This limits the current surge a sudden
@@ -65,7 +73,7 @@
 //
 // How main.cpp uses it
 // --------------------
-//   MotorController controller(RampConfig{4});    // the platform's ramp
+//   MotorController controller;
 //   FrameParser parser;
 //
 //   void loop() {
@@ -75,8 +83,10 @@
 //                   [&](const Frame &frame) { controller.onFrame(frame, now); });
 //     }
 //     controller.update(now);                  // the watchdog and the ramp
+//     const MotorConfig &config = controller.getConfig();
 //     for (size_t i = 0; i < kMotorCount; ++i) {
-//       driver.set(i, toMotorOutput(controller.getApplied(i), sign[i], minDuty));
+//       driver.set(config.terminal[i] - 1,
+//                  toMotorOutput(controller.getApplied(i), ...));   // MotorOutput.h
 //     }
 //     if (controller.takeBootRequest()) { sendBoot(); }
 //     if (controller.isStatusDue(now)) {
@@ -108,12 +118,6 @@ inline constexpr uint32_t kWatchdogMs = 250;
 /** Status goes out this often: 10 Hz. */
 inline constexpr uint32_t kStatusPeriodMs = 100;
 
-/** How fast applied values may change; one per platform. */
-struct RampConfig {
-  /** Wheel units per millisecond: 4 takes 0 to full in 250 ms. 0: no ramp. */
-  uint16_t rampPerMs{0};
-};
-
 /**
  * The firmware's decisions: commands in, wheel values and Status out.
  *
@@ -122,9 +126,6 @@ struct RampConfig {
  */
 class MotorController {
   public:
-    /** @param ramp How fast applied values may change */
-    explicit MotorController(const RampConfig &ramp) : m_ramp(ramp) {}
-
     /**
      * Acts on one frame from the parser.
      *
@@ -166,6 +167,12 @@ class MotorController {
 
     [[nodiscard]] bool isRunning() const { return m_state == MotorState::Running; }
 
+    /** @return true once a Configure has been accepted */
+    [[nodiscard]] bool isConfigured() const { return m_configChecksum != 0; }
+
+    /** @return The calibration held; MotorConfig's defaults while unconfigured */
+    [[nodiscard]] const MotorConfig &getConfig() const { return m_config; }
+
     /**
      * @param motor 0..kMotorCount-1, in protocol order
      * @return What that motor should be getting now, -1000..1000
@@ -175,10 +182,12 @@ class MotorController {
   private:
     void stop(StopReason reason);
     void ramp(uint32_t elapsedMs);
+    void configure(const MotorConfig &config);
 
-    RampConfig m_ramp;
+    MotorConfig m_config;
+    uint16_t m_configChecksum{0};  // 0: unconfigured
     MotorState m_state{MotorState::Stopped};
-    StopReason m_stopReason{StopReason::Boot};
+    StopReason m_stopReason{StopReason::Unconfigured};
     uint8_t m_lastSequence{0};
     int16_t m_target[kMotorCount]{};
     int16_t m_applied[kMotorCount]{};

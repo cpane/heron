@@ -31,10 +31,23 @@
 //              counters see them, and does the link carry on?
 //   sweep      one motor, stepped from low to full, forward then backward,
 //              holding each value: where does it start to turn? That is
-//              the platform's dead band (firmware/motor/src/PlatformConfig.h)
+//              the rig's dead band. Use it with --min-duty 0
 //
 // Every command except watch first waits for the Boot that opening the port
 // causes, so its first frames are not lost while the Uno restarts.
+//
+// Configuring the Arduino
+// -----------------------
+// The firmware starts unconfigured and refuses Drive until the Pi sends the
+// rig's calibration (Protocol.h, "The Arduino starts unconfigured"). So
+// drive, watchdog, noise and sweep load the rig's profile -- this Pi's,
+// ~/heron/profiles/<rig>.conf, or the file given with --profile -- send it
+// as Configure after the Boot, and check the checksum Status sends back.
+// If another Boot arrives mid-run (the Uno reset), they configure again.
+//
+//   --min-duty N     replaces all eight dead-band values with N, for
+//                    measuring: sweep --min-duty 0 shows raw duty
+//   --unconfigured   sends no Configure, to check that Drive is refused
 //
 // How it is built
 // ---------------
@@ -53,6 +66,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -60,6 +74,7 @@
 #include "heron/motor/FrameParser.h"
 #include "heron/motor/MotorPort.h"
 #include "heron/motor/Protocol.h"
+#include "heron/profile/RigProfile.h"
 
 namespace {
 
@@ -88,6 +103,9 @@ struct Options {
   std::int16_t wheels[kMotorCount]{};
   std::size_t sweepMotor{0};      // 1..4; 0 until given
   std::int16_t sweepStep{50};
+  std::string profile;            // empty: this Pi's rig
+  std::optional<std::uint8_t> minDuty;
+  bool unconfigured{false};
 };
 
 [[noreturn]] void usage(int status) {
@@ -110,6 +128,10 @@ struct Options {
                "  --device PATH        serial device (default /dev/arduino)\n"
                "  --seconds S          how long drive and watch run; sweep: per value\n"
                "  --step N             sweep: the value step, 1..1000 (default 50)\n"
+               "  --profile FILE       the rig profile to configure from (default this\n"
+               "                       Pi's: ~/heron/profiles/<rig>.conf)\n"
+               "  --min-duty N         replace the profile's dead band with N (0..255)\n"
+               "  --unconfigured       send no Configure: Drive should be refused\n"
                "  -h, --help           this text\n");
   std::exit(status);
 }
@@ -135,7 +157,10 @@ Options parse(int argc, char **argv) {
     const std::string arg = argv[i];
     if (arg == "-h" || arg == "--help") {
       usage(0);
-    } else if (arg == "--device" || arg == "--seconds" || arg == "--step") {
+    } else if (arg == "--unconfigured") {
+      options.unconfigured = true;
+    } else if (arg == "--device" || arg == "--seconds" || arg == "--step" || arg == "--profile" ||
+               arg == "--min-duty") {
       if (i + 1 >= argc) {
         std::fprintf(stderr, "ERROR: %s needs a value\n", arg.c_str());
         usage(2);
@@ -143,6 +168,15 @@ Options parse(int argc, char **argv) {
       const std::string value = argv[++i];
       if (arg == "--device") {
         options.port.device = value;
+      } else if (arg == "--profile") {
+        options.profile = value;
+      } else if (arg == "--min-duty") {
+        const std::int16_t duty = toWheel(value);
+        if (duty < 0 || duty > 255) {
+          std::fprintf(stderr, "ERROR: --min-duty must be 0..255\n");
+          usage(2);
+        }
+        options.minDuty = static_cast<std::uint8_t>(duty);
       } else if (arg == "--step") {
         options.sweepStep = toWheel(value);
         if (options.sweepStep < 1) {
@@ -219,6 +253,8 @@ const char *toText(StopReason reason) {
       return "stop";
     case StopReason::Watchdog:
       return "watchdog";
+    case StopReason::Unconfigured:
+      return "unconfig";
   }
   return "?";
 }
@@ -227,24 +263,20 @@ const char *toText(Platform platform) {
   switch (platform) {
     case Platform::Unknown:
       return "unknown";
-    case Platform::Bench:
-      return "bench";
-    case Platform::Mini:
-      return "mini";
-    case Platform::FullSize:
-      return "full-size";
+    case Platform::UnoL293d:
+      return "uno-l293d";
   }
   return "?";
 }
 
 void printStatus(std::int64_t atMs, const Status &s) {
   std::printf("%7lld ms  seq %3u  %-7s %-8s  target %5d %5d %5d %5d  applied %5d %5d %5d %5d"
-              "  wd %u  frames %u  crc %u  ver %u  disc %u  loop %u us\n",
+              "  wd %u  frames %u  crc %u  ver %u  disc %u  loop %u us  cfg %04X\n",
               static_cast<long long>(atMs), s.lastSequence, toText(s.state),
               toText(s.stopReason), s.target[0], s.target[1], s.target[2], s.target[3],
               s.applied[0], s.applied[1], s.applied[2], s.applied[3], s.watchdogStops,
               s.framesReceived, s.checksumErrors, s.versionMismatches, s.bytesDiscarded,
-              s.longestLoopMicros);
+              s.longestLoopMicros, s.configChecksum);
 }
 
 void printBoot(std::int64_t atMs, const BootInfo &b) {
@@ -302,6 +334,7 @@ class Link {
         } else if (decodeBoot(frame, boot)) {
           m_boot = boot;
           m_bootAtMs = sinceOpen();
+          ++m_bootCount;
           if (!quiet) {
             printBoot(m_bootAtMs, boot);
           }
@@ -345,6 +378,15 @@ class Link {
 
     void sendRaw(const std::uint8_t *bytes, std::size_t length) { m_port.write(bytes, length); }
 
+    void sendConfigure(MotorConfig config) {
+      config.sequence = m_sequence++;
+      std::uint8_t frame[kMaxFrameLen];
+      m_port.write(frame, encodeConfigure(config, frame, sizeof(frame)));
+    }
+
+    /** Boots seen since the port opened, the one opening it causes included. */
+    [[nodiscard]] std::uint64_t bootCount() const { return m_bootCount; }
+
     [[nodiscard]] std::uint8_t nextSequence() const { return m_sequence; }
     [[nodiscard]] const std::optional<Status> &lastStatus() const { return m_status; }
     [[nodiscard]] const std::optional<BootInfo> &lastBoot() const { return m_boot; }
@@ -360,6 +402,7 @@ class Link {
     std::optional<BootInfo> m_boot;
     std::int64_t m_bootAtMs{0};
     std::uint64_t m_statusCount{0};
+    std::uint64_t m_bootCount{0};
 };
 
 /** Opening the port restarts the Uno; wait for it, and say how long it took. */
@@ -374,16 +417,105 @@ void waitForStartup(Link &link) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Configuring from the rig's profile
+
+/** The profile's [motor] section as the Configure message carries it. */
+MotorConfig toMotorConfig(const Heron::Profile::MotorProfile &motor) {
+  static_assert(Heron::Profile::kProfileMotorCount == kMotorCount, "one value per motor");
+  static_assert(Heron::Profile::kMaxRampPerMs == kMaxRampPerMs, "the same ramp limit");
+  MotorConfig config;
+  for (std::size_t i = 0; i < kMotorCount; ++i) {
+    config.terminal[i] = motor.terminal[i];
+    if (motor.sign[i] < 0) {
+      config.reversed = static_cast<std::uint8_t>(config.reversed | (1U << i));
+    }
+    config.minDutyForward[i] = motor.minDutyForward[i];
+    config.minDutyBackward[i] = motor.minDutyBackward[i];
+  }
+  config.rampPerMs = motor.rampPerMs;
+  return config;
+}
+
+/**
+ * What to configure the Arduino with: the profile, with --min-duty applied.
+ * Empty with --unconfigured.
+ */
+std::optional<MotorConfig> loadConfig(const Options &options) {
+  if (options.unconfigured) {
+    std::printf("--unconfigured: sending no Configure, so Drive should be refused.\n\n");
+    return std::nullopt;
+  }
+  const std::filesystem::path file = options.profile.empty()
+                                         ? Heron::Profile::findRigProfile()
+                                         : std::filesystem::path(options.profile);
+  const Heron::Profile::RigProfile profile = Heron::Profile::loadRigProfile(file);
+  MotorConfig config = toMotorConfig(profile.motor);
+  std::printf("Profile: %s (rig %s)\n", profile.source.c_str(), profile.name.c_str());
+  if (options.minDuty) {
+    for (std::size_t i = 0; i < kMotorCount; ++i) {
+      config.minDutyForward[i] = *options.minDuty;
+      config.minDutyBackward[i] = *options.minDuty;
+    }
+    std::printf("--min-duty %u: the dead band replaced for this run.\n", *options.minDuty);
+  }
+  return config;
+}
+
+/**
+ * Sends Configure and waits for a Status whose checksum matches it.
+ * @return whether one did within a second
+ */
+bool configure(Link &link, const MotorConfig &config) {
+  const std::uint16_t expected = configChecksum(config);
+  link.sendConfigure(config);
+  const auto until = Clock::now() + kReplyWait;
+  while (Clock::now() < until && s_stopRequested == 0) {
+    link.pump(milliseconds(20), true);
+    const auto &s = link.lastStatus();
+    if (s && s->configChecksum == expected) {
+      std::printf("Configured: checksum %04X confirmed in Status.\n\n", expected);
+      return true;
+    }
+  }
+  std::printf("FAIL: no Status with checksum %04X within %lld ms; the Arduino did not take\n"
+              "the configuration (was it running? is the firmware protocol 2?).\n",
+              expected, static_cast<long long>(kReplyWait.count()));
+  return false;
+}
+
+/** The configuration a run uses, loaded before the port is opened; kept so a
+ *  mid-run Boot can be answered. Empty with --unconfigured. */
+std::optional<MotorConfig> s_config;
+
+/** waitForStartup(), then Configure with s_config, if there is one.
+ *  @return false if the Arduino did not take it */
+bool startAndConfigure(Link &link) {
+  waitForStartup(link);
+  return !s_config || configure(link, *s_config);
+}
+
 /**
  * Sends Drive every 20 ms for duration, pumping between sends; stops early
- * on Ctrl-C. optional perTick runs before each send.
+ * on Ctrl-C. optional perTick runs before each send. A Boot arriving
+ * meanwhile means the Uno reset and lost its configuration, so it is sent
+ * again before the next Drive.
  */
 template <typename PerTick>
 void driveFor(Link &link, const std::int16_t (&wheels)[kMotorCount], Clock::duration duration,
               bool quiet, PerTick &&perTick) {
   const auto start = Clock::now();
   auto next = start;
+  std::uint64_t boots = link.bootCount();
   while (Clock::now() - start < duration && s_stopRequested == 0) {
+    if (link.bootCount() != boots) {
+      boots = link.bootCount();
+      if (s_config) {
+        std::printf("%7lld ms  Boot mid-run: the Uno reset. Configuring again.\n",
+                    static_cast<long long>(link.sinceOpen()));
+        link.sendConfigure(*s_config);
+      }
+    }
     perTick();
     link.sendDrive(wheels);
     next += kDrivePeriod;
@@ -429,7 +561,9 @@ int runWatch(Link &link, const Options &options) {
 }
 
 int runDrive(Link &link, const Options &options) {
-  waitForStartup(link);
+  if (!startAndConfigure(link)) {
+    return 1;
+  }
   std::printf("Drive %d %d %d %d at 50 Hz for %.1f s, then Stop.\n", options.wheels[0],
               options.wheels[1], options.wheels[2], options.wheels[3], options.seconds);
   driveFor(link, options.wheels,
@@ -441,7 +575,9 @@ int runDrive(Link &link, const Options &options) {
 }
 
 int runWatchdog(Link &link, const Options &options) {
-  waitForStartup(link);
+  if (!startAndConfigure(link)) {
+    return 1;
+  }
   std::printf("Drive %d %d %d %d for 1 s...\n", options.wheels[0], options.wheels[1],
               options.wheels[2], options.wheels[3]);
   driveFor(link, options.wheels, std::chrono::seconds(1), false, [] {});
@@ -468,7 +604,9 @@ int runWatchdog(Link &link, const Options &options) {
 }
 
 int runNoise(Link &link) {
-  waitForStartup(link);
+  if (!startAndConfigure(link)) {
+    return 1;
+  }
   // No 0xC5 among the junk, so each injection costs exactly what is counted
   // below; a corrupted frame can still hide a false start, hence "at least".
   const std::uint8_t junk[] = {0x00, 0x11, 0x22, 0x33, 0x44};
@@ -521,13 +659,15 @@ int runNoise(Link &link) {
 }
 
 int runSweep(Link &link, const Options &options) {
-  waitForStartup(link);
+  if (!startAndConfigure(link)) {
+    return 1;
+  }
   const std::size_t index = options.sweepMotor - 1;
   const auto hold = std::chrono::duration_cast<Clock::duration>(
       std::chrono::duration<double>(options.seconds));
   std::printf("Motor %zu from %d to 1000, then backward, %.1f s per value. Note the value\n"
-              "where the wheel starts to turn. While the firmware's dead band is off\n"
-              "(kMinDuty 0), the duty is about value x 255 / 1000. Ctrl-C to end.\n\n",
+              "where the wheel starts to turn. With --min-duty 0 the duty is about\n"
+              "value x 255 / 1000. Ctrl-C to end.\n\n",
               options.sweepMotor, options.sweepStep, options.seconds);
   for (const int direction : {1, -1}) {
     for (int value = options.sweepStep; value <= kWheelMax && s_stopRequested == 0;
@@ -564,6 +704,11 @@ int main(int argc, char **argv) {
   std::signal(SIGTERM, onSignal);
 
   try {
+    if (options.command == "drive" || options.command == "watchdog" ||
+        options.command == "noise" || options.command == "sweep") {
+      // Before opening the port, so a bad profile fails without resetting the Uno.
+      s_config = loadConfig(options);
+    }
     Link link(options.port);
     int result = 2;
     if (options.command == "info") {

@@ -1,8 +1,8 @@
 // File        : MotorControllerTest.cpp
 // Author      : Chris Pane
-// Description : Behaviour of the motor firmware's logic -- commands, the
-//               watchdog, the ramp, Status, the output mapping -- on the host,
-//               with made-up frames and times.
+// Description : Behaviour of the motor firmware's logic -- configuring,
+//               commands, the watchdog, the ramp, Status, the output mapping
+//               -- on the host, with made-up frames and times.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -11,9 +11,11 @@
 // MotorController is the firmware's decision-making, compiled here from the
 // same file that goes into the Arduino (firmware/motor/lib/). Frames are built
 // with Protocol.h's encoders and fed through a real FrameParser, as on the
-// board; time is whatever each test says it is. Most tests use no ramp, so
-// applied follows the target on the next update(); the ramp has its own
-// section. Same style as
+// board; time is whatever each test says it is. A Board is configured as it
+// is made, as the Pi configures the Arduino after its Boot, except where a
+// test asks for an unconfigured one. Most tests use no ramp, so applied
+// follows the target on the next update(); the ramp has its own section.
+// Same style as
 // IBusParserTest.cpp -- deliberately no test framework yet.
 
 #include <cinttypes>
@@ -40,16 +42,42 @@ void check(const char *what, bool ok) {
   }
 }
 
-constexpr RampConfig kNoRamp{0};
+// A valid calibration: the bench rig's, with the given ramp.
+MotorConfig benchConfig(std::uint16_t rampPerMs) {
+  MotorConfig config;
+  config.terminal[0] = 1;
+  config.terminal[1] = 2;
+  config.terminal[2] = 4;
+  config.terminal[3] = 3;
+  config.rampPerMs = rampPerMs;
+  const std::uint8_t forward[] = {76, 81, 87, 92};
+  const std::uint8_t backward[] = {71, 76, 76, 102};
+  for (std::size_t i = 0; i < kMotorCount; ++i) {
+    config.minDutyForward[i] = forward[i];
+    config.minDutyBackward[i] = backward[i];
+  }
+  return config;
+}
+
+enum class Start { Configured, Unconfigured };
 
 // The firmware's receive path, minus the serial port: bytes through a
 // parser into the controller, all stamped with one time. drive() then runs
 // update() at the same time, as the loop does after reading the port.
 struct Board {
-  explicit Board(const RampConfig &ramp = kNoRamp) : controller(ramp) {}
+  explicit Board(std::uint16_t rampPerMs = 0, Start start = Start::Configured) {
+    if (start == Start::Configured) {
+      configure(benchConfig(rampPerMs), 0);
+    }
+  }
 
   FrameParser parser;
   MotorController controller;
+
+  void configure(const MotorConfig &config, std::uint32_t nowMs) {
+    std::uint8_t out[kMaxFrameLen];
+    receive(out, encodeConfigure(config, out, sizeof(out)), nowMs);
+  }
 
   void receive(const std::uint8_t *frame, std::size_t length, std::uint32_t nowMs) {
     parser.feed(frame, length,
@@ -91,12 +119,63 @@ bool appliedIs(const MotorController &c, std::int16_t m1, std::int16_t m2, std::
 }  // namespace
 
 int main() {
-  std::printf("Start-up\n");
+  std::printf("Start-up and Configure\n");
+
+  {
+    Board b(0, Start::Unconfigured);
+    const Status s = b.status();
+    check("unconfigured: stopped, reason unconfigured, checksum 0",
+          !b.controller.isConfigured() && s.state == MotorState::Stopped &&
+              s.stopReason == StopReason::Unconfigured && s.configChecksum == 0);
+    b.drive(5, 500, 500, 500, 500, 1000);
+    check("unconfigured: Drive refused, motors stay released",
+          !b.controller.isRunning() && appliedIs(b.controller, 0, 0, 0, 0) &&
+              b.status().target[0] == 0 && b.status().stopReason == StopReason::Unconfigured);
+    check("unconfigured: the refused Drive's sequence is still echoed",
+          b.status().lastSequence == 5);
+    b.stop(6, 1050);
+    check("unconfigured: a Stop keeps the reason unconfigured",
+          b.status().stopReason == StopReason::Unconfigured && b.status().lastSequence == 6);
+    const MotorConfig config = benchConfig(4);
+    b.configure(config, 1100);
+    check("Configure: accepted, checksum reported, reason boot",
+          b.controller.isConfigured() && b.status().configChecksum == configChecksum(config) &&
+              b.status().stopReason == StopReason::Boot);
+    check("Configure: held as sent", b.controller.getConfig().terminal[2] == 4 &&
+                                         b.controller.getConfig().minDutyBackward[3] == 102 &&
+                                         b.controller.getConfig().rampPerMs == 4);
+    b.drive(7, 500, 500, 500, 500, 1200);
+    check("configured: Drive runs", b.controller.isRunning());
+  }
+
+  {
+    Board b(0, Start::Unconfigured);
+    MotorConfig bad = benchConfig(4);
+    bad.terminal[1] = 1;  // M1 twice
+    b.configure(bad, 1000);
+    check("an invalid Configure is refused", !b.controller.isConfigured() &&
+                                                 b.status().configChecksum == 0);
+  }
+
+  {
+    Board b(0);
+    const std::uint16_t before = b.status().configChecksum;
+    b.drive(1, 300, 300, 300, 300, 1000);
+    b.configure(benchConfig(9), 1010);
+    check("Configure while running is refused: the old one stays",
+          b.status().configChecksum == before && b.controller.getConfig().rampPerMs == 0);
+    b.stop(2, 1020);
+    b.configure(benchConfig(9), 1030);
+    check("after a Stop it is accepted",
+          b.status().configChecksum == configChecksum(benchConfig(9)) &&
+              b.controller.getConfig().rampPerMs == 9);
+    check("re-configuring keeps the stop reason", b.status().stopReason == StopReason::StopMessage);
+  }
 
   {
     Board b;
     const Status s = b.status();
-    check("stopped, reason boot", !b.controller.isRunning() &&
+    check("configured: stopped, reason boot", !b.controller.isRunning() &&
                                       s.state == MotorState::Stopped &&
                                       s.stopReason == StopReason::Boot);
     check("all applied zero", appliedIs(b.controller, 0, 0, 0, 0));
@@ -206,7 +285,7 @@ int main() {
   std::printf("Status timing\n");
 
   {
-    MotorController c(kNoRamp);
+    MotorController c;
     check("the first is due at once", c.isStatusDue(5000));
     check("not again in the same period", !c.isStatusDue(5000) && !c.isStatusDue(5099));
     check("due 100 ms later", c.isStatusDue(5100));
@@ -214,14 +293,14 @@ int main() {
   }
 
   {
-    MotorController c(kNoRamp);
+    MotorController c;
     c.isStatusDue(5000);
     check("a late loop still sends", c.isStatusDue(5130));
     check("on schedule again, not drifting", !c.isStatusDue(5199) && c.isStatusDue(5200));
   }
 
   {
-    MotorController c(kNoRamp);
+    MotorController c;
     c.isStatusDue(5000);
     check("after a 1 s stall: one Status", c.isStatusDue(6000));
     check("after a 1 s stall: not a burst of the missed ones",
@@ -229,7 +308,7 @@ int main() {
   }
 
   {
-    MotorController c(kNoRamp);
+    MotorController c;
     const std::uint32_t nearWrap = 0xFFFFFFC0;
     c.isStatusDue(nearWrap);
     check("across the millis() wrap: due 100 ms later",
@@ -239,7 +318,7 @@ int main() {
   std::printf("Ramp\n");
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     b.controller.update(1000);
     b.drive(1, 1000, -1000, 400, 0, 1000);
     check("a Drive alone moves nothing in the same millisecond",
@@ -255,7 +334,7 @@ int main() {
   }
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     b.controller.update(1000);
     std::uint32_t t = 1000;
     for (std::uint8_t seq = 0; t <= 1300; ++seq, t += 20) {
@@ -274,7 +353,7 @@ int main() {
   }
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     b.controller.update(1000);
     b.drive(1, 1000, 1000, 1000, 1000, 1000);
     b.controller.update(1100);
@@ -287,7 +366,7 @@ int main() {
   }
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     b.controller.update(1000);
     b.drive(1, 800, 800, 800, 800, 1000);
     b.controller.update(1240);
@@ -297,7 +376,7 @@ int main() {
   }
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     b.controller.update(1000);
     b.drive(1, -1000, 0, 0, 0, 1000);
     b.drive(2, -1000, 0, 0, 0, 1200);  // a 200 ms stall between loop passes
@@ -306,7 +385,7 @@ int main() {
   }
 
   {
-    Board b(RampConfig{4});
+    Board b(4);
     const std::uint32_t nearWrap = 0xFFFFFFF0;
     b.controller.update(nearWrap);
     b.drive(1, 1000, 0, 0, 0, nearWrap);
@@ -317,28 +396,34 @@ int main() {
   std::printf("Output: value to duty and direction\n");
 
   {
-    const MotorOutput zero = toMotorOutput(0, 1, 70);
+    const MotorOutput zero = toMotorOutput(0, false, 70, 60);
     check("0: released, duty 0", zero.direction == Direction::Release && zero.duty == 0);
-    const MotorOutput one = toMotorOutput(1, 1, 70);
-    check("1: the dead band's edge, forward", one.direction == Direction::Forward &&
-                                                  one.duty == 70);
-    check("500: halfway through the band", toMotorOutput(500, 1, 70).duty == 162);
-    const MotorOutput full = toMotorOutput(-1000, 1, 70);
+    const MotorOutput one = toMotorOutput(1, false, 70, 60);
+    check("1: the forward dead band's edge, forward",
+          one.direction == Direction::Forward && one.duty == 70);
+    const MotorOutput minusOne = toMotorOutput(-1, false, 70, 60);
+    check("-1: the backward dead band's edge, backward",
+          minusOne.direction == Direction::Backward && minusOne.duty == 60);
+    check("500: halfway through the band", toMotorOutput(500, false, 70, 60).duty == 162);
+    const MotorOutput full = toMotorOutput(-1000, false, 70, 60);
     check("-1000: full, backward", full.direction == Direction::Backward && full.duty == 255);
-    check("sign -1 reverses the direction, not the duty",
-          toMotorOutput(-1000, -1, 70).direction == Direction::Forward &&
-              toMotorOutput(300, -1, 70).direction == Direction::Backward &&
-              toMotorOutput(300, -1, 70).duty == toMotorOutput(300, 1, 70).duty);
-    check("out of range clamps", toMotorOutput(30000, 1, 70).duty == 255 &&
-                                     toMotorOutput(-30000, 1, 70).direction ==
+    check("reversed flips the direction, not the duty or which dead band",
+          toMotorOutput(-1000, true, 70, 60).direction == Direction::Forward &&
+              toMotorOutput(300, true, 70, 60).direction == Direction::Backward &&
+              toMotorOutput(300, true, 70, 60).duty == toMotorOutput(300, false, 70, 60).duty &&
+              toMotorOutput(-1, true, 70, 60).duty == 60);
+    check("out of range clamps", toMotorOutput(30000, false, 70, 60).duty == 255 &&
+                                     toMotorOutput(-30000, false, 70, 60).direction ==
                                          Direction::Backward);
     check("no dead band: 1..1000 spread over 0..255",
-          toMotorOutput(1000, 1, 0).duty == 255 && toMotorOutput(500, 1, 0).duty == 127 &&
-              toMotorOutput(1, 1, 0).duty == 0 &&
-              toMotorOutput(1, 1, 0).direction == Direction::Forward);
+          toMotorOutput(1000, false, 0, 0).duty == 255 &&
+              toMotorOutput(500, false, 0, 0).duty == 127 &&
+              toMotorOutput(1, false, 0, 0).duty == 0 &&
+              toMotorOutput(1, false, 0, 0).direction == Direction::Forward);
     bool rising = true;
     for (std::int16_t v = 2; v <= 1000; ++v) {
-      rising = rising && toMotorOutput(v, 1, 70).duty >= toMotorOutput(v - 1, 1, 70).duty;
+      rising = rising && toMotorOutput(v, false, 70, 60).duty >=
+                             toMotorOutput(static_cast<std::int16_t>(v - 1), false, 70, 60).duty;
     }
     check("duty never falls as the value rises", rising);
   }
@@ -351,8 +436,8 @@ int main() {
     const std::uint8_t noise[] = {0x00, 0x12, 0x34};
     b.receive(noise, sizeof(noise), 1001);
     const Status s = b.controller.makeStatus(b.parser.getStats(), 7400, 812);
-    check("link counters come from the parser",
-          s.framesReceived == 1 && s.bytesDiscarded == 3 && s.checksumErrors == 0);
+    check("link counters come from the parser (Configure, Drive)",
+          s.framesReceived == 2 && s.bytesDiscarded == 3 && s.checksumErrors == 0);
     check("battery and loop time come from the caller",
           s.batteryMillivolts == 7400 && s.longestLoopMicros == 812);
   }
@@ -368,7 +453,7 @@ int main() {
               1000);
     check("wrong length or unknown type: ignored",
           !b.controller.isRunning() && b.status().lastSequence == 0 &&
-              b.status().framesReceived == 2);
+              b.status().framesReceived == 3);
   }
 
   std::printf("\n%" PRId32 " failure(s)\n", s_failures);

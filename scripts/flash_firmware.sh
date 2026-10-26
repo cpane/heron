@@ -9,8 +9,8 @@
 # installed by provisioning; the Pi never builds anything.
 #
 #   scripts/build_firmware.sh                       first
-#   scripts/flash_firmware.sh <user>@<pi>           the bench firmware
-#   scripts/flash_firmware.sh <user>@<pi> bench     the same, by name
+#   scripts/flash_firmware.sh <user>@<pi>               the uno-l293d firmware
+#   scripts/flash_firmware.sh <user>@<pi> uno-l293d     the same, by name
 #
 # How avrdude reaches the chip: the Uno's bootloader (Optiboot) listens on
 # the serial port for a moment after each reset. avrdude opens the port,
@@ -23,12 +23,12 @@ set -Eeuo pipefail
 if [[ $# -lt 1 || $# -gt 2 ]]; then
     echo "Usage: $0 <user@host> [platform]"
     echo "Example: $0 <user>@<pi>"
-    echo "Platforms: the environments in firmware/motor/platformio.ini (default bench)"
+    echo "Platforms: the environments in firmware/motor/platformio.ini (default uno-l293d)"
     exit 1
 fi
 
 TARGET="$1"
-PLATFORM="${2:-bench}"
+PLATFORM="${2:-uno-l293d}"
 
 if [[ "${TARGET}" != *@* ]]; then
     echo "ERROR: Target must be specified as user@host."

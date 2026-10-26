@@ -58,8 +58,8 @@
 // its own resistors [unverified]. begin() is the first thing setup() does.
 //
 // Terminals are numbered 0..3 here for M1..M4. Which terminal each protocol
-// motor uses, and its sign, is the platform's configuration
-// (PlatformConfig.h), not this class's.
+// motor uses, and which way round it is, is the rig's calibration, sent by
+// the Pi in Configure (docs/rig-profiles.md), not this class's.
 
 #ifndef HERON_MOTOR_L293D_SHIELD_H
 #define HERON_MOTOR_L293D_SHIELD_H
