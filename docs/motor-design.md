@@ -235,7 +235,8 @@ cpp/tests/Motor*Test.cpp     ctest: the protocol and the controller
 docker/Dockerfile.firmware   the AVR toolchain
 scripts/build_firmware.sh    pio run, in the container
 scripts/flash_firmware.sh    copies the .hex to the Pi, runs avrdude there
-(step 4) heron_motor         the Pi's motor library, like heron_remote
+(step 5) heron_motor         the Pi's motor library, like heron_remote
+                             (motor-cpp-design.md)
 ```
 
 - **`protocol/motor/`** is written once and compiled by both sides: CMake
