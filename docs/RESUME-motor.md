@@ -73,7 +73,9 @@ measure it on the hardware before building motor logic on top.
    [`rig-profiles.md`](rig-profiles.md)): the bench's numbers move from
    `PlatformConfig.h` into `profiles/bench.conf`, sent to the Arduino by a
    protocol v2 Configure after every Boot, with a dead band per motor and
-   direction. Its §8 has the order of work.
+   direction. Its §8 has the order of work. **Part 1, the profile and the
+   rig name, built** (2026-10-25): `heron_profile`, `profiles/bench.conf`,
+   `rig_profile`, `set_rig.sh`. Part 2, protocol v2 and the firmware, next.
 5. **`heron_motor`** on the Pi, then the stick mapping and mixing; it loads
    the profile and owns the Configure handshake.
 

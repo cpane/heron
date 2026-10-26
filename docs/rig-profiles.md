@@ -1,7 +1,8 @@
 # Rig profiles — design
 
 How each physical Heron is described and calibrated, so the same code runs
-on every one of them. **Agreed 2026-10-25, nothing built yet.** The
+on every one of them. **Agreed 2026-10-25; §8 step 1 (the profile and the
+rig name) built, the rest not yet.** The
 calibration lives on the Pi and is sent to the Arduino at connect (§4);
 every Pi has its own name (PR #23); the review points are settled (§9).
 
@@ -28,11 +29,11 @@ its motors.
 
 ## 2. The profile file
 
-One per rig, in the repository, so every calibration has a history in git:
+One per rig, in the repository, so every calibration has a history in git.
+The bench's, [`profiles/bench.conf`](../profiles/bench.conf), shortened:
 
 ```
-# profiles/bench.conf -- the bench rig: Uno + L293D, four yellow motors,
-# no wheels.
+# The bench rig: Uno + L293D, four yellow motors, no wheels.
 format = 1
 
 [rig]
@@ -54,15 +55,14 @@ min_duty_backward = 71 76 76 102
 date = 2026-10-25
 method = motor_link sweep, step 20, from rest; +10 margin
 supply = AA cells on EXT_PWR
-
-[geometry]
-# Absent on the bench: no wheels. The mini and the full-size robot set
-# wheel_radius_m, track_m, wheelbase_m, max_speed_mps.
 ```
 
-- **Format:** `key = value` lines in `[sections]`, `#` comments. Simple
-  enough for our standard-library-only C++ to read without a parser
-  library, readable in a diff.
+- **Format:** `key = value` lines in `[sections]`. `#` starts a comment only
+  at the start of a line, so a value may contain one. Simple enough for our
+  standard-library-only C++ to read without a parser library, readable in a
+  diff. Every rule and key is listed in the reader's header,
+  `cpp/include/heron/profile/RigProfile.h`.
+- **`[motor.calibration]`** is a free-text record: any keys, all optional.
 - **Strict:** an unknown key in a known section, a missing required key or
   a value out of range is an error, with the file and line. A typo must not
   silently leave a default in place. Unknown sections are errors too, so a
@@ -71,7 +71,8 @@ supply = AA cells on EXT_PWR
 - **Grows by section.** The motor section comes first. Others are added by
   their own workstreams when they need them: `[odometry]` (the OTOS's linear
   and angular scalars, its mounting offset), `[lidar]` (mounting offset),
-  `[geometry]`.
+  and `[geometry]` (wheel radius, track, wheelbase, maximum speed) when the
+  mixing needs it. The bench, with no wheels, will have none.
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own
@@ -173,9 +174,11 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
 
 ## 8. Order of work
 
-1. **The profile and the rig name:** the format, `heron_profile` and its
-   tests, `profiles/bench.conf` from the step 3 measurements,
-   `set_rig.sh`, deploying `profiles/`.
+1. **The profile and the rig name: built** (2026-10-25). `heron_profile`
+   (`RigProfile.h`) and `rig_profile_test`; `profiles/bench.conf` from the
+   step 3 measurements; the `rig_profile` tool (`check`, `show`), with a
+   ctest that checks every file in `profiles/`; `set_rig.sh`;
+   `deploy_cpp.sh` copies `profiles/`.
 2. **Protocol v2 and the firmware:** Configure, the unconfigured state, the
    checksum; `PlatformConfig.h` removed; `motor_link --profile` and its
    overrides. Bench checks: unconfigured refuses Drive; configured drives

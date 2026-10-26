@@ -191,6 +191,9 @@ heron_motor_controller    the firmware's logic (firmware/motor/lib/), built
                           here for its tests; the firmware itself is built
                           by scripts/build_firmware.sh (motor-design.md §3)
 heron_motor_port          the Pi's serial port to the Arduino
+
+heron_profile             a rig's profile (profiles/<rig>.conf), read and
+                          checked, and which rig a Pi is (rig-profiles.md)
 ```
 
 `heron_lidar` links the SDK and the channels **privately**, so anything
@@ -205,6 +208,9 @@ include path. The boundary is enforced by the build. Rationale in
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
 | `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
 | `motor_protocol_test`, `motor_controller_test` | `cpp/tests/` | the motor link protocol and frame parser, and the firmware's logic, run by `ctest` |
+| `rig_profile_test` | `cpp/tests/` | reading and checking rig profiles, every rule, run by `ctest` |
+| `rig_profiles_check` | `profiles/*.conf` | not a program: a `ctest` running `rig_profile check` on every profile in the repository |
+| `rig_profile` | `cpp/tools/` | checks profile files (`check`), and shows a Pi's own profile (`show`) |
 | `motor_link` | `cpp/tools/` | the motor link's bench tool: commands to the Arduino, the dead-band sweep, and the bench checks in `RESUME-motor.md` |
 | `heron_motor_protocol_nostd` | `protocol/motor/check/` | not a program: compiles the shared protocol with `-nostdinc++`, so a C++ standard header in it fails the build |
 | `scan_builder_check`, `lidar_replay_check` | `cpp/tests/` | checks against recordings; driven by `python/tools/lidar_gapcheck.py` and `lidar_adaptercheck.py`. Not in `ctest`, since recordings are git-ignored |
