@@ -20,6 +20,10 @@ Workstreams pause and resume independently, so their context must not mix:
   docs. Shared facts (hardware, build chain, conventions) go in this file,
   `docs/cpp-build.md`, or `docs/rig-profiles.md` (how each physical rig is
   described) and `docs/rig-calibration.md` (how to measure one).
+- **Telemetry:** external clients will read the LiDAR and odometry live
+  through a server inside the robot process, read-only, never slowing the
+  control loop. Every library keeps the `getLatest()` shape that allows it;
+  the rules are `docs/robot-telemetry.md`.
 - **Name its documents `docs/<area>-*.md`**, and its memory entries with the
   area as a prefix (`lidar-...`). General memories carry no prefix.
 - **A new workstream** gets a resume file, a row in the index, and a section
