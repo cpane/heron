@@ -17,7 +17,8 @@
 //
 // Messages
 // --------
-//   Pi to Arduino   Drive        four wheel values, sent every 20 ms
+//   Pi to Arduino   Configure    the rig's motor calibration, after every Boot
+//                   Drive        four wheel values, sent every 20 ms
 //                   Stop         release all four motors now
 //                   InfoRequest  "send me a Boot"
 //   Arduino to Pi   Status       what the motors are doing, every 100 ms
@@ -28,13 +29,32 @@
 // pulled cable), it stops the motors by itself: the watchdog. That is why
 // the Pi sends Drive every 20 ms even when nothing has changed.
 //
+// The Arduino starts unconfigured
+// -------------------------------
+// The firmware holds no rig-specific numbers: which driver terminal each
+// motor is on, which way round it is, where it starts to turn, how fast it
+// may ramp. Those are measured per rig and kept in the rig's profile on the
+// Pi (docs/rig-profiles.md). So after every reset the Arduino refuses Drive,
+// its motors released, until the Pi sends Configure with the profile's motor
+// numbers. Status then carries a checksum of what the Arduino holds, which
+// the Pi compares with what it sent. A reset in the middle of a drive (a
+// brown-out, say) therefore ends with the motors released, never running on
+// defaults, until the Pi notices the new Boot and configures again:
+//
+//   Pi                                   Arduino
+//   opens the port            ------->   resets, unconfigured
+//                             <-------   Boot
+//   Configure                 ------->   holds it, if stopped and valid
+//                             <-------   Status, configChecksum = configChecksum(sent)
+//   Drive, every 20 ms        ------->   drives
+//
 // Frames
 // ------
 // A serial port carries a stream of bytes with no boundaries, and noise or
 // a dropped byte can corrupt it. So every message travels inside a frame:
 //
 //   start  length  type  version  payload ...  checksum
-//    C5     0B      01    01      9 bytes      2 bytes
+//    C5     0B      01    02      9 bytes      2 bytes
 //
 //   start     always 0xC5: where a frame may begin
 //   length    how many bytes follow, up to the checksum (type, version and
@@ -117,7 +137,9 @@ namespace Heron::Motor {
  *  the RPLIDAR's 0xA5 or 0x5A: the two USB bridges are identical, so a mixed-up
  *  port must not turn a motor frame into a LiDAR command. */
 inline constexpr uint8_t kStartByte = 0xC5;
-inline constexpr uint8_t kProtocolVersion = 1;
+/** 2 added Configure, the unconfigured state and Status's configuration
+ *  checksum, and made Boot's platform the hardware design, not the rig. */
+inline constexpr uint8_t kProtocolVersion = 2;
 
 inline constexpr size_t kLengthOffset = 1;
 inline constexpr size_t kTypeOffset = 2;
@@ -127,7 +149,7 @@ inline constexpr size_t kChecksumLen = 2;
 /** Start, length, type, version and checksum: a frame with no payload. */
 inline constexpr size_t kFrameOverhead = kPayloadOffset + kChecksumLen;
 
-/** Room for every version-1 payload (Status is the largest, 33) and for growth,
+/** Room for every payload (Status is the largest, 35) and for growth,
  *  so a longer frame from a newer version is counted as a version mismatch
  *  rather than discarded as noise. */
 inline constexpr size_t kMaxPayloadLen = 60;
@@ -140,6 +162,7 @@ enum class MessageType : uint8_t {
   Drive = 0x01,
   Stop = 0x02,
   InfoRequest = 0x03,
+  Configure = 0x04,
   Status = 0x81,
   Boot = 0x82
 };
@@ -173,17 +196,19 @@ enum class MotorState : uint8_t {
 };
 
 enum class StopReason : uint8_t {
-  None = 0,         // running
-  Boot = 1,         // no command since start-up
-  StopMessage = 2,  // the Pi sent Stop
-  Watchdog = 3      // no valid command for 250 ms
+  None = 0,          // running
+  Boot = 1,          // configured, no Drive yet
+  StopMessage = 2,   // the Pi sent Stop
+  Watchdog = 3,      // no valid command for 250 ms
+  Unconfigured = 4   // no Configure since start-up: Drive is refused
 };
 
+/** The hardware design the firmware was built for: which motor driver it
+ *  drives. Several rigs share one (the bench and the mini robot are both
+ *  UnoL293d); which rig it is, is the Pi's business. */
 enum class Platform : uint8_t {
   Unknown = 0,
-  Bench = 1,
-  Mini = 2,
-  FullSize = 3
+  UnoL293d = 1  // Uno with the HW-130 L293D shield
 };
 
 /** Reset-cause bits in Boot. They match the ATmega328P's MCUSR, so the Uno
@@ -229,6 +254,28 @@ struct InfoRequest {
   uint8_t sequence{0};
 };
 
+/** The fastest ramp Configure may ask for: -1000 to 1000 in 1 ms. */
+inline constexpr uint16_t kMaxRampPerMs = 2000;
+
+/**
+ * Pi to Arduino, after every Boot: the rig's motor calibration, from the
+ * [motor] section of its profile (docs/rig-profiles.md). Until one is
+ * accepted the Arduino refuses Drive. It is accepted only while the motors
+ * are stopped and only if isValidConfig() holds; otherwise it is ignored,
+ * and the Pi sees that from configChecksum in Status.
+ *
+ * Arrays are in motor order, as DriveCommand's wheels.
+ */
+struct MotorConfig {
+  uint8_t sequence{0};
+  uint8_t terminal[kMotorCount]{1, 2, 3, 4};  // driver terminal, 1..4 for M1..M4, each once
+  uint8_t reversed{0};       // bit i set: motor i+1 is wired backwards, so its
+                             // driver direction is flipped
+  uint16_t rampPerMs{0};     // 0..kMaxRampPerMs wheel units per ms; 0 is no ramp
+  uint8_t minDutyForward[kMotorCount]{};   // PWM duty for the smallest value
+  uint8_t minDutyBackward[kMotorCount]{};  // above 0 and below 0: the dead band
+};
+
 /**
  * Arduino to Pi, every 100 ms: what the motors are doing and how healthy
  * the link is. The Pi learns from it that the firmware is alive, whether its
@@ -240,7 +287,7 @@ struct InfoRequest {
 struct Status {
   uint8_t lastSequence{0};  // of the newest valid command
   MotorState state{MotorState::Stopped};
-  StopReason stopReason{StopReason::Boot};
+  StopReason stopReason{StopReason::Unconfigured};
   int16_t target[kMotorCount]{};   // as last commanded
   int16_t applied[kMotorCount]{};  // where the ramp has got to
   uint16_t batteryMillivolts{0};   // 0 if no divider is fitted
@@ -250,6 +297,8 @@ struct Status {
   uint16_t versionMismatches{0};
   uint16_t bytesDiscarded{0};
   uint16_t longestLoopMicros{0};   // since the previous Status
+  uint16_t configChecksum{0};      // configChecksum() of the configuration
+                                   // held; 0 while unconfigured
 };
 
 /** Arduino to Pi, once after start-up and in reply to InfoRequest. */
@@ -267,7 +316,8 @@ struct BootInfo {
 inline constexpr size_t kDrivePayloadLen = 1 + 2 * kMotorCount;
 inline constexpr size_t kStopPayloadLen = 1;
 inline constexpr size_t kInfoRequestPayloadLen = 1;
-inline constexpr size_t kStatusPayloadLen = 3 + 2 * 2 * kMotorCount + 7 * 2;
+inline constexpr size_t kConfigurePayloadLen = 1 + kMotorCount + 1 + 2 + 2 * kMotorCount;
+inline constexpr size_t kStatusPayloadLen = 3 + 2 * 2 * kMotorCount + 8 * 2;
 inline constexpr size_t kBootPayloadLen = 12;
 
 static_assert(kStatusPayloadLen <= kMaxPayloadLen, "Status must fit a frame");
@@ -414,6 +464,59 @@ inline size_t encodeInfoRequest(const InfoRequest &cmd, uint8_t *out, size_t cap
   return encodeFrame(MessageType::InfoRequest, payload, sizeof(payload), out, capacity);
 }
 
+/** The Configure payload without its sequence: what configChecksum() covers. */
+inline void putConfigFields(const MotorConfig &config, uint8_t *p) {
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    p[i] = config.terminal[i];
+  }
+  p[kMotorCount] = config.reversed;
+  putU16(p + kMotorCount + 1, config.rampPerMs);
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    p[kMotorCount + 3 + i] = config.minDutyForward[i];
+    p[2 * kMotorCount + 3 + i] = config.minDutyBackward[i];
+  }
+}
+
+/** @return as encodeFrame() */
+inline size_t encodeConfigure(const MotorConfig &config, uint8_t *out, size_t capacity) {
+  uint8_t payload[kConfigurePayloadLen];
+  payload[0] = config.sequence;
+  putConfigFields(config, payload + 1);
+  return encodeFrame(MessageType::Configure, payload, sizeof(payload), out, capacity);
+}
+
+/**
+ * The checksum Status reports for a configuration: CRC-16 over its fields,
+ * the sequence left out, so the same calibration always gives the same
+ * value. Never 0, which Status uses for "unconfigured": a CRC of 0 is
+ * reported as 1.
+ */
+inline uint16_t configChecksum(const MotorConfig &config) {
+  uint8_t fields[kConfigurePayloadLen - 1];
+  putConfigFields(config, fields);
+  const uint16_t crc = crc16(fields, sizeof(fields));
+  return crc == 0 ? 1 : crc;
+}
+
+/**
+ * @return true if every terminal is 1..kMotorCount and used once, no bit
+ *         above the motors is set in reversed, and the ramp is at most
+ *         kMaxRampPerMs. Any duty 0..255 is valid.
+ */
+inline bool isValidConfig(const MotorConfig &config) {
+  bool used[kMotorCount + 1] = {};
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    const uint8_t t = config.terminal[i];
+    if (t < 1 || t > kMotorCount || used[t]) {
+      return false;
+    }
+    used[t] = true;
+  }
+  const uint8_t motorBits = static_cast<uint8_t>((1U << kMotorCount) - 1U);
+  return (config.reversed & static_cast<uint8_t>(~motorBits)) == 0 &&
+         config.rampPerMs <= kMaxRampPerMs;
+}
+
 /** @return as encodeFrame() */
 inline size_t encodeStatus(const Status &status, uint8_t *out, size_t capacity) {
   uint8_t payload[kStatusPayloadLen];
@@ -430,7 +533,7 @@ inline size_t encodeStatus(const Status &status, uint8_t *out, size_t capacity) 
   const uint16_t counters[] = {status.batteryMillivolts, status.watchdogStops,
                                status.framesReceived,    status.checksumErrors,
                                status.versionMismatches, status.bytesDiscarded,
-                               status.longestLoopMicros};
+                               status.longestLoopMicros, status.configChecksum};
   for (const uint16_t value : counters) {
     putU16(p, value);
     p += 2;
@@ -487,6 +590,24 @@ inline bool decodeInfoRequest(const Frame &frame, InfoRequest &out) {
   return true;
 }
 
+/** Decodes the fields as they are; whether they make sense is
+ *  isValidConfig()'s question, so the firmware can refuse a bad one. */
+inline bool decodeConfigure(const Frame &frame, MotorConfig &out) {
+  if (frame.type != MessageType::Configure || frame.payloadLen != kConfigurePayloadLen) {
+    return false;
+  }
+  const uint8_t *p = frame.payload + 1;
+  out.sequence = frame.payload[0];
+  for (size_t i = 0; i < kMotorCount; ++i) {
+    out.terminal[i] = p[i];
+    out.minDutyForward[i] = p[kMotorCount + 3 + i];
+    out.minDutyBackward[i] = p[2 * kMotorCount + 3 + i];
+  }
+  out.reversed = p[kMotorCount];
+  out.rampPerMs = getU16(p + kMotorCount + 1);
+  return true;
+}
+
 inline bool decodeStatus(const Frame &frame, Status &out) {
   if (frame.type != MessageType::Status || frame.payloadLen != kStatusPayloadLen) {
     return false;
@@ -505,7 +626,7 @@ inline bool decodeStatus(const Frame &frame, Status &out) {
   uint16_t *const counters[] = {&out.batteryMillivolts, &out.watchdogStops,
                                 &out.framesReceived,    &out.checksumErrors,
                                 &out.versionMismatches, &out.bytesDiscarded,
-                                &out.longestLoopMicros};
+                                &out.longestLoopMicros, &out.configChecksum};
   for (uint16_t *const counter : counters) {
     *counter = getU16(p);
     p += 2;
