@@ -321,10 +321,12 @@ add_executable(ibus_reader tools/IBusReader.cpp)
 target_link_libraries(ibus_reader PRIVATE heron_ibus_port heron_warnings)
 
 # The motor link's bench tool: sends commands to the Arduino and runs the
-# link checks (docs/RESUME-motor.md). Built for the host as well as the Pi,
+# link checks (docs/RESUME-motor.md). It configures the Arduino from the
+# rig's profile, hence heron_profile. Built for the host as well as the Pi,
 # so an Uno can be checked from either.
 add_executable(motor_link tools/MotorLink.cpp)
-target_link_libraries(motor_link PRIVATE heron_motor_port heron_motor_protocol heron_warnings)
+target_link_libraries(motor_link
+    PRIVATE heron_motor_port heron_motor_protocol heron_profile heron_warnings)
 
 # Checks profile files on the host, and shows a Pi's own profile there.
 add_executable(rig_profile tools/RigProfileTool.cpp)
