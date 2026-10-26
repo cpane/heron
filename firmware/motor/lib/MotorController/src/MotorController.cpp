@@ -36,8 +36,12 @@ void MotorController::onFrame(const Frame &frame, uint32_t nowMs) {
   DriveCommand drive;
   StopCommand stopCmd;
   InfoRequest info;
+  MotorConfig config;
   if (decodeDrive(frame, drive)) {
     m_lastSequence = drive.sequence;
+    if (!isConfigured()) {
+      return;  // refused: no calibration, so no driving (header, "The rules")
+    }
     m_lastDriveMs = nowMs;
     if (m_state != MotorState::Running) {
       // Starting: the ramp runs from this Drive, not from the last update()
@@ -59,6 +63,9 @@ void MotorController::onFrame(const Frame &frame, uint32_t nowMs) {
   } else if (decodeInfoRequest(frame, info)) {
     m_lastSequence = info.sequence;
     m_bootRequested = true;
+  } else if (decodeConfigure(frame, config)) {
+    m_lastSequence = config.sequence;
+    configure(config);
   }
   // Anything else passed the checksum, so it is a sender bug, not noise:
   // ignored, as the header explains.
@@ -119,7 +126,21 @@ Status MotorController::makeStatus(const ParserStats &link, uint16_t batteryMill
   status.versionMismatches = link.versionMismatches;
   status.bytesDiscarded = link.bytesDiscarded;
   status.longestLoopMicros = longestLoopMicros;
+  status.configChecksum = m_configChecksum;
   return status;
+}
+
+void MotorController::configure(const MotorConfig &config) {
+  // Never under running motors, and never a calibration that makes no sense:
+  // either way the old one stays, and the unchanged checksum tells the Pi.
+  if (m_state != MotorState::Stopped || !isValidConfig(config)) {
+    return;
+  }
+  m_config = config;
+  m_configChecksum = configChecksum(config);
+  if (m_stopReason == StopReason::Unconfigured) {
+    m_stopReason = StopReason::Boot;
+  }
 }
 
 void MotorController::ramp(uint32_t elapsedMs) {
@@ -127,11 +148,11 @@ void MotorController::ramp(uint32_t elapsedMs) {
   // product below in range however long the loop stalled.
   const int32_t fullSwing = static_cast<int32_t>(kWheelMax) - kWheelMin;
   int32_t maxStep = fullSwing;
-  if (m_ramp.rampPerMs != 0) {
+  if (m_config.rampPerMs != 0) {
     const uint32_t elapsed = elapsedMs > static_cast<uint32_t>(fullSwing)
                                  ? static_cast<uint32_t>(fullSwing)
                                  : elapsedMs;
-    const uint32_t step = elapsed * m_ramp.rampPerMs;
+    const uint32_t step = elapsed * m_config.rampPerMs;
     maxStep = step > static_cast<uint32_t>(fullSwing) ? fullSwing : static_cast<int32_t>(step);
   }
   for (size_t i = 0; i < kMotorCount; ++i) {
@@ -141,7 +162,11 @@ void MotorController::ramp(uint32_t elapsedMs) {
 
 void MotorController::stop(StopReason reason) {
   m_state = MotorState::Stopped;
-  m_stopReason = reason;
+  // Unconfigured is the more important thing to report: a Stop changes
+  // nothing about it, and the motors were never running.
+  if (isConfigured()) {
+    m_stopReason = reason;
+  }
   for (size_t i = 0; i < kMotorCount; ++i) {
     m_applied[i] = 0;
   }

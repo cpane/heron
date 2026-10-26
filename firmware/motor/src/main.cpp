@@ -17,20 +17,24 @@
 //     -> FrameParser            bytes to checked frames
 //     -> MotorController        what each command means, the watchdog, the ramp
 //     -> toMotorOutput()        applied value to duty and direction, with the
-//                               platform's sign and dead band
-//     -> L293DShield            the pins
+//                               rig's direction and dead band
+//     -> L293DShield            the pins, through the rig's terminal map
 //   and back:
 //     -> Status and Boot        encoded with Protocol.h, written to Serial
 //
 // Anything here can only be tested on the bench, so this file does as little
 // as possible: read bytes, read the clock, hand the applied values to the
 // driver, write frames, and gather the few facts only the chip knows (reset
-// cause, free RAM, loop time). The numbers that differ between platforms are
-// in PlatformConfig.h.
+// cause, free RAM, loop time).
 //
-// Step 3 of the motor workstream: the motors are driven. With the shield's
-// PWR jumper off and the motor battery on EXT_PWR, a Drive turns wheels.
-// docs/RESUME-motor.md.
+// Nothing rig-specific is compiled in. The rig's numbers -- terminal map,
+// directions, dead band, ramp -- arrive from the Pi in a Configure after
+// every Boot, from the rig's profile (docs/rig-profiles.md). Until then the
+// controller refuses Drive and every motor stays released. One build serves
+// every rig of the platform: the bench rig and the mini robot alike.
+//
+// With the shield's PWR jumper off and the motor battery on EXT_PWR, a
+// configured Drive turns wheels. docs/RESUME-motor.md.
 //
 // Build and flash
 // ---------------
@@ -56,7 +60,6 @@
 #include "L293DShield.h"
 #include "MotorController.h"
 #include "MotorOutput.h"
-#include "PlatformConfig.h"
 #include "heron/motor/FrameParser.h"
 #include "heron/motor/Protocol.h"
 
@@ -78,7 +81,7 @@ using namespace Heron::Motor;
 constexpr uint32_t kBaud = 115200;
 
 FrameParser s_parser;
-MotorController s_controller(RampConfig{kRampPerMs});
+MotorController s_controller;
 L293DShield s_shield;
 uint8_t s_resetFlags = 0;
 uint16_t s_longestLoopMicros = 0;
@@ -121,12 +124,17 @@ void sendStatus() {
   s_longestLoopMicros = 0;  // the field is "since the previous Status"
 }
 
-// The applied values, through the platform's terminal map, sign and dead
-// band, onto the shield. apply() writes only what changed.
+// The applied values, through the rig's terminal map, directions and dead
+// band, onto the shield. Unconfigured, every applied value is 0, so every
+// motor is released. apply() writes only what changed.
 void driveMotors() {
+  const MotorConfig &config = s_controller.getConfig();
   for (size_t i = 0; i < kMotorCount; ++i) {
-    s_shield.set(kMotorTerminal[i],
-                 toMotorOutput(s_controller.getApplied(i), kMotorSign[i], kMinDuty));
+    const bool reversed = ((config.reversed >> i) & 1U) != 0;
+    // Configure's terminals are 1..4 (M1..M4); the shield counts from 0.
+    s_shield.set(static_cast<uint8_t>(config.terminal[i] - 1),
+                 toMotorOutput(s_controller.getApplied(i), reversed, config.minDutyForward[i],
+                               config.minDutyBackward[i]));
   }
   s_shield.apply();
 }

@@ -12,7 +12,8 @@
 
 namespace Heron::Motor {
 
-MotorOutput toMotorOutput(int16_t value, int8_t sign, uint8_t minDuty) {
+MotorOutput toMotorOutput(int16_t value, bool reversed, uint8_t minDutyForward,
+                          uint8_t minDutyBackward) {
   if (value > kWheelMax) {
     value = kWheelMax;
   } else if (value < kWheelMin) {
@@ -22,7 +23,8 @@ MotorOutput toMotorOutput(int16_t value, int8_t sign, uint8_t minDuty) {
     return MotorOutput{};
   }
 
-  const bool forward = (value > 0) != (sign < 0);
+  const bool forward = (value > 0) != reversed;
+  const uint8_t minDuty = value > 0 ? minDutyForward : minDutyBackward;
   // 1..1000, held in 32 bits: the product below reaches about 255 000, far
   // past the AVR's 16-bit int.
   const uint32_t magnitude = static_cast<uint32_t>(value > 0 ? value : -value);
