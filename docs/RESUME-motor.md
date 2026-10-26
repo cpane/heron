@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench: the protocol, the link firmware and the driver layer. `heron_motor` (step 4) is next.
+Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench: the protocol, the link firmware and the driver layer. Rig profiles (step 4) are next, then `heron_motor`.
 
 ## Read this first when resuming
 
@@ -69,7 +69,13 @@ measure it on the hardware before building motor logic on top.
    `motor_link sweep`. Firmware 0.2.0: 339 bytes of RAM, 4.9 KB of flash.
    Passed the step 3 checklist below; the bench's terminal map and dead
    band are in `PlatformConfig.h`.
-4. **`heron_motor`** on the Pi, then the stick mapping and mixing.
+4. **Rig profiles first** (agreed 2026-10-25,
+   [`rig-profiles.md`](rig-profiles.md)): the bench's numbers move from
+   `PlatformConfig.h` into `profiles/bench.conf`, sent to the Arduino by a
+   protocol v2 Configure after every Boot, with a dead band per motor and
+   direction. Its §8 has the order of work.
+5. **`heron_motor`** on the Pi, then the stick mapping and mixing; it loads
+   the profile and owns the Configure handshake.
 
 ## Step 2 bench checklist
 
