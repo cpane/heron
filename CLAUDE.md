@@ -119,6 +119,8 @@ Read before doing motor work:
   protocol version.
 - `docs/motor-design.md` — hardware, firmware layers and toolchain, the
   holonomic mixing on the Pi, the three test platforms.
+- `docs/motor-cpp-design.md` — `heron_motor`, the Pi's motor library:
+  `Motors`, its start-up handshake, and how the robot drives through it.
 
 Motor-only facts:
 
