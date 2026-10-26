@@ -54,7 +54,8 @@ and run over SSH. Nothing is authored on the Pi.
 
 In the commands below, `<user>` is your account on the Pi and `<pi>` its
 address. Use the address of its wired link if it has one: its mDNS name
-(`heron.local`) can resolve to the Wi-Fi address instead.
+(`heron-<suffix>.local`, the suffix being the end of its wired MAC address,
+set by provisioning) can resolve to the Wi-Fi address instead.
 
 ### One-time host setup
 

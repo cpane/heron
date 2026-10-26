@@ -215,7 +215,30 @@ apt-get install -y \
 # Hostname
 #
 
-TARGET_HOSTNAME="${HERON_HOSTNAME:-heron}"
+# Each Pi gets its own name, so several can share a network: "heron-" and the
+# last three bytes of its wired port's MAC address, e.g. heron-9d9324, and
+# its mDNS name heron-9d9324.local. The first three bytes are the vendor's
+# (b8:27:eb on every Pi 3), so they add nothing. The
+# name is the same on every run, so re-provisioning never renames a Pi.
+# HERON_HOSTNAME overrides it when running this script directly.
+mac_suffix() {
+    local address_file="/sys/class/net/${ETH_DEV}/address"
+    if [[ ! -r "${address_file}" ]]; then
+        return 1
+    fi
+    # aa:bb:cc:dd:ee:ff -> ddeeff
+    tr -d ':\n' < "${address_file}" | tail -c 6
+}
+
+if [[ -n "${HERON_HOSTNAME:-}" ]]; then
+    TARGET_HOSTNAME="${HERON_HOSTNAME}"
+elif SUFFIX="$(mac_suffix)" && [[ "${SUFFIX}" =~ ^[0-9a-f]{6}$ ]]; then
+    TARGET_HOSTNAME="heron-${SUFFIX}"
+else
+    echo "ERROR: Cannot read the MAC address of ${ETH_DEV} to name this Pi."
+    echo "  Set HERON_ETH_DEV to the wired interface, or HERON_HOSTNAME to a name."
+    exit 1
+fi
 
 echo
 echo "Setting hostname to '${TARGET_HOSTNAME}'..."
@@ -242,6 +265,11 @@ else
 fi
 
 hostnamectl set-hostname "${TARGET_HOSTNAME}"
+
+# avahi-daemon, which answers for <name>.local, reads the hostname when it
+# starts and does not follow a rename: measured, it went on advertising the
+# old name. try-restart leaves it alone if it is not running.
+systemctl try-restart avahi-daemon.service
 
 #
 # Device access and stable device names
