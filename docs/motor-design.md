@@ -95,13 +95,16 @@ Docker.
   duty and direction)`, `apply()`. The only code that knows the shield's
   wiring, and the swap point when a platform changes driver (§6): another
   driver is another class with the same three calls.
-- **Platform settings, `PlatformConfig.h`** in `src/`: the ramp rate, the
-  dead band, and each protocol motor's shield terminal and sign, one block
-  per `HERON_PLATFORM`.
+- **No rig settings in the firmware.** The ramp rate, the dead band per
+  motor and direction, and each motor's terminal and direction come from
+  the rig's profile on the Pi, in a Configure after every Boot
+  ([`rig-profiles.md`](rig-profiles.md), protocol §4). One build per
+  platform (`uno-l293d`) serves every rig of it.
 - **Arduino-free logic** in `lib/`, tested by `ctest`: `MotorController`
   (what each command does, the watchdog, the Status schedule, the ramp)
-  and `MotorOutput` (a value to a duty and a direction, with the sign and
-  the dead band). Stop and the watchdog release all four motors at once,
+  and `MotorOutput` (a value to a duty and a direction, with the direction
+  flip and the dead band); also Configure: held only while stopped, Drive
+  refused until one arrives. Stop and the watchdog release all four motors at once,
   without the ramp.
 
 The dead band and the ramp stay on the Arduino: the Pi sends the values it
@@ -224,7 +227,6 @@ firmware/motor/              the PlatformIO project
   platformio.ini             pinned versions; one environment per platform
   src/main.cpp               setup()/loop(): serial, clock, Boot and Status
   src/L293DShield.*          the bench shield's driver
-  src/PlatformConfig.h       ramp, dead band, terminal and sign per platform
   lib/MotorController/       the logic, no Arduino code; also built by CMake:
                              MotorController, MotorOutput
 cpp/include/heron/motor/     MotorPort: the Pi's serial port to the Arduino

@@ -1,10 +1,9 @@
 # Motor link protocol — Pi to Arduino
 
 The wire format between the Pi and the Arduino motor controller, over USB
-serial (`/dev/arduino`). **Version 1, written in `protocol/motor/` and
-tested on the host (2026-10-25); not yet on a real link.** Nothing here has
-been measured; when it is, tag the result **[ours]** as in the other
-workstreams' references.
+serial (`/dev/arduino`). **Version 2, written in `protocol/motor/`,
+tested on the host and run on the bench rig (2026-10-25).** Measured
+results are in [`RESUME-motor.md`](RESUME-motor.md), tagged **[ours]**.
 
 The protocol is the contract between the two sides, and both are written
 here: the Pi's holonomic control and the Arduino firmware. It must work
@@ -72,7 +71,7 @@ Every message, both ways:
 | Start byte | 1 | `0xC5`, for resynchronising after noise |
 | Length | 1 | Type, version and payload: 2 plus the payload length, at most 62 |
 | Message type | 1 | Below |
-| Protocol version | 1 | `1`. So a format change fails loudly, not silently |
+| Protocol version | 1 | `2`. So a format change fails loudly, not silently: a board with old firmware counts the Pi's frames as version mismatches, and its Boot reports the old version |
 | Payload | 0–60 | Per message type, §4 and §5 |
 | Checksum | 2 | CRC-16/CCITT-FALSE over everything before it, start byte included |
 
@@ -89,7 +88,8 @@ Chosen 2026-10-25, when `protocol/motor/` was written:
   | `0x01` | Drive | Pi to Arduino | 9 | 15 |
   | `0x02` | Stop | Pi to Arduino | 1 | 7 |
   | `0x03` | Info request | Pi to Arduino | 1 | 7 |
-  | `0x81` | Status | Arduino to Pi | 33 | 39 |
+  | `0x04` | Configure | Pi to Arduino | 16 | 22 |
+  | `0x81` | Status | Arduino to Pi | 35 | 41 |
   | `0x82` | Boot | Arduino to Pi | 12 | 18 |
 
 - **Checksum: CRC-16/CCITT-FALSE** (polynomial `0x1021`, initial value
@@ -97,7 +97,7 @@ Chosen 2026-10-25, when `protocol/motor/` was written:
   CRC rather than a sum because it also catches swapped and shifted bytes;
   the tests check that every single-bit error in a frame is caught. Computed
   bit by bit: a lookup table would take 512 of the Uno's 2 KB of RAM.
-- **Payloads up to 60 bytes,** though version 1's largest is 33, so a longer
+- **Payloads up to 60 bytes,** though the largest is Status's 35, so a longer
   frame from a later version is counted as a version mismatch, not
   discarded as noise.
 
@@ -109,17 +109,50 @@ another version is counted in Status and not acted on.
 The worked example: Drive, sequence 7, wheels 1000, −1000, 197, −1:
 
 ```
-C5 0B 01 01 07 E8 03 18 FC C5 00 FF FF 16 98
+C5 0B 01 02 07 E8 03 18 FC C5 00 FF FF D9 29
 ```
 
-`C5` start, `0B` length 11, `01` Drive, `01` version, `07` sequence, then
+`C5` start, `0B` length 11, `01` Drive, `02` version, `07` sequence, then
 the four wheels (`C5 00` is 197: a start byte inside a payload is harmless,
-since the checksum decides), then the CRC `0x9816`.
+since the checksum decides), then the CRC `0x29D9`.
+
+**Version history.** 1 (2026-10-25): Drive, Stop, Info, Status, Boot.
+2 (2026-10-25, before anything was released): Configure, the unconfigured
+state, Status's configuration checksum, and Boot's platform naming the
+hardware design rather than the rig ([`rig-profiles.md`](rig-profiles.md)).
+Bumped although nothing was released, because flashing is a separate step
+from deploying: a stale board must say so, not misread frames.
 
 All multi-byte fields are little-endian. Counters only count up and wrap;
 the receiver takes differences.
 
 ## 4. Pi to Arduino
+
+### Configure, after every Boot
+
+The rig's motor calibration, from the `[motor]` section of its profile
+([`rig-profiles.md`](rig-profiles.md)). The firmware holds nothing
+rig-specific: **from every reset until a Configure is accepted, it refuses
+Drive and keeps the motors released**, and Status says *unconfigured*.
+
+| Field | Size | Value |
+|---|---|---|
+| Sequence | 1 | As for Drive |
+| Terminal, motor 1 to 4 | 4 × 1 | The driver terminal each motor is on, 1–4 for M1–M4, each once |
+| Reversed | 1 | Bit 0 for motor 1 to bit 3 for motor 4: wired backwards, so its driver direction is flipped. Bits 4–7 zero |
+| Ramp | 2 | 0–2000 wheel units per millisecond; 0 is no ramp |
+| Minimum duty forward, motor 1 to 4 | 4 × 1 | PWM duty 0–255 for the smallest positive value: the dead band |
+| Minimum duty backward, motor 1 to 4 | 4 × 1 | The same for negative values |
+
+- **Accepted only while stopped, and only if valid** (terminals a
+  permutation of 1–4, no stray reversed bits, ramp in range). Otherwise it
+  is ignored and the previous calibration stays.
+- **The Pi checks it took:** Status carries the checksum of the
+  calibration held (§5), and the Pi compares it with
+  `configChecksum()` of what it sent.
+- **After any Boot, the Pi sends it again.** A reset mid-drive (a
+  brown-out) loses it, so the motors stay released until the Pi notices
+  the Boot and configures again; they never run on defaults.
 
 ### Drive
 
@@ -137,7 +170,8 @@ the receiver takes differences.
 ### Stop
 
 The header, a sequence and the checksum; no motor fields. All four motors
-are released.
+are released. On an unconfigured board the stop reason stays
+*unconfigured*: that is the more useful thing to report.
 
 ### Info request
 
@@ -152,7 +186,7 @@ The header, a sequence and the checksum. The Arduino answers with Boot
 |---|---|---|
 | Last sequence | 1 | Sequence of the newest valid command; the Pi measures round-trip time from it |
 | State | 1 | 0 stopped, 1 running |
-| Stop reason | 1 | 0 none (running), 1 boot (no command yet), 2 Stop message, 3 watchdog |
+| Stop reason | 1 | 0 none (running), 1 boot (configured, no Drive yet), 2 Stop message, 3 watchdog, 4 unconfigured (no Configure since reset: Drive refused) |
 | Target, motor 1 to 4 | 4 × 2 | The values last commanded |
 | Applied, motor 1 to 4 | 4 × 2 | Where the ramp has got to |
 | Battery | 2 | Motor supply in millivolts, from a divider on A0; 0 if not fitted |
@@ -162,8 +196,9 @@ The header, a sequence and the checksum. The Arduino answers with Boot
 | Version mismatches | 2 | Since boot |
 | Bytes discarded | 2 | Skipped while resynchronising, since boot |
 | Longest loop | 2 | Microseconds, since the previous Status |
+| Configuration checksum | 2 | CRC-16 of the Configure fields held, the sequence left out; 0 while unconfigured (a CRC of 0 is sent as 1) |
 
-About 40 bytes, 400 bytes a second at 10 Hz: under 4% of a 115 200-baud
+About 41 bytes, 410 bytes a second at 10 Hz: under 4% of a 115 200-baud
 link. The L293D gives no fault signal (its thermal shutdown is invisible to
 the Arduino), so there is no fault field for the bench.
 
@@ -176,7 +211,7 @@ example when the Pi opens the port after the Arduino is already running.
 |---|---|---|
 | Firmware version | 3 | Major, minor, patch |
 | Protocol version | 1 | The highest this firmware speaks |
-| Platform ID | 1 | 0 unknown, 1 bench, 2 mini, 3 full-size |
+| Platform ID | 1 | The hardware design the firmware was built for: 0 unknown, 1 `uno-l293d` (the bench rig and the mini robot). Not the rig: that is the Pi's ([`rig-profiles.md`](rig-profiles.md)) |
 | Reset cause | 1 | Bits: `0x01` power-on, `0x02` external, `0x04` brown-out, `0x08` watchdog. A brown-out means motor current pulled the Uno's supply down. The bits are the ATmega328P's MCUSR, so the Uno sends it as it is. The bench Uno's bootloader clears MCUSR before the firmware reads it, so it always sends 0 **[ours]** |
 | Uptime | 4 | Milliseconds since boot |
 | Free RAM | 2 | Bytes between the heap and the stack, of 2 KB |
@@ -210,5 +245,6 @@ No C++ standard library, so the AVR compiler can build it
 ([`motor-design.md`](motor-design.md) §3). On the host,
 `heron_motor_protocol_nostd` compiles both headers with `-nostdinc++`, so
 a standard header slipping in fails the host build. `motor_protocol_test`
-(`ctest`) covers the worked example above, every message's round trip,
-clamping, and the parser's resynchronising.
+(`ctest`) covers the worked examples (Drive above; a Configure built the
+same way, in Python), every message's round trip, the configuration
+checksum and validity, clamping, and the parser's resynchronising.

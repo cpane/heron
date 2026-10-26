@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench: the protocol, the link firmware and the driver layer. Rig profiles (step 4) are next, then `heron_motor`.
+Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench; step 4, rig profiles, parts 1 and 2 built (part 2's motor checks pending). Then `heron_motor`.
 
 ## Read this first when resuming
 
@@ -72,10 +72,15 @@ measure it on the hardware before building motor logic on top.
 4. **Rig profiles first** (agreed 2026-10-25,
    [`rig-profiles.md`](rig-profiles.md)): the bench's numbers move from
    `PlatformConfig.h` into `profiles/bench.conf`, sent to the Arduino by a
-   protocol v2 Configure after every Boot, with a dead band per motor and
+   Configure message after every Boot, with a dead band per motor and
    direction. Its §8 has the order of work. **Part 1, the profile and the
    rig name, built** (2026-10-25): `heron_profile`, `profiles/bench.conf`,
-   `rig_profile`, `set_rig.sh`. Part 2, protocol v2 and the firmware, next.
+   `rig_profile`, `set_rig.sh`. **Part 2, Configure (protocol version 2),
+   built** (2026-10-25): the firmware (0.3.0) starts unconfigured and
+   refuses Drive until the Pi sends the profile's motor section; Status
+   reports its checksum; `PlatformConfig.h` is gone and the build is per
+   platform (`uno-l293d`). `motor_link` configures from the profile. Its
+   bench checks are below.
 5. **`heron_motor`** on the Pi, then the stick mapping and mixing; it loads
    the profile and owns the Configure handshake.
 
@@ -154,3 +159,28 @@ EXT_PWR **[ours]**:
 | 5 | 0 to 1000: applied 368, 768, 1000 at 100 ms intervals; a smooth spin-up, no reset |
 | 6 | `watchdog 600 600 600 600`: stop reported 303 ms after the last Drive, applied straight to 0, wd 1; the wheels coasted to a stop |
 | 7 | Longest loop about 810 µs while driving, 620 µs stopped (the duty arithmetic: 32-bit division, four times a pass); free RAM 1461 bytes |
+
+## Step 4 part 2 bench checklist: Configure
+
+Firmware 0.3.0 flashed; the Pi set to rig `bench` (`set_rig.sh`), profiles
+deployed with `deploy_cpp.sh`. Wheels off the ground, PWR jumper off, motor
+battery on EXT_PWR for checks 4 to 6.
+
+| # | Check | Command | Expect |
+|---|---|---|---|
+| 1 | Boot | `motor_link info` | firmware 0.3.0, protocol 2, platform uno-l293d; Status stopped, *unconfig*, cfg 0000 |
+| 2 | Unconfigured refuses Drive | `motor_link drive 600 600 600 600 --unconfigured` | No wheel moves; target stays 0; still *unconfig* after the Stop |
+| 3 | Configure takes | `motor_link drive 0 0 0 0` | "Configured: checksum ... confirmed"; Status cfg the same |
+| 4 | Configured drives as in step 3 | `motor_link drive 600 0 0 0`, then each other motor | Front-left, front-right, back-right, back-left, all forward |
+| 5 | Per-motor dead band | `motor_link drive 1 1 1 1`, then `-1 -1 -1 -1` | All four turn slowly both ways |
+| 6 | A reset mid-drive releases the motors | `motor_link drive 600 600 600 600 --seconds 10`; press the Uno's reset button midway | Wheels stop at the reset; "Boot mid-run ... Configuring again", then they run again |
+| 7 | A bad profile | `motor_link drive 0 0 0 0 --profile /nonexistent.conf` | An error before the port opens; the Uno not reset |
+
+Results, 2026-10-25 **[ours]**, checks 1, 2, 3 and 7 (no wheel turning):
+
+| # | Measured |
+|---|---|
+| 1 | firmware 0.3.0, protocol 2, platform uno-l293d, Boot 1522 ms after opening; *unconfig*, cfg 0000 |
+| 2 | 50 Drives refused: target 0, applied 0, *unconfig* throughout and after the Stop |
+| 3 | Checksum 3B1B confirmed; `noise` also passes when configured |
+| 7 | `cannot read /nonexistent.conf`, before the port opens |

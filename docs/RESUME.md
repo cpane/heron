@@ -9,7 +9,7 @@ another's. Start from the workstream you are picking up.
 | LiDAR (RPLIDAR A1M8) | [`RESUME-lidar.md`](RESUME-lidar.md) | paused 2026-10-04 at a clean stopping point | lifecycle hardening (its §9) |
 | Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | paused 2026-10-12 at a clean stopping point | optional checks only (its "Picking up") |
 | Odometry (SparkFun OTOS, I²C) | [`RESUME-odometry.md`](RESUME-odometry.md) | paused 2026-10-18 at a clean stopping point | optional checks only (its "Picking up") |
-| Motor controller (Arduino, 4 motors) | [`RESUME-motor.md`](RESUME-motor.md) | rig profiles part 1 built 2026-10-25 | step 4 part 2, protocol v2 ([`rig-profiles.md`](rig-profiles.md) §8) |
+| Motor controller (Arduino, 4 motors) | [`RESUME-motor.md`](RESUME-motor.md) | rig profiles parts 1 and 2 built 2026-10-25 | the Configure bench checks with motors turning (its "Step 4 part 2 bench checklist") |
 
 Planned, not started: the robot design that ties the workstreams together. The three sensor workstreams are paused; the motor controller is next, since the robot cannot move without it.
 

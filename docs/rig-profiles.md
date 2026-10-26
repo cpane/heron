@@ -2,7 +2,7 @@
 
 How each physical Heron is described and calibrated, so the same code runs
 on every one of them. **Agreed 2026-10-25; §8 step 1 (the profile and the
-rig name) built, the rest not yet.** The
+rig name) and step 2 (Configure) built; step 3 not yet.** The
 calibration lives on the Pi and is sent to the Arduino at connect (§4);
 every Pi has its own name (PR #23); the review points are settled (§9).
 
@@ -93,7 +93,7 @@ load `~/heron/profiles/$(cat ~/heron/rig).conf`, or the file named by a
 `--profile` option. No sudo, and the hostname (`heron-<mac>`) stays a
 network name only, never written into the repository.
 
-## 4. Getting the numbers to the Arduino: protocol v2
+## 4. Getting the numbers to the Arduino: Configure (protocol version 2)
 
 The Arduino holds the motor section in RAM, sent by the Pi after every
 Boot. Nothing is stored on the Arduino and nothing rig-specific is compiled
@@ -179,10 +179,11 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
    step 3 measurements; the `rig_profile` tool (`check`, `show`), with a
    ctest that checks every file in `profiles/`; `set_rig.sh`;
    `deploy_cpp.sh` copies `profiles/`.
-2. **Protocol v2 and the firmware:** Configure, the unconfigured state, the
-   checksum; `PlatformConfig.h` removed; `motor_link --profile` and its
-   overrides. Bench checks: unconfigured refuses Drive; configured drives
-   as step 3 did; a reset mid-drive releases the motors.
+2. **Protocol version 2 and the firmware: built** (2026-10-25). Configure,
+   the unconfigured state, the checksum; `PlatformConfig.h` removed, the
+   environment renamed `uno-l293d`; firmware 0.3.0; `motor_link` configures
+   from the profile, with `--profile`, `--min-duty` and `--unconfigured`.
+   Bench checks in `RESUME-motor.md`.
 3. **The calibration document**, and `motor_link calibrate` if it earns its
    place.
 4. Then motor step 4, `heron_motor`, on top.
@@ -195,5 +196,5 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
 3. **Configure only while stopped** (§4): a calibration tool stops first.
 4. **Tracking:** profiles cross workstreams, so this document and the
    profile format are shared, like `cpp-build.md`, and listed in
-   `CLAUDE.md`. The motor parts (protocol v2, the firmware) are motor steps,
+   `CLAUDE.md`. The motor parts (Configure, the firmware) are motor steps,
    recorded in `RESUME-motor.md`.
