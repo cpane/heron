@@ -119,8 +119,9 @@ Docker. The Arduino is plugged into the Pi, which writes the firmware to it.
     scripts/set_rig.sh <user>@<pi> bench
 
 Each physical robot has its own Pi and its own profile in `profiles/`: the
-numbers measured on it (`docs/rig-profiles.md`). `deploy_cpp.sh` copies the
-profiles; this names the one the Pi uses. Check with
+numbers measured on it (`docs/rig-profiles.md`; how to measure a new one:
+`docs/rig-calibration.md`). `deploy_cpp.sh` copies the profiles; this names
+the one the Pi uses. Check with
 `scripts/deploy_cpp.sh <user>@<pi> rig_profile show`.
 
 ### Retrieve captured data

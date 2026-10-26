@@ -2,7 +2,8 @@
 
 How each physical Heron is described and calibrated, so the same code runs
 on every one of them. **Agreed 2026-10-25; §8 step 1 (the profile and the
-rig name) and step 2 (Configure) built; step 3 not yet.** The
+rig name), step 2 (Configure) and step 3 (the calibration procedure)
+done.** The
 calibration lives on the Pi and is sent to the Arduino at connect (§4);
 every Pi has its own name (PR #23); the review points are settled (§9).
 
@@ -136,7 +137,7 @@ A small library, `heron_profile`: reads and validates a profile file into a
 plain struct, with ctest tests for the format and its errors. Pure, like
 the protocol parsers: no I/O beyond reading the file.
 
-- `heron_motor` (motor step 4) loads the motor section and owns the
+- `heron_motor` (motor step 5) loads the motor section and owns the
   handshake: wait for Boot, send Configure, check the checksum in Status,
   and repeat after any Boot.
 - The Pi-side motor settings (geometry, maximum speed) come from the same
@@ -145,9 +146,9 @@ the protocol parsers: no I/O beyond reading the file.
 
 ## 6. Calibrating a rig
 
-A procedure document, `docs/rig-calibration.md`, one section per profile
-section, each saying what to measure, with which tool, and what to write
-where. The motor section is what step 3 did by hand:
+The procedure is [`rig-calibration.md`](rig-calibration.md), one section
+per profile section, each saying what to measure, with which tool, and
+what to write where. The motor section is what step 3 did by hand:
 
 | # | Measure | How |
 |---|---|---|
@@ -156,9 +157,11 @@ where. The motor section is what step 3 did by hand:
 | 3 | Dead band, per motor and direction | `motor_link sweep --min-duty 0`; first steady turn from rest, plus a margin |
 | 4 | Ramp | step changes on the floor (the mini, the robot): firm, no jolt, no reset |
 
-Later, `motor_link calibrate` can walk through these and print a ready
-`[motor]` block to paste into the profile. The person calibrating commits
-the profile, with the record filled in.
+A `motor_link calibrate` that walks through these and prints a ready
+`[motor]` block was considered and not built: the steps need a person
+watching the wheels anyway, and the document is enough until calibrating
+becomes routine. The person calibrating commits the profile, with the
+record filled in.
 
 A rig is recalibrated when its hardware changes (motors, wheels, driver,
 battery type) or when its behaviour drifts (a wheel that no longer starts).
@@ -184,9 +187,11 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
    environment renamed `uno-l293d`; firmware 0.3.0; `motor_link` configures
    from the profile, with `--profile`, `--min-duty` and `--unconfigured`.
    Checked on the bench, including a reset mid-drive (`RESUME-motor.md`).
-3. **The calibration document**, and `motor_link calibrate` if it earns its
-   place.
-4. Then motor step 4, `heron_motor`, on top.
+3. **The calibration document: written** (2026-10-25),
+   [`rig-calibration.md`](rig-calibration.md). `motor_link calibrate` not
+   built (§6). Open: how to measure the dead band under load, on a rig
+   with wheels on the floor; settled when the mini robot is calibrated.
+4. Then motor step 5, `heron_motor`, on top.
 
 ## 9. Decisions from review (2026-10-25)
 

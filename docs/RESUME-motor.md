@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench; step 4, rig profiles, parts 1 and 2 done and checked on the bench. Next: part 3 (the calibration document), then `heron_motor`.
+Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Next: `heron_motor` (step 5).
 
 ## Read this first when resuming
 
@@ -81,7 +81,10 @@ measure it on the hardware before building motor logic on top.
    reports its checksum; `PlatformConfig.h` is gone and the build is per
    platform (`uno-l293d`). `motor_link` configures from the profile, and
    again after a mid-run Boot. Passed its bench checklist below, including
-   a reset mid-drive.
+   a reset mid-drive. **Part 3, the calibration procedure, written**
+   (2026-10-25): [`rig-calibration.md`](rig-calibration.md), the bench's
+   calibration as steps for the next rig. Open: measuring the dead band
+   under load, settled when the mini robot is calibrated.
 5. **`heron_motor`** on the Pi, then the stick mapping and mixing; it loads
    the profile and owns the Configure handshake.
 

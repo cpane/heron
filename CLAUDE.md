@@ -19,7 +19,7 @@ Workstreams pause and resume independently, so their context must not mix:
   workstream's progress, decisions or open items in another's resume file or
   docs. Shared facts (hardware, build chain, conventions) go in this file,
   `docs/cpp-build.md`, or `docs/rig-profiles.md` (how each physical rig is
-  described and calibrated).
+  described) and `docs/rig-calibration.md` (how to measure one).
 - **Name its documents `docs/<area>-*.md`**, and its memory entries with the
   area as a prefix (`lidar-...`). General memories carry no prefix.
 - **A new workstream** gets a resume file, a row in the index, and a section
