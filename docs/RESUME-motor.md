@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Steps 5 and 6 built: `heron_motor` (checked on the bench) and driving by hand with the remote (`heron_teleop`, its bench check next).
+Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Steps 5 and 6 done and checked on the bench: `heron_motor`, and driving by hand with the remote (`heron_teleop`). Next: the mini robot on the floor.
 
 ## Read this first when resuming
 
@@ -97,8 +97,8 @@ measure it on the hardware before building motor logic on top.
 6. **Driving by hand: built** (2026-10-25). `heron_drive` (sticks to body
    velocity, mecanum mixing, the arming rule), tested by `drive_test`;
    `heron_teleop` runs RemoteControl, the mixing and Motors at 50 Hz, with
-   `--dry-run` to read the sticks without the motors. Next: its bench
-   check, wheels off the ground (below), then the mini robot on the floor. `Motors`: `start()` blocks
+   `--dry-run` to read the sticks without the motors. Passed its bench
+   checklist below. Next: the mini robot on the floor. `Motors`: `start()` blocks
    until the Arduino is configured; the robot's loop calls `drive()` every
    20 ms (no heartbeat thread); a reader thread publishes Status and
    configures again after a reset. Then the stick mapping and mixing.
@@ -232,3 +232,16 @@ ssh -t <user>@<pi> '~/heron/bin/heron_teleop'
 Motor numbers are protocol order: 1 front-left, 2 front-right, 3
 back-right, 4 back-left. A wrong sign in 4 or 5 mirrors the robot on the
 floor without any error, which is why each wheel is checked here first.
+
+Results, 2026-10-25 **[ours]**: all nine pass, after one fix.
+
+| # | Measured |
+|---|---|
+| 1, 2 | Arming with the throttle half up: ARMED, nothing turned until the throttle had been at the bottom |
+| 3 | First run: right stick up gave vx −0.55, all wheels backward. **Right stick up reads low on CH2** on our transmitter; CH1 and CH4 read as expected. Fixed in `StickConfig` (`forwardReadsLow`). Then vx +0.52, wheels + + + +, all forward |
+| 4 | vy +0.52, wheels − + − +, matching on the bench |
+| 5 | wz +0.50, wheels − + + −, matching on the bench |
+| 6 | vx +0.48, vy +0.47: wheels 0.00 +0.95 0.00 +0.95. A diagonal runs its two wheels at nearly twice a straight move's value at the same throttle (the mixing, as designed); the other two at ±0.01 still get the dead band's minimum duty, so a stick slightly off the diagonal makes them creep |
+| 7 | SwA up while driving: stopped at once, DISARMED |
+| 8 | Re-armed with the throttle up: nothing until it came down |
+| 9 | Transmitter off while driving: stopped |
