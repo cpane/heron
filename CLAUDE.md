@@ -152,6 +152,8 @@ from scripts in this repository.
   Builds via the top-level `CMakeLists.txt`; see `docs/cpp-build.md`.
 - `third_party/` — vendor code as pinned git submodules. Our build
   descriptions live in `third_party/CMakeLists.txt`, outside the submodules.
+- `profiles/` — one file per physical rig: its measured numbers
+  (`docs/rig-profiles.md`), deployed with the C++ binaries.
 - `scripts/` — host-side drivers. `target/` — things that run on the Pi.
 
 ## Hardware
@@ -194,6 +196,7 @@ scripts/build_cpp.sh                                    # C++ for the Pi, in a c
 scripts/deploy_cpp.sh      <user>@<pi> <binary> [args]
 scripts/build_firmware.sh                               # Arduino firmware, in a container
 scripts/flash_firmware.sh  <user>@<pi>         # avrdude on the Pi
+scripts/set_rig.sh         <user>@<pi> <rig>   # once per Pi: which profile
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
 ```
 

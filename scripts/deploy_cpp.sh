@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Push the compiled C++ binaries to the target, and optionally run one.
+# Push the compiled C++ binaries to the target, with the rig profiles they
+# read, and optionally run one.
 #
 # The C++ counterpart of deploy_pi.sh. Kept separate rather than folded into
 # it: deploy_pi.sh mirrors python/ with --delete, and pointing that at a
@@ -33,11 +34,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 LOCAL_BIN_DIR="${REPO_ROOT}/build-pi/bin"
+LOCAL_PROFILE_DIR="${REPO_ROOT}/profiles"
 
 # Beside the Python tree, not inside it: deploy_pi.sh mirrors python/ with
 # --delete and would remove anything it finds there that is not in the repo.
 REMOTE_ROOT="heron"
 REMOTE_BIN_DIR="${REMOTE_ROOT}/bin"
+# Every rig's profile, not only this Pi's: which one is used is ~/heron/rig,
+# set by set_rig.sh (docs/rig-profiles.md).
+REMOTE_PROFILE_DIR="${REMOTE_ROOT}/profiles"
 
 if [[ ! -d "${LOCAL_BIN_DIR}" ]]; then
     echo "ERROR: no build output found at:"
@@ -93,7 +98,7 @@ fi
 
 echo
 echo "Creating remote directories..."
-ssh "${TARGET}" "mkdir -p '${REMOTE_BIN_DIR}'"
+ssh "${TARGET}" "mkdir -p '${REMOTE_BIN_DIR}' '${REMOTE_PROFILE_DIR}'"
 
 echo
 echo "Syncing binaries..."
@@ -107,6 +112,15 @@ rsync -rlptvz --delete \
     -e ssh \
     "${LOCAL_BIN_DIR}/" \
     "${TARGET}:${REMOTE_BIN_DIR}/"
+
+echo
+echo "Syncing rig profiles..."
+# With the binaries, so a Pi always has the profiles of the code it runs;
+# --delete for the same reason as above.
+rsync -rlptvz --delete \
+    -e ssh \
+    "${LOCAL_PROFILE_DIR}/" \
+    "${TARGET}:${REMOTE_PROFILE_DIR}/"
 
 if [[ $# -eq 0 ]]; then
     echo

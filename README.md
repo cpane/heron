@@ -114,6 +114,15 @@ hardware, build natively and run the test suites:
 The compiler lives in a container, as for the Pi, so this needs only
 Docker. The Arduino is plugged into the Pi, which writes the firmware to it.
 
+### Tell each Pi which rig it is (once per Pi)
+
+    scripts/set_rig.sh <user>@<pi> bench
+
+Each physical robot has its own Pi and its own profile in `profiles/`: the
+numbers measured on it (`docs/rig-profiles.md`). `deploy_cpp.sh` copies the
+profiles; this names the one the Pi uses. Check with
+`scripts/deploy_cpp.sh <user>@<pi> rig_profile show`.
+
 ### Retrieve captured data
 
     scripts/fetch_captures.sh <user>@<pi>
