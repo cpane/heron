@@ -146,7 +146,9 @@ The Pi never builds anything; it only runs `avrdude` and `motor_link`.
 
 ## 4. Holonomic mixing, on the Pi
 
-Decided 2026-10-24. All the motion maths lives in one place and one
+Decided 2026-10-24; built 2026-10-25 as `heron_drive`
+(`cpp/include/heron/drive/Drive.h`: `sticksToVelocity()`, `mix()`,
+`ArmGate`) and run by `heron_teleop`, the first driving program. All the motion maths lives in one place and one
 language, tested on the Mac with `ctest` rather than reflashed. The OTOS
 feedback that will close the loop is on the Pi, and the correction has to
 happen before the mixing. Per-wheel trims change without a reflash.
@@ -161,6 +163,17 @@ happen before the mixing. Per-wheel trims change without a reflash.
 | Mix | The formulas below, then scale all four by the largest if any exceeds 1, so the direction is kept |
 | Send | `heron_motor`: Drive, four values × 1000, rounded and clamped |
 | Apply (Arduino) | Check the frame, reset the watchdog, convert, ramp, drive the shield |
+
+Settled when it was built (2026-10-25):
+
+- **Arming needs the throttle at the bottom.** The throttle stick does not
+  spring back, so after SwA arms nothing moves until the throttle has been
+  seen at or below 5%; disarming, radio loss or a stale link closes it
+  again (`ArmGate`).
+- **Dead zone:** 30 counts around each stick's centre, 3% of its travel.
+- **Turn gain 1.0** until tuned on the mini robot.
+- These are constants in `StickConfig` for now; the turn gain moves to the
+  rig profile with the mini's geometry.
 
 ### Stick mapping
 

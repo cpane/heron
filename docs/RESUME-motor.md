@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Step 5, `heron_motor`, built and checked on the bench rig. Next: the stick mapping and holonomic mixing on the Pi, so the remote drives the wheels.
+Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Steps 5 and 6 built: `heron_motor` (checked on the bench) and driving by hand with the remote (`heron_teleop`, its bench check next).
 
 ## Read this first when resuming
 
@@ -93,7 +93,12 @@ measure it on the hardware before building motor logic on top.
    reset pressed mid-run, the snapshot went not OK (stale, age 384 ms),
    the reset was counted, the library configured the board again, and the
    wheels ran on: 47 of 750 polls not OK, about 0.94 s from the press to
-   configured, nearly all of it the bootloader. `Motors`: `start()` blocks
+   configured, nearly all of it the bootloader.
+6. **Driving by hand: built** (2026-10-25). `heron_drive` (sticks to body
+   velocity, mecanum mixing, the arming rule), tested by `drive_test`;
+   `heron_teleop` runs RemoteControl, the mixing and Motors at 50 Hz, with
+   `--dry-run` to read the sticks without the motors. Next: its bench
+   check, wheels off the ground (below), then the mini robot on the floor. `Motors`: `start()` blocks
    until the Arduino is configured; the robot's loop calls `drive()` every
    20 ms (no heartbeat thread); a reader thread publishes Status and
    configures again after a reset. Then the stick mapping and mixing.
@@ -201,3 +206,29 @@ Results, 2026-10-25 **[ours]**: all seven pass.
 | 5 | All four turn slowly at 1 and at −1: the per-motor, per-direction dead band |
 | 6 | Two presses of the shield's reset during a 600 drive. Each time: Boot with *unconfig*, checksum 0000, applied 0; `motor_link` configured again 9 and 17 ms after the Boot; running again within 100 ms, ramping up. Status went quiet for 2.4 s and 1.1 s (the bootloader's wait runs from the button's release). Drives sent into the bootloader did no harm: no checksum or framing errors after |
 | 7 | `cannot read /nonexistent.conf`, before the port opens |
+
+## Step 6 bench checklist: driving by hand
+
+Wheels off the ground, PWR jumper off, motor battery on EXT_PWR; the
+transmitter on, SwA up (disarmed). From a second terminal, so the status
+line shows live:
+
+```
+ssh -t <user>@<pi> '~/heron/bin/heron_teleop'
+```
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Throttle half up, then SwA down | ARMED: nothing turns |
+| 2 | Throttle to the bottom, then up a little | DRIVING; nothing turns until a stick moves |
+| 3 | Right stick up | All four forward |
+| 4 | Right stick left | 1 and 3 backward, 2 and 4 forward (strafe left) |
+| 5 | Left stick left | 1 and 4 backward, 2 and 3 forward (anticlockwise) |
+| 6 | Right stick up and left together | 2 and 4 forward, 1 and 3 still (a diagonal) |
+| 7 | SwA up while driving | All stop at once; DISARMED |
+| 8 | Arm again with the throttle up | ARMED, nothing turns until the throttle comes down |
+| 9 | Transmitter off while driving | All stop within about 1 s (the receiver fails SwA to disarmed) |
+
+Motor numbers are protocol order: 1 front-left, 2 front-right, 3
+back-right, 4 back-left. A wrong sign in 4 or 5 mirrors the robot on the
+floor without any error, which is why each wheel is checked here first.

@@ -195,6 +195,9 @@ heron_motor_port          the Pi's serial port to the Arduino
 heron_motor               Motors: start-up handshake, reader thread, drive();
                           what robot code links (motor-cpp-design.md)
 
+heron_drive               sticks to body velocity, mecanum mixing, the
+                          arming rule; pure (motor-design.md §4)
+
 heron_profile             a rig's profile (profiles/<rig>.conf), read and
                           checked, and which rig a Pi is (rig-profiles.md)
 ```
@@ -211,6 +214,8 @@ include path. The boundary is enforced by the build. Rationale in
 | `scan_test`, `replay_test`, `scan_builder_test`, `sector_check_test` | `cpp/tests/` | unit tests, run by `ctest`; no hardware, no recordings |
 | `ibus_parser_test`, `normalize_test`, `failsafe_test`, `remote_control_test` | `cpp/tests/` | remote control unit tests (iBUS parser, link rule, normalization, failsafe detection, `RemoteControl` over a pty), run by `ctest` |
 | `motor_protocol_test`, `motor_controller_test` | `cpp/tests/` | the motor link protocol and frame parser, and the firmware's logic, run by `ctest` |
+| `drive_test` | `cpp/tests/` | sticks to body velocity, the mixing as the bench's wheel-by-wheel checks, the arming rule; run by `ctest` |
+| `heron_teleop` | `cpp/tools/` | drives Heron with the remote: RemoteControl, `heron_drive` and Motors at 50 Hz; `--dry-run` without the motors |
 | `motors_test` | `cpp/tests/` | `Motors` against a fake Arduino on a pty that runs the firmware's own logic, run by `ctest` |
 | `motor_adapter` | `cpp/probes/` | `Motors` live on the board, as a 50 Hz robot loop sees it |
 | `rig_profile_test` | `cpp/tests/` | reading and checking rig profiles, every rule, run by `ctest` |
