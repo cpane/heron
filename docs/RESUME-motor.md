@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Next: `heron_motor` (step 5), designed in `motor-cpp-design.md`.
+Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Step 5, `heron_motor`, built; its bench check with the wheels turning is next.
 
 ## Read this first when resuming
 
@@ -85,8 +85,11 @@ measure it on the hardware before building motor logic on top.
    (2026-10-25): [`rig-calibration.md`](rig-calibration.md), the bench's
    calibration as steps for the next rig. Open: measuring the dead band
    under load, settled when the mini robot is calibrated.
-5. **`heron_motor`: designed, not built** (2026-10-25):
-   [`motor-cpp-design.md`](motor-cpp-design.md). `Motors`: `start()` blocks
+5. **`heron_motor`: built** (2026-10-25):
+   [`motor-cpp-design.md`](motor-cpp-design.md). `motors_test` (45 checks,
+   against a fake board running the firmware's logic) passes on the host
+   and the Pi; `motor_adapter` started it on the bench rig in 1627 ms,
+   250 polls all OK. `Motors`: `start()` blocks
    until the Arduino is configured; the robot's loop calls `drive()` every
    20 ms (no heartbeat thread); a reader thread publishes Status and
    configures again after a reset. Then the stick mapping and mixing.

@@ -135,6 +135,9 @@ Motor-only facts:
   flashed through the Pi; nothing for it is installed on the host. Its
   logic (`firmware/motor/lib/`) has no Arduino code and is tested by
   `ctest`, like the Pi's code.
+- Robot code links **`heron_motor`** (`Motors`: `start()` blocks until the
+  Arduino is configured; the robot's loop calls `drive()` every 20 ms, the
+  heartbeat). Read `docs/motor-cpp-design.md` before changing it.
 - The firmware holds no rig-specific numbers: after every reset it refuses
   Drive until the Pi sends Configure with the rig's profile
   (`profiles/<rig>.conf`, `docs/rig-profiles.md`). One build per platform
