@@ -1,6 +1,6 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench; step 4, rig profiles, parts 1 and 2 built (part 2's motor checks pending). Then `heron_motor`.
+Last updated 2026-10-25. Steps 1 to 3 done and checked on the bench; step 4, rig profiles, parts 1 and 2 done and checked on the bench. Next: part 3 (the calibration document), then `heron_motor`.
 
 ## Read this first when resuming
 
@@ -79,8 +79,9 @@ measure it on the hardware before building motor logic on top.
    built** (2026-10-25): the firmware (0.3.0) starts unconfigured and
    refuses Drive until the Pi sends the profile's motor section; Status
    reports its checksum; `PlatformConfig.h` is gone and the build is per
-   platform (`uno-l293d`). `motor_link` configures from the profile. Its
-   bench checks are below.
+   platform (`uno-l293d`). `motor_link` configures from the profile, and
+   again after a mid-run Boot. Passed its bench checklist below, including
+   a reset mid-drive.
 5. **`heron_motor`** on the Pi, then the stick mapping and mixing; it loads
    the profile and owns the Configure handshake.
 
@@ -176,11 +177,14 @@ battery on EXT_PWR for checks 4 to 6.
 | 6 | A reset mid-drive releases the motors | `motor_link drive 600 600 600 600 --seconds 10`; press the Uno's reset button midway | Wheels stop at the reset; "Boot mid-run ... Configuring again", then they run again |
 | 7 | A bad profile | `motor_link drive 0 0 0 0 --profile /nonexistent.conf` | An error before the port opens; the Uno not reset |
 
-Results, 2026-10-25 **[ours]**, checks 1, 2, 3 and 7 (no wheel turning):
+Results, 2026-10-25 **[ours]**: all seven pass.
 
 | # | Measured |
 |---|---|
 | 1 | firmware 0.3.0, protocol 2, platform uno-l293d, Boot 1522 ms after opening; *unconfig*, cfg 0000 |
 | 2 | 50 Drives refused: target 0, applied 0, *unconfig* throughout and after the Stop |
 | 3 | Checksum 3B1B confirmed; `noise` also passes when configured |
+| 4 | Front-left, front-right, back-right, back-left, all forward: the terminal map now comes from `profiles/bench.conf` |
+| 5 | All four turn slowly at 1 and at −1: the per-motor, per-direction dead band |
+| 6 | Two presses of the shield's reset during a 600 drive. Each time: Boot with *unconfig*, checksum 0000, applied 0; `motor_link` configured again 9 and 17 ms after the Boot; running again within 100 ms, ramping up. Status went quiet for 2.4 s and 1.1 s (the bootloader's wait runs from the button's release). Drives sent into the bootloader did no harm: no checksum or framing errors after |
 | 7 | `cannot read /nonexistent.conf`, before the port opens |

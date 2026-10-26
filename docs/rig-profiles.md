@@ -183,7 +183,7 @@ battery type) or when its behaviour drifts (a wheel that no longer starts).
    the unconfigured state, the checksum; `PlatformConfig.h` removed, the
    environment renamed `uno-l293d`; firmware 0.3.0; `motor_link` configures
    from the profile, with `--profile`, `--min-duty` and `--unconfigured`.
-   Bench checks in `RESUME-motor.md`.
+   Checked on the bench, including a reset mid-drive (`RESUME-motor.md`).
 3. **The calibration document**, and `motor_link calibrate` if it earns its
    place.
 4. Then motor step 4, `heron_motor`, on top.
