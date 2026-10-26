@@ -155,9 +155,12 @@ from scripts in this repository.
 
 ## Hardware
 
-A Raspberry Pi 3B, hostname `heron`. Commands write its address as `<pi>`:
-use the wired link (`eth0`), not the Wi-Fi one, which is what its mDNS name
-(`heron.local`) resolves to. Addresses, user names and access details are
+A Raspberry Pi 3B per rig (the bench rig, the mini robot, later the
+full-size robot). Provisioning names each one `heron-` and the last three
+bytes of its wired MAC address (`heron-9d9324`), so several can share a
+network. Commands write its address as `<pi>`: use the wired link (`eth0`),
+not the Wi-Fi one, which is what its mDNS name (`heron-<suffix>.local`)
+resolves to. Addresses, user names and access details are
 per-developer and stay out of the repository (see "Personal setup" below).
 Provisioning sets the hostname and **disables cloud-init**: on later boots it
 rebuilt `/etc/hosts` from its cached first-boot user-data, undoing a rename,
