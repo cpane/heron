@@ -52,8 +52,11 @@ namespace Heron::Motor {
 #if HERON_PLATFORM == 1  // bench: the Uno and the HW-130 L293D shield
 
 inline constexpr uint16_t kRampPerMs = 4;
-// Not measured yet: 0 until motor_link sweep finds the dead band.
-inline constexpr uint8_t kMinDuty = 0;
+// motor_link sweep, 2026-10-25, on AA cells: the duty where each motor
+// first turned steadily from rest was 61 to 82, and 92 for motor 4
+// backward, the hardest. 100 leaves about 10% over that. Weaker cells raise
+// the thresholds: re-measure if the slowest wheel stops starting.
+inline constexpr uint8_t kMinDuty = 100;
 // Checked on the bench 2026-10-25: front-left on M1, front-right on M2,
 // back-left on M3, back-right on M4, all turning forward for a positive
 // value. So protocol motors 3 (back-right) and 4 (back-left) are on M4 and M3.

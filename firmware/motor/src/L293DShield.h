@@ -35,8 +35,8 @@
 //                  both off      released: the motor coasts
 //
 // The wiring, from Adafruit's v1 design and its library (AFMotor, public
-// domain); **[unverified] on the HW-130** until the bench drives each motor
-// in turn (docs/RESUME-motor.md):
+// domain); checked on the bench's HW-130 2026-10-25, each terminal driving
+// its own motor the right way (docs/RESUME-motor.md):
 //
 //   Terminal   PWM pin (timer)     74HC595 bits A, B
 //   M1         11 (Timer 2, OC2A)  2, 3
