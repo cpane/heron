@@ -266,6 +266,11 @@ fi
 
 hostnamectl set-hostname "${TARGET_HOSTNAME}"
 
+# avahi-daemon, which answers for <name>.local, reads the hostname when it
+# starts and does not follow a rename: measured, it went on advertising the
+# old name. try-restart leaves it alone if it is not running.
+systemctl try-restart avahi-daemon.service
+
 #
 # Device access and stable device names
 #
