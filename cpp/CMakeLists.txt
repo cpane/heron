@@ -169,6 +169,16 @@ target_link_libraries(heron_motor
     PUBLIC heron_motor_port heron_motor_protocol heron_profile
     PRIVATE Threads::Threads heron_warnings)
 
+# -- driving by hand -------------------------------------------------------------
+#
+# The maths between the remote and the motors: sticks to a body velocity,
+# mecanum mixing to four wheel values, and the arming rule. Pure; it needs
+# the remote's frame type and stick normalisation, not its port.
+# docs/motor-design.md §4.
+add_library(heron_drive STATIC src/drive/Drive.cpp)
+target_include_directories(heron_drive PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_drive PUBLIC heron_ibus PRIVATE heron_warnings)
+
 # -- rig profiles ---------------------------------------------------------------
 #
 # Each physical rig's measured numbers, read from profiles/<rig>.conf and
@@ -227,6 +237,10 @@ add_executable(motors_test tests/MotorsTest.cpp)
 target_link_libraries(motors_test
     PRIVATE heron_motor heron_motor_controller Threads::Threads heron_warnings)
 add_test(NAME motors_test COMMAND motors_test)
+
+add_executable(drive_test tests/DriveTest.cpp)
+target_link_libraries(drive_test PRIVATE heron_drive heron_warnings)
+add_test(NAME drive_test COMMAND drive_test)
 
 add_executable(rig_profile_test tests/RigProfileTest.cpp)
 target_link_libraries(rig_profile_test PRIVATE heron_profile heron_warnings)
@@ -354,3 +368,9 @@ target_link_libraries(motor_link
 # Checks profile files on the host, and shows a Pi's own profile there.
 add_executable(rig_profile tools/RigProfileTool.cpp)
 target_link_libraries(rig_profile PRIVATE heron_profile heron_warnings)
+
+# Drive Heron with the remote: RemoteControl, heron_drive and Motors in one
+# 50 Hz loop -- the first, deliberately small, version of the robot core.
+add_executable(heron_teleop tools/HeronTeleop.cpp)
+target_link_libraries(heron_teleop
+    PRIVATE heron_remote heron_drive heron_motor heron_profile heron_warnings)
