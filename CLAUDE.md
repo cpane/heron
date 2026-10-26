@@ -5,8 +5,9 @@ subsystem is developed as its own **workstream**: explored, built as a
 reusable piece, and verified on the hardware, before the robot design that
 ties them together. The LiDAR, remote control and odometry workstreams
 each have a working C++ library and are paused. The motor controller
-workstream is active: its protocol, link firmware and driver layer are
-checked on the bench, and the Pi's motor library is next.
+workstream is active: everything up to driving by hand with the remote
+(`heron_teleop`) is built and checked on the bench rig; the mini robot on
+the floor is next (`docs/RESUME-motor.md`).
 
 ## Workstreams
 
@@ -187,8 +188,9 @@ deploy scripts need SSH to it, and provisioning needs `sudo` there.
 
 Attached: the RPLIDAR A1M8 (USB), a FlySky FS-iA6B receiver (iBUS on the
 GPIO UART) for the FS-i6X remote, and a SparkFun OTOS optical odometry
-sensor on I2C. Planned, not yet attached or explored: an Arduino
-motor controller over USB serial, driving 4 motors for a holonomic drive.
+sensor on I2C. An Arduino motor controller on USB
+(`/dev/arduino`), driving 4 motors for a holonomic drive: the bench rig
+has four motors and no wheels; the mini robot has mecanum wheels.
 
 GPIO header use, through a HAT that passes the Pi's pins through and adds
 spare 5 V and GND connections (the full build guide is `docs/wiring.md`;

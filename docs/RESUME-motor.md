@@ -1,6 +1,9 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. Steps 1 to 4 done: the protocol, the link firmware, the driver layer and rig profiles, checked on the bench. Steps 5 and 6 done and checked on the bench: `heron_motor`, and driving by hand with the remote (`heron_teleop`). Next: the mini robot on the floor.
+Last updated 2026-10-25. **Everything the bench rig can prove is done:**
+steps 1 to 6 below, each checked on the bench rig. The remote drives the
+wheels through `heron_teleop`. **Next: the mini robot on the floor**
+("Picking up next", below).
 
 ## Read this first when resuming
 
@@ -14,8 +17,18 @@ and is written down here:
 
 | Document | What |
 |---|---|
-| [`motor-protocol.md`](motor-protocol.md) | The wire format: Drive, Stop, Info, Status, Boot; the watchdog |
-| [`motor-design.md`](motor-design.md) | Hardware, firmware layers and toolchain, the mixing on the Pi, test platforms |
+| [`motor-protocol.md`](motor-protocol.md) | The wire format (version 2): Configure, Drive, Stop, Info, Status, Boot; the watchdog |
+| [`motor-design.md`](motor-design.md) | Hardware, firmware layers and toolchain, the stick mapping and mixing on the Pi (§4), test platforms |
+| [`motor-cpp-design.md`](motor-cpp-design.md) | `heron_motor`: `Motors`, the Pi's motor library |
+| [`rig-profiles.md`](rig-profiles.md) | Per-rig calibration: `profiles/<rig>.conf`, sent to the Arduino as Configure (shared doc) |
+| [`rig-calibration.md`](rig-calibration.md) | How to calibrate a new rig, step by step (shared doc) |
+| [`robot-telemetry.md`](robot-telemetry.md) | Rules that keep live telemetry to external clients possible later (shared doc) |
+
+**The programs:** `heron_teleop` drives with the remote (`--dry-run` reads
+the sticks only); `motor_adapter` runs `Motors` live; `motor_link` is the
+frame-level bench tool (`info`, `drive`, `sweep`, `watchdog`, `noise`);
+`rig_profile` checks and shows profiles. Firmware: `build_firmware.sh`,
+`flash_firmware.sh`; a Pi's rig: `set_rig.sh`.
 
 **Hardware on the bench:** a Keyestudio Uno R3-compatible board with an
 L293D shield (HW-130) and four two-wire DC motors, no encoders. Its USB
@@ -44,9 +57,15 @@ checked on the Pi).
 
 ## Still open
 
-1. **The full-size robot's motor driver**, not chosen.
-2. **Does the shield twitch a motor during the 1.5 s reset,** while the
-   pins float? Not observed either way during step 3.
+1. **The dead band under load:** the bench was measured with no wheels;
+   how to measure with the robot's weight on the wheels is not worked out
+   (`rig-calibration.md` §4). Settled on the mini.
+2. **Turn gain** (`StickConfig::turnGain`, 1.0) and the **ramp** on the
+   floor: tuned on the mini, then the turn gain moves into its profile.
+3. **The full-size robot's motor driver**, not chosen.
+4. **Does the shield twitch a motor during the 1.5 s reset,** while the
+   pins float? Not observed either way.
+5. **Battery voltage** in Status: no divider fitted, reads 0.
 
 AFMotor's licence, once open here, was checked 2026-10-25: public domain.
 It is not used ([`motor-design.md`](motor-design.md) §3).
@@ -67,8 +86,8 @@ measure it on the hardware before building motor logic on top.
    (`L293DShield`), the ramp (4 units per ms) and the dead band and sign
    mapping (`MotorOutput`, tested by `motor_controller_test`), and
    `motor_link sweep`. Firmware 0.2.0: 339 bytes of RAM, 4.9 KB of flash.
-   Passed the step 3 checklist below; the bench's terminal map and dead
-   band are in `PlatformConfig.h`.
+   Passed the step 3 checklist below. The bench's terminal map and dead
+   band, first compiled in, now live in `profiles/bench.conf` (step 4).
 4. **Rig profiles first** (agreed 2026-10-25,
    [`rig-profiles.md`](rig-profiles.md)): the bench's numbers move from
    `PlatformConfig.h` into `profiles/bench.conf`, sent to the Arduino by a
@@ -98,10 +117,31 @@ measure it on the hardware before building motor logic on top.
    velocity, mecanum mixing, the arming rule), tested by `drive_test`;
    `heron_teleop` runs RemoteControl, the mixing and Motors at 50 Hz, with
    `--dry-run` to read the sticks without the motors. Passed its bench
-   checklist below. Next: the mini robot on the floor. `Motors`: `start()` blocks
-   until the Arduino is configured; the robot's loop calls `drive()` every
-   20 ms (no heartbeat thread); a reader thread publishes Status and
-   configures again after a reset. Then the stick mapping and mixing.
+   checklist below. Our transmitter sends right-stick-up as a low CH2
+   value, so that axis is read reversed (`StickConfig::forwardReadsLow`).
+
+## Picking up next: the mini robot on the floor
+
+The mini has the same parts as the bench (Uno, HW-130, yellow motors) and
+its own Pi; mecanum wheels and its weight are what is new. The bench
+proved which wheel turns which way; only the floor proves the robot moves
+the right way.
+
+1. **Its Pi:** `scripts/provision_pi.sh` names it `heron-<mac>`; record its
+   address in Claude's memory (per-developer, not the repo). Flash the
+   `uno-l293d` firmware (`flash_firmware.sh`).
+2. **Its profile:** follow `rig-calibration.md` to write
+   `profiles/mini.conf`, then `set_rig.sh <user>@<pi> mini`. Sections 3
+   and 5 can be done with the wheels off the ground; the dead band (§4)
+   needs a way to measure under load (open item 1), worked out then and
+   written into `rig-calibration.md`.
+3. **First drive:** `heron_teleop`, low throttle. Check that forward,
+   strafe left and anticlockwise move the *robot* that way: a wrong sign
+   mirrors it without any error. If the rollers form an O rather than an
+   X, it barely strafes or turns (`motor-design.md` §4).
+4. **Tune** the turn gain and the ramp on the floor (open item 2).
+5. Then, from `motor-design.md` §4: Phase 2, the LiDAR safety arbiter, and
+   later closed-loop speed from the OTOS.
 
 ## Step 2 bench checklist
 
