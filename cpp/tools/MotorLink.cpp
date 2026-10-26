@@ -73,6 +73,7 @@
 
 #include "heron/motor/FrameParser.h"
 #include "heron/motor/MotorPort.h"
+#include "heron/motor/Motors.h"
 #include "heron/motor/Protocol.h"
 #include "heron/profile/RigProfile.h"
 
@@ -419,23 +420,6 @@ void waitForStartup(Link &link) {
 
 // ---------------------------------------------------------------------------
 // Configuring from the rig's profile
-
-/** The profile's [motor] section as the Configure message carries it. */
-MotorConfig toMotorConfig(const Heron::Profile::MotorProfile &motor) {
-  static_assert(Heron::Profile::kProfileMotorCount == kMotorCount, "one value per motor");
-  static_assert(Heron::Profile::kMaxRampPerMs == kMaxRampPerMs, "the same ramp limit");
-  MotorConfig config;
-  for (std::size_t i = 0; i < kMotorCount; ++i) {
-    config.terminal[i] = motor.terminal[i];
-    if (motor.sign[i] < 0) {
-      config.reversed = static_cast<std::uint8_t>(config.reversed | (1U << i));
-    }
-    config.minDutyForward[i] = motor.minDutyForward[i];
-    config.minDutyBackward[i] = motor.minDutyBackward[i];
-  }
-  config.rampPerMs = motor.rampPerMs;
-  return config;
-}
 
 /**
  * What to configure the Arduino with: the profile, with --min-duty applied.
