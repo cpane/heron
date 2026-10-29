@@ -2,10 +2,11 @@
 
 External programs will read the robot's sensor data live while it drives:
 first a graphical client on a computer, drawing the LiDAR's view and the
-odometry pose as the robot moves. **This is not a design.** The client and
-the server are a later phase. What is fixed here, 2026-10-25, are the rules
-the robot and its libraries must keep now so that they can be added without
-rework.
+odometry pose as the robot moves. **This is not a design**: the design that
+keeps these rules is [`telemetry-design.md`](telemetry-design.md), the
+telemetry workstream's (`RESUME-telemetry.md`). What is fixed here,
+2026-10-25, are the rules the robot and its libraries must keep now so that
+they can be added without rework.
 
 ## What already fits
 

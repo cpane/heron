@@ -10,6 +10,7 @@ another's. Start from the workstream you are picking up.
 | Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | paused 2026-10-12 at a clean stopping point | optional checks only (its "Picking up") |
 | Odometry (SparkFun OTOS, I²C) | [`RESUME-odometry.md`](RESUME-odometry.md) | paused 2026-10-18 at a clean stopping point | optional checks only (its "Picking up") |
 | Motor controller (Arduino, 4 motors) | [`RESUME-motor.md`](RESUME-motor.md) | driving by hand checked on the bench 2026-10-25 (`heron_teleop`) | the mini robot on the floor |
+| Telemetry (live data to other computers) | [`RESUME-telemetry.md`](RESUME-telemetry.md) | started 2026-10-28, design proposed | reviewing the design (step 1) |
 
 Planned, not started: the robot design that ties the workstreams together. The three sensor workstreams are paused; the motor controller is next, since the robot cannot move without it.
 
