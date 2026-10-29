@@ -30,6 +30,13 @@ frame-level bench tool (`info`, `drive`, `sweep`, `watchdog`, `noise`);
 `rig_profile` checks and shows profiles. Firmware: `build_firmware.sh`,
 `flash_firmware.sh`; a Pi's rig: `set_rig.sh`.
 
+**At boot, for driving with no laptop:** `teleop_autostart.sh <user>@<pi>
+on` installs `target/systemd/heron-teleop@.service` and enables it, so
+`heron_teleop` starts at every boot and restarts if it exits; `off` undoes
+it, `status` shows it and its recent output. While it is on it holds
+`/dev/arduino` and `/dev/serial0`: turn it off before bench work with
+`motor_link` or `ibus_reader`.
+
 **Hardware on the bench:** a Keyestudio Uno R3-compatible board with an
 L293D shield (HW-130) and four two-wire DC motors, no encoders. Its USB
 bridge is a CP2102 identical to the LiDAR's, so the udev rules name both
