@@ -34,6 +34,12 @@
 // the motors: for checking the sticks with nothing turning.
 //
 // Ctrl-C ends it; the motors are released on the way out.
+//
+// At boot
+// -------
+// target/systemd/heron-teleop@.service runs it at every boot, for driving
+// with no laptop; scripts/teleop_autostart.sh turns that on and off. Its
+// output then goes to the journal (journalctl -u heron-teleop@<user> -f).
 
 #include <chrono>
 #include <cinttypes>
@@ -113,6 +119,9 @@ int main(int argc, char **argv) {
       usage(2);
     }
   }
+  // Line by line even when stdout is not a terminal, so the journal shows
+  // the status as it happens when this runs as a service.
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
   std::signal(SIGINT, onSignal);
   std::signal(SIGTERM, onSignal);
 

@@ -1,0 +1,39 @@
+# heron_teleop at boot: drive the robot with the remote, no laptop needed.
+#
+# A template unit: the part after the @ is the user whose ~/heron holds the
+# deployed binaries and the rig profile (deploy_cpp.sh, set_rig.sh), so no
+# user name is written into the repository. Installed and enabled by
+#
+#   scripts/teleop_autostart.sh <user>@<pi> on
+#
+# which makes it heron-teleop@<user>.service. Off by default: while it runs
+# it owns /dev/arduino and /dev/serial0, and the bench tools (motor_link,
+# ibus_reader) cannot open them.
+#
+# Safe to start unattended: the motors move only once the remote is armed
+# (SwA down) and the throttle has been at the bottom since
+# (cpp/tools/HeronTeleop.cpp). Its output is in the journal:
+#
+#   journalctl -u heron-teleop@<user> -f
+
+[Unit]
+Description=Heron: drive with the remote (heron_teleop, user %i)
+# No limit on restarts: the Arduino or the receiver may come up after it,
+# and a robot left on should keep trying rather than give up.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/heron
+ExecStart=/home/%i/heron/bin/heron_teleop
+# A failed start (no Arduino yet, no profile) or an exit: try again shortly.
+# systemctl stop is not restarted.
+Restart=always
+RestartSec=3
+# SIGTERM is caught: heron_teleop sends Stop to the Arduino on the way out.
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
