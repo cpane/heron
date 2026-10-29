@@ -87,12 +87,15 @@ if [[ "${ACTION}" == "on" ]]; then
     echo "OK: rig '$(ssh "${TARGET}" "cat heron/rig")'."
     echo
 
+    # enable, then restart rather than enable --now: restart starts it if it
+    # is stopped and picks up a newly deployed binary if it is running, with
+    # one Arduino reset either way.
     scp -q "${LOCAL_UNIT}" "${TARGET}:${REMOTE_STAGE}"
     # -t so sudo can prompt for the password.
     ssh -t "${TARGET}" "sudo install -m 0644 '${REMOTE_STAGE}' '/etc/systemd/system/${UNIT_TEMPLATE}' \
         && rm -f '${REMOTE_STAGE}' \
         && sudo systemctl daemon-reload \
-        && sudo systemctl enable --now '${UNIT}' \
+        && sudo systemctl enable '${UNIT}' \
         && sudo systemctl restart '${UNIT}'"
     echo
     echo "On: it starts at every boot, and has started now."
