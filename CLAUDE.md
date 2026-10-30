@@ -7,7 +7,8 @@ ties them together. The LiDAR, remote control and odometry workstreams
 each have a working C++ library and are paused. The motor controller
 workstream is active: everything up to driving by hand with the remote
 (`heron_teleop`) is built and checked on the bench rig; the mini robot on
-the floor is next (`docs/RESUME-motor.md`).
+the floor is next (`docs/RESUME-motor.md`). The telemetry workstream,
+streaming live data to other computers, started 2026-10-28.
 
 ## Workstreams
 
@@ -150,6 +151,23 @@ Motor-only facts:
 - The wire format is code in `protocol/motor/`, header-only and compiled
   by both sides. It uses no C++ standard library: the board's compiler has
   none (`CPP_CODING_STANDARD.md`, "Shared code for the AVR").
+
+### Telemetry — live data to other computers (active)
+
+Read before doing telemetry work:
+
+- **`docs/RESUME-telemetry.md`** — where the work stands and what is next.
+- `docs/telemetry-design.md` — the server, channels, protocol, and the
+  recipe for adding a sensor.
+- `docs/robot-telemetry.md` — the rules (shared doc).
+
+Telemetry-only facts:
+
+- One server inside the robot program, one channel per kind of data;
+  clients only watch. Sensor libraries never depend on telemetry: the
+  telemetry library depends on them.
+- The wire format is `python/heron/link/wire.py`, version 1, changed only
+  by additions, so `python/tools/lidar_gui.py` keeps working unchanged.
 
 ## Development model
 
