@@ -8,7 +8,9 @@ each have a working C++ library and are paused. The motor controller
 workstream is active: everything up to driving by hand with the remote
 (`heron_teleop`) is built and checked on the bench rig; the mini robot on
 the floor is next (`docs/RESUME-motor.md`). The telemetry workstream,
-streaming live data to other computers, started 2026-10-28.
+streaming live data to other computers, started 2026-10-28. The builder
+workstream, scripts and a guide for people who build and drive a Heron
+without changing code, started 2026-11-02.
 
 ## Workstreams
 
@@ -169,6 +171,23 @@ Telemetry-only facts:
 - The wire format is `python/heron/link/wire.py`, version 1, changed only
   by additions, so `python/tools/lidar_gui.py` keeps working unchanged.
 
+### Builder — scripts for people who build and drive a Heron (active)
+
+Read before doing builder work:
+
+- **`docs/RESUME-builder.md`** — what exists, how builder scripts are
+  written, and what is next.
+- `docs/builder-guide.md` — the guide itself, written for builders.
+
+Builder-only facts:
+
+- Builders change no code: they need a terminal, the Pi's address, and
+  the scripts in `builder/`. Each script asks questions as it goes and says
+  what to do on every failure, in a builder's words (front-left wheel,
+  terminal M1, SwA).
+- Builder scripts use the programs already on the Pi and add no robot
+  code; a missing capability is a change in its own workstream first.
+
 ## Development model
 
 Code is written on the host (macOS) and stored in git. **The Pi is a
@@ -187,6 +206,7 @@ from scripts in this repository.
 - `profiles/` — one file per physical rig: its measured numbers
   (`docs/rig-profiles.md`), deployed with the C++ binaries.
 - `scripts/` — host-side drivers. `target/` — things that run on the Pi.
+- `builder/` — interactive scripts for builders (`docs/builder-guide.md`).
 
 ## Hardware
 
@@ -232,6 +252,7 @@ scripts/flash_firmware.sh  <user>@<pi>         # avrdude on the Pi
 scripts/set_rig.sh         <user>@<pi> <rig>   # once per Pi: which profile
 scripts/teleop_autostart.sh <user>@<pi> on|off|status  # heron_teleop at boot
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
+builder/wheel_check.sh     <user>@<pi>         # each wheel and stick, by eye
 ```
 
 `deploy_pi.sh` and `deploy_cpp.sh` with extra arguments deploy *and* run, so
