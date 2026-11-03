@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <stdexcept>
+#include <string>
 
 #include "heron/drive/Drive.h"
 
@@ -152,6 +153,47 @@ int main() {
     check("everything at once: every wheel within -1..1", inRange &&
                                                             near(std::abs(all[1]), 1.0));
     check("under full drive: not scaled", wheelsAre(mix({0.3, 0.2, 0.1}), 0.0, 0.6, 0.2, 0.4));
+  }
+
+  std::printf("Mixing: the motion table\n");
+
+  {
+    // The reference table of mecanum motions: for each, which way each wheel
+    // turns, F forward, R reverse, 0 stopped. It is written in its own terms
+    // (forward, right, clockwise) and wheel order (FL FR RL RR), as given, so
+    // it can be compared with the source line by line; each row is turned
+    // into Heron's frame (vx forward, vy left, wz anticlockwise) here. Only
+    // directions are checked: the speeds are the checks above.
+    struct Motion {
+      const char *name;
+      double forward, right, clockwise;
+      const char *wheels;  // FL FR RL RR
+    };
+    const Motion table[] = {
+        {"forward", 1, 0, 0, "FFFF"},
+        {"backward", -1, 0, 0, "RRRR"},
+        {"strafe right", 0, 1, 0, "FRRF"},
+        {"strafe left", 0, -1, 0, "RFFR"},
+        {"diagonal forward-right", 1, 1, 0, "F00F"},
+        {"diagonal forward-left", 1, -1, 0, "0FF0"},
+        {"diagonal backward-right", -1, 1, 0, "0RR0"},
+        {"diagonal backward-left", -1, -1, 0, "R00R"},
+        {"spin clockwise", 0, 0, 1, "FRFR"},
+        {"spin counter-clockwise", 0, 0, -1, "RFRF"},
+        {"corner right (pivot on right)", 1, 0, 1, "F0F0"},
+        {"corner left (pivot on left)", 1, 0, -1, "0F0F"},
+        {"turn right about rear axle", 0, 1, 1, "FR00"},
+        {"turn left about rear axle", 0, -1, -1, "RF00"},
+    };
+    const auto letter = [](double value) { return value > 1e-9 ? 'F' : value < -1e-9 ? 'R' : '0'; };
+    for (const Motion &motion : table) {
+      const WheelValues m = mix({motion.forward, -motion.right, -motion.clockwise});
+      // Heron's order is FL FR BR BL; the table's is FL FR RL RR.
+      const char got[] = {letter(m[0]), letter(m[1]), letter(m[3]), letter(m[2]), '\0'};
+      char what[96];
+      std::snprintf(what, sizeof(what), "%s: %s (got %s)", motion.name, motion.wheels, got);
+      check(what, std::string(got) == motion.wheels);
+    }
   }
 
   std::printf("Arming\n");
