@@ -1,8 +1,12 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-10-25. **Everything the bench rig can prove is done:**
+Last updated 2026-11-03. **The bench rig, now with mecanum wheels,
+drives every move on the floor** ("The bench rig on the floor", below).
+Next: the mini robot, or the bench rig's dead band re-measured first.
+
+Up to 2026-10-25, everything the bench rig can prove lifted was done:
 steps 1 to 6 below, each checked on the bench rig. The remote drives the
-wheels through `heron_teleop`. **Next: the mini robot on the floor**
+wheels through `heron_teleop`. After the floor work: the mini robot
 ("Picking up next", below).
 
 ## Read this first when resuming
@@ -149,6 +153,49 @@ the right way.
 4. **Tune** the turn gain and the ramp on the floor (open item 2).
 5. Then, from `motor-design.md` §4: Phase 2, the LiDAR safety arbiter, and
    later closed-loop speed from the OTOS.
+
+## The bench rig on the floor (2026-11-02 to 2026-11-03)
+
+The bench rig has mecanum wheels and was driven on the floor with
+`heron_teleop` (rig still `bench`). **Done:** every move works.
+
+What was found **[ours]**:
+
+- **Rewired motors, checked wheel by wheel:** after the rewiring, the back
+  pair ran backward (leads swapped on each) and the front pair was on each
+  other's terminals (M1, M2 moved). Both fixed in the wiring; all four
+  wheels then turned the right wheel forward, lifted.
+- **The mixing is right:** it matches a 14-motion reference table row for
+  row (strafes, diagonals, spins, corners, turns about the rear axle), now
+  a `drive_test` check. The teleop log showed the right wheel commands for
+  every move, with `motors OK, resets 0`: no brown-out reset.
+- **The wheels were the fault.** With wheels in the wrong corners the
+  robot drove forward and backward but, asked to slide, strained and
+  shook, then (after a first swap) turned on the spot about one back
+  wheel. With each wheel in its own corner, the top rollers seen from
+  above point at the robot's centre: front-left \\, front-right /,
+  back-left /, back-right \\, the X of `motor-design.md` §4. (The rollers
+  on the floor slant the other way.)
+- **2026-11-03, with the power brick on board:** forward, backward, slide
+  left and right, diagonals forward-left and forward-right, spin left and
+  right all move the robot the way asked. Spins were seen to work; the log
+  holds their commands from the earlier run (wheels ±0.6 in the spin
+  pattern). Diagonals backward were not tried.
+- **Reverse looked slow once, then was not:** the slow runs were part
+  throttle, commands −0.60 and −0.37 against forward runs up to +0.97. At
+  full throttle both ways the log shows +0.97 forward and −1.00 back, and
+  reverse looked as fast. Full stick up reads +0.97: the transmitter's
+  up end-point stops about 3% short (harmless; its end-point setting).
+
+Left open:
+
+1. **The dead band is stale:** `min_duty_forward`/`min_duty_backward` in
+   `profiles/bench.conf` were measured 2026-10-25, before the rewiring.
+   The back leads were swapped since, so motors 3 and 4 likely have their
+   forward and backward values the wrong way round. Only creeping speeds
+   are affected. Re-measure (`rig-calibration.md` §4), now on the floor
+   under load if possible (open item 1).
+2. **Turn gain and ramp** tuning on the floor (open item 2).
 
 ## Step 2 bench checklist
 
