@@ -98,6 +98,10 @@ program that drives with the remote, and asks you to arm it:
 2. Switch SwA (top left) down.
 3. Throttle up to about half way.
 
+The robot starts driving as soon as the throttle reaches the bottom, but
+with the throttle there the sticks do nothing, so the script waits for it
+to come up. If it reminds you about the throttle, push it up.
+
 Then it asks you to push each stick and hold it. It reads what the robot
 saw, checks the wheel commands, and asks whether the wheels did it:
 
@@ -123,5 +127,6 @@ If the Pi is set to start the remote driving program at boot
 cannot run beside it. The script offers to stop it, and to start it again
 at the end. Both need the Pi user's password, for `sudo`.
 
-If the check ends early, it says the service is still stopped and how to
-start it again. Restarting the Pi also starts it.
+If the check ends early, on an error or Ctrl-C, it still offers to start
+the service again. If you say no, it prints the command to start it later.
+Restarting the Pi also starts it.

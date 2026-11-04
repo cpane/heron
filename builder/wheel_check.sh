@@ -116,6 +116,11 @@ start_service_again() {
 cleanup() {
     stop_teleop
     rm -f "${RUN_LOG}" "${TELEOP_LOG}"
+    # On an early exit too (an error, Ctrl-C): leave the robot as found. Only
+    # when someone is there to answer and to type the sudo password.
+    if [[ ${SERVICE_STOPPED} -eq 1 && -t 0 ]]; then
+        start_service_again || true
+    fi
     if [[ ${SERVICE_STOPPED} -eq 1 ]]; then
         echo
         echo "NOTE: the teleop service is still stopped. Start it again with"
@@ -397,6 +402,17 @@ numbers() {
     }'
 }
 
+# From a status line: the throttle, 0.00 to 1.00.
+throttle_of() {
+    printf '%s\n' "$1" | awk '{ for (i = 1; i < NF; i++) if ($i == "throttle") print $(i + 1) }'
+}
+
+# True if the throttle in a status line is under 0.3: too low for the
+# stick checks, which need a move of at least 0.3 to be sure of it.
+throttle_low() {
+    [[ "$(throttle_of "$1" | awk '{ print ($1 < 0.3) ? "low" : "ok" }')" == "low" ]]
+}
+
 echo
 echo "Starting heron_teleop on the Pi (it resets the Arduino)..."
 # -tt: a terminal on the Pi, so the program ends if this connection drops.
@@ -417,9 +433,17 @@ while true; do
     teleop_alive
     line="$(latest_status "${start}")"
     mode="${line%% *}"
+    # DRIVING starts as soon as the throttle reaches the bottom, so wait
+    # for it to come up as well: at the bottom every stick gives nothing.
     if [[ "${mode}" == "DRIVING" ]]; then
-        echo "DRIVING."
-        break
+        if ! throttle_low "${line}"; then
+            echo "DRIVING, throttle $(throttle_of "${line}")."
+            break
+        fi
+        if [[ "${shown}" != "DRIVING" ]]; then
+            echo "  Driving. Now bring the throttle up to about half way."
+            shown="DRIVING"
+        fi
     fi
     if [[ -n "${mode}" && "${mode}" != "${shown}" ]]; then
         case "${mode}" in
@@ -429,7 +453,7 @@ while true; do
         shown="${mode}"
     fi
     if [[ ${waited} -ge 240 ]]; then
-        echo "ERROR: no DRIVING after 2 minutes. Last status:"
+        echo "ERROR: not driving with the throttle up after 2 minutes. Last status:"
         echo "  ${line:-none}"
         exit 1
     fi
@@ -469,12 +493,17 @@ for move in "${MOVES[@]}"; do
             if [[ ${seen_component} -ne 0 ]]; then
                 break
             fi
+            if throttle_low "${line}" && [[ "${shown}" != "low" ]]; then
+                echo "  The throttle is at $(throttle_of "${line}"): bring it up to about half way."
+                shown="low"
+            fi
         elif [[ -n "${line}" && "${line%% *}" != "${shown}" ]]; then
             echo "  The robot is not DRIVING (${line%% *}): arm it again as before."
             shown="${line%% *}"
         fi
         if [[ ${waited} -ge 120 ]]; then
-            echo "ERROR: no stick movement seen in 1 minute."
+            echo "ERROR: no stick movement seen in 1 minute. What the robot last said:"
+            echo "  ${line:-nothing}"
             exit 1
         fi
         sleep 0.5
