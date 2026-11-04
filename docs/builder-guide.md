@@ -113,9 +113,11 @@ saw, checks the wheel commands, and asks whether the wheels did it:
 | Left stick left | Front-left and back-left backward, front-right and back-right forward (turn left) |
 | SwA up | All stop at once |
 
-**The remote reads wrong.** If the script says the robot read a stick as a
-different movement, or the opposite way, the transmitter's channels are set
-up differently from Heron's: the right stick should be channels 1
+**The remote reads wrong.** If the robot reads a stick as a different
+movement, or the opposite way, the script first asks whether it was a
+slip: the other stick, or the other way, is easy to do. Say yes and try
+that stick again. If it still reads wrong, the transmitter's channels are
+set up differently from Heron's: the right stick should be channels 1
 (left-right) and 2 (up-down), the left stick 3 (throttle) and 4
 (left-right), SwA channel 7. Check the transmitter's settings, or ask the
 developer: the fix is in Heron's settings, not in the wiring.

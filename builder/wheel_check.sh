@@ -474,70 +474,80 @@ FAILED=0
 for move in "${MOVES[@]}"; do
     IFS='|' read -r name instruction component sign pattern expect <<< "${move}"
     banner "Part 2: ${name}"
-    echo "${instruction}"
-    echo "Waiting for the robot to see it..."
-    start=$(log_lines)
-    shown=""
-    waited=0
+    # Until a reading is accepted, or the builder stops retrying.
     while true; do
-        teleop_alive
-        line="$(latest_status "${start}")"
-        if [[ "${line%% *}" == "DRIVING" ]]; then
-            # The biggest of vx, vy, wz, if it is at least 0.3: which way
-            # the stick says to go, and its sign.
-            read -r seen_component seen_sign <<< "$(numbers "${line}" | awk '{
-                best = 0; c = 0
-                for (k = 1; k <= 3; k++) { a = $k < 0 ? -$k : $k; if (a > best) { best = a; c = k } }
-                if (best >= 0.3) print c, ($c < 0 ? "-" : "+"); else print 0, "+"
-            }')"
-            if [[ ${seen_component} -ne 0 ]]; then
-                break
+        echo "${instruction}"
+        echo "Waiting for the robot to see it..."
+        start=$(log_lines)
+        shown=""
+        waited=0
+        while true; do
+            teleop_alive
+            line="$(latest_status "${start}")"
+            if [[ "${line%% *}" == "DRIVING" ]]; then
+                # The biggest of vx, vy, wz, if it is at least 0.3: which way
+                # the stick says to go, and its sign.
+                read -r seen_component seen_sign <<< "$(numbers "${line}" | awk '{
+                    best = 0; c = 0
+                    for (k = 1; k <= 3; k++) { a = $k < 0 ? -$k : $k; if (a > best) { best = a; c = k } }
+                    if (best >= 0.3) print c, ($c < 0 ? "-" : "+"); else print 0, "+"
+                }')"
+                if [[ ${seen_component} -ne 0 ]]; then
+                    break
+                fi
+                if throttle_low "${line}" && [[ "${shown}" != "low" ]]; then
+                    echo "  The throttle is at $(throttle_of "${line}"): bring it up to about half way."
+                    shown="low"
+                fi
+            elif [[ -n "${line}" && "${line%% *}" != "${shown}" ]]; then
+                echo "  The robot is not DRIVING (${line%% *}): arm it again as before."
+                shown="${line%% *}"
             fi
-            if throttle_low "${line}" && [[ "${shown}" != "low" ]]; then
-                echo "  The throttle is at $(throttle_of "${line}"): bring it up to about half way."
-                shown="low"
+            if [[ ${waited} -ge 120 ]]; then
+                echo "ERROR: no stick movement seen in 1 minute. What the robot last said:"
+                echo "  ${line:-nothing}"
+                exit 1
             fi
-        elif [[ -n "${line}" && "${line%% *}" != "${shown}" ]]; then
-            echo "  The robot is not DRIVING (${line%% *}): arm it again as before."
-            shown="${line%% *}"
-        fi
-        if [[ ${waited} -ge 120 ]]; then
-            echo "ERROR: no stick movement seen in 1 minute. What the robot last said:"
-            echo "  ${line:-nothing}"
-            exit 1
-        fi
-        sleep 0.5
-        waited=$((waited + 1))
-    done
+            sleep 0.5
+            waited=$((waited + 1))
+        done
 
-    wheel_signs="$(numbers "${line}" | awk '{
-        s = ""
-        for (k = 4; k <= 7; k++) s = s ($k < 0 ? "-" : "+")
-        print s
-    }')"
-    echo "Seen: ${line}"
-    echo "Let go of the stick."
-    echo
-    if [[ ${seen_component} -ne ${component} || "${seen_sign}" != "${sign}" ]]; then
-        echo "WRONG: the robot read this stick as ${COMPONENT_NAMES[seen_component]} (${seen_sign}),"
-        echo "not ${COMPONENT_NAMES[component]} (${sign}). The remote's channel or stick direction"
-        echo "is set up differently from Heron's: see \"The remote reads wrong\" in"
-        echo "docs/builder-guide.md."
-        FAILED=1
-        continue
-    fi
-    if [[ "${wheel_signs}" != "${pattern}" ]]; then
-        echo "WRONG: the wheel commands were ${wheel_signs}, not ${pattern}."
-        FAILED=1
-        continue
-    fi
-    if ask_yes "Did ${expect}?"; then
-        echo "OK."
-    else
-        echo "WRONG: the commands were right, so a wheel is wired differently from"
-        echo "part 1. Run this again from the start."
-        FAILED=1
-    fi
+        wheel_signs="$(numbers "${line}" | awk '{
+            s = ""
+            for (k = 4; k <= 7; k++) s = s ($k < 0 ? "-" : "+")
+            print s
+        }')"
+        echo "Seen: ${line}"
+        echo "Let go of the stick."
+        echo
+        if [[ ${seen_component} -ne ${component} || "${seen_sign}" != "${sign}" ]]; then
+            echo "The robot read this stick as ${COMPONENT_NAMES[seen_component]} (${seen_sign}),"
+            echo "not ${COMPONENT_NAMES[component]} (${sign})."
+            # Pushing the other way, or the other stick, is an easy slip: try
+            # again before blaming the transmitter.
+            if ask_yes "Was that a slip (the other way, or the other stick)? Try again?"; then
+                echo
+                continue
+            fi
+            echo "WRONG: the remote's channel or stick direction is set up differently"
+            echo "from Heron's: see \"The remote reads wrong\" in docs/builder-guide.md."
+            FAILED=1
+            break
+        fi
+        if [[ "${wheel_signs}" != "${pattern}" ]]; then
+            echo "WRONG: the wheel commands were ${wheel_signs}, not ${pattern}."
+            FAILED=1
+            break
+        fi
+        if ask_yes "Did ${expect}?"; then
+            echo "OK."
+        else
+            echo "WRONG: the commands were right, so a wheel is wired differently from"
+            echo "part 1. Run this again from the start."
+            FAILED=1
+        fi
+        break
+    done
 done
 
 banner "Part 2: the arm switch"
