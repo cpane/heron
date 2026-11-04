@@ -10,7 +10,9 @@ workstream is active: everything up to driving by hand with the remote
 the floor is next (`docs/RESUME-motor.md`). The telemetry workstream,
 streaming live data to other computers, started 2026-10-28. The builder
 workstream, scripts and a guide for people who build and drive a Heron
-without changing code, started 2026-11-02.
+without changing code, started 2026-11-02. The navigation workstream,
+obstacle avoidance from the LiDAR and the OTOS, started 2026-11-04 with
+its design.
 
 ## Workstreams
 
@@ -187,6 +189,26 @@ Builder-only facts:
   terminal M1, SwA).
 - Builder scripts use the programs already on the Pi and add no robot
   code; a missing capability is a change in its own workstream first.
+
+### Navigation — obstacle avoidance (active, design only)
+
+Read before doing navigation work:
+
+- **`docs/RESUME-navigation.md`** — where the work stands and what it
+  waits on.
+- `docs/navigation-design.md` — the design: five layers, the obstacle
+  map, the SwC modes, phases N0 to N7.
+
+Navigation-only facts:
+
+- Five layers, each its own library, each handing its newest result on
+  through `getLatest()`: sensors, pose, perception (the rolling obstacle
+  map), the safety limiter, the local planner. The limiter reads the raw
+  LiDAR points, never the map, so a map or planner bug cannot drive the
+  robot into a wall; it is built first.
+- Our own code, not ROS 2 and Nav2, on this hardware (design D4).
+- Most of phase N1 is other workstreams' work (design §9): record it in
+  theirs, not here.
 
 ## Development model
 
