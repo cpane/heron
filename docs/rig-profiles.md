@@ -18,7 +18,7 @@ Two levels, which `HERON_PLATFORM` mixes up today:
 
 | Platform | Rigs |
 |---|---|
-| `uno-l293d`: Uno, HW-130 L293D shield, yellow DC motors | `bench` (no wheels, unloaded), `mini` (3D-printed robot, big wheels), a second controller if built |
+| `uno-l293d`: Uno, HW-130 L293D shield, yellow DC motors | `bench` (a small robot with mecanum wheels, since 2026-11-03; first measured with no wheels), `mini` (3D-printed robot, big wheels), a second controller if built |
 | Full-size: driver not chosen | the 4-ft robot |
 
 The bench and the mini have identical parts and run identical firmware, but
@@ -34,7 +34,7 @@ One per rig, in the repository, so every calibration has a history in git.
 The bench's, [`profiles/bench.conf`](../profiles/bench.conf), shortened:
 
 ```
-# The bench rig: Uno + L293D, four yellow motors, no wheels.
+# The bench rig: Uno + L293D, four yellow motors, mecanum wheels.
 format = 1
 
 [rig]
@@ -73,7 +73,7 @@ supply = AA cells on EXT_PWR
   their own workstreams when they need them: `[odometry]` (the OTOS's linear
   and angular scalars, its mounting offset), `[lidar]` (mounting offset),
   and `[geometry]` (wheel radius, track, wheelbase, maximum speed) when the
-  mixing needs it. The bench, with no wheels, will have none.
+  mixing needs it. The bench, now on mecanum wheels, gets one too.
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own

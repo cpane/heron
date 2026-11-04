@@ -198,7 +198,7 @@ Mostly work in other workstreams, which this one waits on.
 
 | What | Why | Where |
 |---|---|---|
-| A robot on the floor with the LiDAR and OTOS mounted, their mounting poses in its profile | Avoidance can only be tested moving | motor |
+| The bench rig with the LiDAR and OTOS mounted on it, their mounting poses in its profile | Avoidance can only be tested moving | motor; shared `rig-profiles.md` |
 | The robot's outline and wheel geometry in the profile | The planner and the limiter need its size | shared: `rig-profiles.md` |
 | The speed loop closed with the OTOS: 0.3 m/s means 0.3 m/s | Avoidance needs real speeds, not fractions of full power | motor (planned) |
 | LiDAR restart, unplug and replug | A robot that relies on the LiDAR needs it to recover | `RESUME-lidar.md` §9 |
@@ -268,5 +268,3 @@ This mapping is from general knowledge of ROS 2, not tried here.
 - **Library names and their headers,** settled when N3 starts, following
   `docs/odometry-cpp-design.md`'s pattern (a pure layer, a device layer,
   a threaded one).
-- **Which robot carries it:** the bench rig, now on the floor with
-  mecanum wheels, or the mini robot.

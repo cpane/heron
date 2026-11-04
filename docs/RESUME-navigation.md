@@ -35,7 +35,8 @@ Heron).
 Phase N1, the prerequisites (`navigation-design.md` §9), is work in
 other workstreams; check each one's resume file for where it stands:
 
-1. A robot on the floor with the LiDAR and OTOS mounted, and their
+1. The bench rig, which carries navigation (a small robot on mecanum
+   wheels since 2026-11-03), with the LiDAR and OTOS mounted, and their
    mounting poses in its profile (motor; shared `rig-profiles.md`).
 2. The robot's outline and wheel geometry in the profile (shared).
 3. The speed loop closed with the OTOS (motor).
@@ -48,4 +49,4 @@ replay test bench on the Mac, which needs no robot.
 ## Still open
 
 `navigation-design.md` §13: unknown cells, the robot's outline in the
-planner, library names, and which robot carries it.
+planner, and library names. Settled 2026-11-04: the bench rig carries it.

@@ -249,8 +249,9 @@ deploy scripts need SSH to it, and provisioning needs `sudo` there.
 Attached: the RPLIDAR A1M8 (USB), a FlySky FS-iA6B receiver (iBUS on the
 GPIO UART) for the FS-i6X remote, and a SparkFun OTOS optical odometry
 sensor on I2C. An Arduino motor controller on USB
-(`/dev/arduino`), driving 4 motors for a holonomic drive: the bench rig
-has four motors and no wheels; the mini robot has mecanum wheels.
+(`/dev/arduino`), driving 4 motors for a holonomic drive on mecanum wheels. The bench rig
+is a complete small robot (since 2026-11-03): it drives on the floor, or
+sits on a block for wheels-free checks. The mini robot is planned.
 
 GPIO header use, through a HAT that passes the Pi's pins through and adds
 spare 5 V and GND connections (the full build guide is `docs/wiring.md`;
