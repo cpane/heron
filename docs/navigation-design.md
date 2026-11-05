@@ -3,7 +3,7 @@
 How the LiDAR and the odometry sensor turn Heron from a remote-controlled
 base into a semi-autonomous one: it knows where it is, sees obstacles,
 slides around them, and goes back to its course. **Goal and decisions
-D1 to D4 accepted 2026-11-04; the design below (P1 to P12) proposed
+D1 to D5 accepted 2026-11-04; the design below (P1 to P12) proposed
 2026-11-04, for review.** Nothing is built.
 
 It builds on what exists and is measured: `Lidar` and its `Scan`
@@ -46,6 +46,7 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 | D2 | **"Where it is" means position since start-up, from the OTOS, for now** | Enough to avoid an obstacle and resume a course. Position on a map of the room is phase N6 |
 | D3 | **Avoid by sliding sideways and keeping the heading** | What mecanum wheels are for; keeps a forward LiDAR pointed down the course; makes rejoining the course line simple |
 | D4 | **Our own code, not ROS 2 and Nav2,** on this hardware | ROS 2 is heavy for a 1 GB Pi 3, not packaged for this Debian, and would replace the architecture already built. §16 maps a later move |
+| D5 | **Three modes on SwC, kept: Manual, Assisted, Navigate. Manual is exactly today's remote control,** and nothing in navigation can change it: in Manual the sticks go straight to the mix, with no limiter, planner, LiDAR or OTOS in the path, and a failure in any of them leaves Manual working | One switch position you can always trust, to take over from the robot at any time. Assisted tests the limiter with you steering before anything steers for you; the three positions match SwC's three. SwA still stops everything in every mode |
 
 ### 2.2 Proposed (2026-11-04), for review
 
@@ -342,6 +343,9 @@ Each 20 ms:
   checked with `ibus_reader monitor` in step N4.
 - **Start-up order:** odometry first, still (its calibration needs the
   robot still), then the LiDAR, motors and threads.
+- **Manual is today's remote control** (D5): the same `ArmGate`,
+  sticks and mix as `heron_teleop`, checked by driving both programs the
+  same way. Switching to Manual is how you take over at any time.
 - **Failures** are reported, never fatal: a LiDAR, OTOS or planner
   failure leaves Manual working; telemetry failing changes nothing
   (telemetry D10).

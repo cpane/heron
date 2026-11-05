@@ -5,7 +5,7 @@ progress: the full design, P1 to P12, proposed for review.**
 
 ## Read this first when resuming
 
-**Phase N0: the goal and D1 to D4 are agreed; the design that builds it
+**Phase N0: the goal and D1 to D5 are agreed; the design that builds it
 (P1 to P12) is written and awaiting review.** Heron is to see obstacles, slide
 around them and return to its course, in a new SwC mode, Navigate. Five
 layers, each its own library: sensors, pose, perception (a rolling
@@ -28,8 +28,10 @@ there; the design doc is now the source of truth.
 D1 to D4 in `navigation-design.md` §2, accepted as recommended: Navigate
 is held, letting go stops; position since start-up from the OTOS for
 now; avoid by sliding, keeping the heading; our own code, not ROS 2 and
-Nav2, on this hardware (§11 sketches a later move for a more powerful
-Heron).
+Nav2, on this hardware (§16 sketches a later move for a more powerful
+Heron). D5, added the same day at the user's request: keep all three SwC
+modes, and Manual is exactly today's remote control, untouched by
+navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
