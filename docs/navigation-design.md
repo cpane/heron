@@ -53,7 +53,7 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 | # | Proposal | Why | § |
 |---|---|---|---|
 | P1 | **Five new libraries:** `heron_geometry`, `heron_pose`, `heron_perception`, `heron_limiter`, `heron_planner`, plus `heron_nav_sim` for tests | One job each, tested alone; matches the plan's five layers, with the shared maths in one place | 4 |
-| P2 | **Every library has a pure core that takes explicit times,** and a thin threaded wrapper where it needs one | The whole pipeline runs in the simulator in virtual time, faster than real time and repeatable, on the Mac | 4 |
+| P2 | **Every library has a pure core that takes explicit times,** and a thin threaded wrapper where it needs one. The core never reads the clock or starts a thread; every time it uses is passed in | The whole pipeline runs in the simulator in virtual time, faster than real time and repeatable, on the Mac; timing rules are tested without sleeping; a failure seen on the robot replays exactly. The remote and odometry libraries are already built this way | 4.1 |
 | P3 | **Pose keeps a 2 s history of OTOS readings,** read from `Odometry::getLatest()`; `Odometry` is not changed | Placing a scan's points needs the pose at each point's own time (a scan takes ~137 ms), not just the newest. Another workstream's library stays as it is | 5 |
 | P4 | **The LiDAR's yaw stays in `Lidar`** (`mountingOffsetRad`, as now); **its position is applied in perception and the limiter** | The bearing flip and yaw happen exactly once, in the adapter (`lidar-cpp-design.md` §2.1). The adapter knows nothing of the robot's size | 3 |
 | P5 | **The obstacle map: an 80 × 80 grid of 5 cm cells, one signed count per cell,** rolling with Heron, in the pose frame | Small (6.4 KB), cheap to update per scan, and keeps unknown apart from free | 6 |
@@ -139,6 +139,46 @@ No thread waits for another: each reads the others' newest results
 through `getLatest()`, as every library does now. In Manual and Assisted
 the planner is idle and the stick goes straight to the limiter (Assisted)
 or past it (Manual).
+
+### 4.1 Pure cores and thin wrappers (P2)
+
+Each library splits in two:
+
+- **The core** holds the logic: `PoseHistory`, `ObstacleGrid` and
+  `placeScan()`, `Limiter::limit()`, `Planner::plan()`. It never reads
+  the clock, never sleeps and never starts a thread. Every time it
+  needs, "now", a scan's point times or a reading's age, is an argument.
+  Given the same inputs it gives the same answer.
+- **The wrapper,** where there is one (`PoseTracker`, `Perception`,
+  `LocalPlanner`), owns the thread: it reads the steady clock, calls the
+  core with that time, and hands the result on through `getLatest()`.
+  It holds no decisions of its own. The limiter has no wrapper: the
+  control loop calls it directly, every 20 ms.
+
+Why:
+
+- **The simulator runs in virtual time.** With no threads and no clock
+  inside, `heron_nav_sim` calls the cores in a loop and moves time on
+  itself. A minute of driving runs in well under a second, and every run
+  repeats exactly. That is what makes §12.2's 1,000-run wall check a
+  practical ctest on the Mac.
+- **Timing rules are tested by passing a time, not by waiting:** the
+  300 ms stale scan (§7.4), the 50 ms extrapolation (§5), the 0.3 s plan
+  age (§8). A test of "the scan is 301 ms old" is one call, and never
+  flaky.
+- **A failure replays exactly.** A recording from the robot fed into the
+  cores with its own times gives the same commands, so a bug seen on the
+  floor is found and fixed on the Mac.
+- **It is the pattern already here.** The remote's pure `heron_ibus` sits
+  under the threaded `heron_remote`, and odometry's pure `heron_otos`
+  under `heron_odometry`, and their pure parts are checked by ctest on
+  the Mac.
+- **The cores move unchanged** if Heron later moves to ROS 2 (§16): only
+  the wrappers would be replaced.
+
+The cost is a little more code: a wrapper and a core where one class
+would do. The wrappers are kept small enough that the robot tests (§12.4)
+cover them.
 
 ## 5. Pose
 
