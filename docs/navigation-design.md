@@ -56,7 +56,7 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 | P2 | **Every library has a pure core that takes explicit times,** and a thin threaded wrapper where it needs one. The core never reads the clock or starts a thread; every time it uses is passed in | The whole pipeline runs in the simulator in virtual time, faster than real time and repeatable, on the Mac; timing rules are tested without sleeping; a failure seen on the robot replays exactly. The remote and odometry libraries are already built this way | 4.1 |
 | P3 | **Pose keeps a 2 s history of OTOS readings,** read from `Odometry::getLatest()`; `Odometry` is not changed | Placing a scan's points needs the pose at each point's own time (a scan takes ~137 ms), not just the newest. Another workstream's library stays as it is | 5 |
 | P4 | **The LiDAR's yaw stays in `Lidar`** (`mountingOffsetRad`, as now); **its position is applied in perception and the limiter** | The bearing flip and yaw happen exactly once, in the adapter (`lidar-cpp-design.md` §2.1). The adapter knows nothing of the robot's size | 3 |
-| P5 | **The obstacle map: an 80 × 80 grid of 5 cm cells, one signed count per cell,** rolling with Heron, in the pose frame | Small (6.4 KB), cheap to update per scan, and keeps unknown apart from free | 6 |
+| P5 | **The obstacle map: an 80 × 80 grid of 5 cm cells, one signed count per cell,** rolling with Heron, in the odom frame | Small (6.4 KB), cheap to update per scan, and keeps unknown apart from free | 6 |
 | P6 | **Unknown cells count as blocked within 0.6 m of Heron, free beyond** | Heron never drives into space it has not seen, yet still plans past the edge of what it has | 6, 8 |
 | P7 | **The limiter sweeps the robot's outline along the commanded motion, point by point, and cuts only the axes that would hit** | Exact for a rectangle, cheap on 530 points, and lets Heron slide along a wall while the motion into it stops. The same sweep the planner uses | 7 |
 | P8 | **The limiter fails closed:** no fresh, covered scan in Assisted or Navigate means stop | A LiDAR that stops answering must not read as "nothing there" | 7 |
@@ -96,13 +96,13 @@ can disagree about a point in two ways, and usually both at once:
 
 Converting a point between frames undoes both, the shift and the rotation
 (§3.3). Navigation keeps three frames; the robot and LiDAR frames differ
-only by a shift, the robot and pose frames by a shift and a rotation θ:
+only by a shift, the robot and odom frames by a shift and a rotation θ:
 
 | Frame | Origin and axes | Who uses it |
 |---|---|---|
-| **Robot** | The centre of the wheelbase, on the floor. x forward, y to the left, angles anticlockwise seen from above (the ROS convention, REP 103). Moves and turns with Heron | The outline, the limiter, commands |
-| **LiDAR** | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
-| **Pose** (also called odom) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does | The pose, the obstacle map, the course line |
+| **Robot** (ROS: `base_link`) | The centre of the wheelbase, on the floor. x forward, y to the left, angles anticlockwise seen from above (the ROS convention, REP 103). Moves and turns with Heron | The outline, the limiter, commands |
+| **LiDAR** (ROS: `laser`) | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
+| **Odom** (ROS: `odom`) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does. Named for odometry, which measures from it | The pose, the obstacle map, the course line |
 
 Each frame's origin is a point, not an area, and each has its own axes. **Why a LiDAR frame at
 all:** the LiDAR measures from its own spin axis, and that axis is rarely
@@ -127,8 +127,9 @@ The LiDAR's position matters beyond that conversion:
 - **A tilted or second LiDAR adds height** (`[lidar] height`, §6.2 and
   §13), and its frame becomes more than a flat shift.
 
-The **pose** is the robot frame's position and heading in the pose frame:
-three numbers, (x, y, θ). x and y are metres from the start point; θ
+A **pose** is not a frame. It is the position and orientation of one
+frame measured in another; here, of the robot frame in the odom frame
+(ROS writes it as `base_link` in `odom`). It is three numbers, (x, y, θ). x and y are metres from the start point; θ
 (theta) is the heading, how far Heron has turned anticlockwise since
 start-up. Heron at pose (2.0, 1.0, 90°) is 2 m forward and 1 m to the left
 of where it started, measured along the start-up axes, and has turned a
@@ -139,11 +140,15 @@ relative to me, now?", and a box's coordinates in them change as Heron
 moves, though the box does not. Only the pose answers "where am I?", and
 it links the frames: it is what turns a robot-frame point into a floor
 point (§3.3). It is the OTOS's running estimate, so it drifts slowly, and
-an OTOS restart starts a new pose frame and clears the map (§5).
+an OTOS restart starts a new odom frame and clears the map (§5).
+
+The names follow ROS's REP 105, so the ROS 2 mapping (§16) needs no
+renaming. REP 105's `map` frame, fixed to the room rather than to the
+start point, arrives with mapping in N6.
 
 Why three frames: the limiter cares about the robot's own body, so it
 works in the robot frame; the obstacle map must stay put while Heron
-moves through it, so it lives in the pose frame; the LiDAR frame is
+moves through it, so it lives in the odom frame; the LiDAR frame is
 simply where the measurements arrive.
 
 ### 3.2 A trigonometry primer
@@ -218,7 +223,7 @@ The symbols:
 | lx, ly | Where the LiDAR's spin axis sits in the robot frame, metres | The profile, `[lidar] x` and `y` (§10) |
 | x, y, θ | The robot's pose when the point was measured | `poseAt(scan.timeOf(β))` (§5) |
 | px, py | The point in the robot frame | Step 1 |
-| X, Y | The point in the pose frame | Step 2 |
+| X, Y | The point in the odom frame | Step 2 |
 
 **Step 1, LiDAR to robot frame:** split the range into forward and
 sideways, then add where the LiDAR sits.
@@ -228,7 +233,7 @@ px = lx + r cos β
 py = ly + r sin β
 ```
 
-**Step 2, robot to pose frame:** turn the point by the robot's heading,
+**Step 2, robot to odom frame:** turn the point by the robot's heading,
 then add the robot's position.
 
 ```
@@ -249,7 +254,7 @@ so (lx, ly) = (0.06, 0). It sees a box at β = 30°, r = 1.0 m.
   The box is at (1.5, 1.93) on the floor, measured from where Heron
   started. Perception marks that cell of the obstacle map.
 
-In words: Heron has turned to face the start frame's left (+y), so "ahead
+In words: Heron has turned to face the odom frame's left (+y), so "ahead
 of Heron" is +y on the floor, and "Heron's left" is −x. The box ahead
 adds 0.926 to Y; the box being on Heron's left takes 0.5 off X.
 
@@ -291,7 +296,7 @@ heron_pose        pure PoseHistory (2 s of timestamped poses, interpolated
                   Odometry reading into it, getLatest() and poseAt(t).
   ^
 heron_perception  pure ObstacleGrid (§6) and placeScan() (points into the
-                  pose frame); Perception: a thread building a grid per
+                  odom frame); Perception: a thread building a grid per
                   scan, getLatest() returning an immutable map.
 heron_limiter     pure, no thread: Limiter::limit(command, scan, pose,
                   measured velocity, now) -> limited command and why.
@@ -404,7 +409,7 @@ its pose and velocity.
 | Blocked | ≥ +3 | |
 | Free | ≤ −2 | |
 | Unknown | anything else, including never seen | Unknown is not free (P6) |
-| Frame | The pose frame; cell edges on multiples of 5 cm | Obstacles stay put as Heron turns or slides |
+| Frame | The odom frame; cell edges on multiples of 5 cm | Obstacles stay put as Heron turns or slides |
 
 All counts are starting values (P5), tuned against the simulator and the
 recordings.
@@ -516,7 +521,7 @@ Navigate only, 10 times a second, on its own thread (P9).
 ### 8.1 The course
 
 - **Engaging:** with SwC down, the right stick's direction, turned into
-  the pose frame, is the course heading; the course line runs through
+  the odom frame, is the course heading; the course line runs through
   Heron's position at that moment along it. The speed asked for is the
   stick's size × the throttle × `max_speed`.
 - **Moving the stick** more than 10° re-anchors the line at the current
@@ -620,7 +625,7 @@ in N1 and recorded with its method, as `[motor.calibration]` is.
 ## 11. Telemetry
 
 Four channels by the recipe (`telemetry-design.md` §9), SI units, the
-pose frame unless named:
+odom frame unless named:
 
 | Channel | Each item | Rate |
 |---|---|---|
