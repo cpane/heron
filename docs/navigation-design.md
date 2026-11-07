@@ -118,6 +118,13 @@ start-up. Heron at pose (2.0, 1.0, 90°) is 2 m forward and 1 m to the left
 of where it started, measured along the start-up axes, and has turned a
 quarter turn to the left.
 
+The robot and LiDAR frames hold no history: they answer "where is this
+relative to me, now?", and a box's coordinates in them change as Heron
+moves, though the box does not. Only the pose answers "where am I?", and
+it links the frames: it is what turns a robot-frame point into a floor
+point (§3.3). It is the OTOS's running estimate, so it drifts slowly, and
+an OTOS restart starts a new pose frame and clears the map (§5).
+
 Why three frames: the limiter cares about the robot's own body, so it
 works in the robot frame; the obstacle map must stay put while Heron
 moves through it, so it lives in the pose frame; the LiDAR frame is
