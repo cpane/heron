@@ -75,12 +75,28 @@ floor, with a worked example.
 
 ### 3.1 What a frame is
 
-A **frame** is a choice of origin and axes: where (0, 0) is, which way x
-points and which way y points. The same box on the floor has different
-coordinates in different frames. "0.9 m ahead and 0.5 m to the left"
-is the box in the robot's frame; "1.5 m along and 1.9 m across from where
-Heron started" is the same box in the floor's frame. Navigation keeps
-three:
+A **frame** (a coordinate frame) is two things together, and both are
+needed:
+
+- **An origin,** the point called (0, 0). It fixes *position*: distances
+  are measured from it.
+- **A pair of axes,** the directions called x and y, at right angles. They
+  fix *orientation*: which way is "ahead" and which way is "left".
+
+A coordinate is only meaningful with its frame. "0.9 m ahead and 0.5 m to
+the left" is the box in the robot's frame; "1.5 m along and 1.9 m across
+from where Heron started" is the same box in the floor's frame. Two frames
+can disagree about a point in two ways, and usually both at once:
+
+- **Their origins differ** (a shift): the axes point the same way, but
+  distances start from different places.
+- **Their axes point differently** (a rotation): measured from the same
+  place, but "ahead" is a different direction. Two frames with one origin
+  still give different coordinates if one is turned.
+
+Converting a point between frames undoes both, the shift and the rotation
+(§3.3). Navigation keeps three frames; the robot and LiDAR frames differ
+only by a shift, the robot and pose frames by a shift and a rotation θ:
 
 | Frame | Origin and axes | Who uses it |
 |---|---|---|
@@ -88,7 +104,7 @@ three:
 | **LiDAR** | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
 | **Pose** (also called odom) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does | The pose, the obstacle map, the course line |
 
-Each frame's origin is a point, not an area. **Why a LiDAR frame at
+Each frame's origin is a point, not an area, and each has its own axes. **Why a LiDAR frame at
 all:** the LiDAR measures from its own spin axis, and that axis is rarely
 on the wheelbase centre; with several LiDARs (§13) they cannot all be. So
 each LiDAR has its own frame, its origin (lx, ly) from the wheelbase
