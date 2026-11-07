@@ -88,6 +88,12 @@ three:
 | **LiDAR** | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
 | **Pose** (also called odom) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does | The pose, the obstacle map, the course line |
 
+Each frame's origin is a point, not an area. The robot and LiDAR frames
+point the same way and differ only by where their origins sit: the LiDAR's
+spin axis is (lx, ly) from the wheelbase centre, wherever it is mounted
+(6 cm ahead in this section's example). A LiDAR mounted dead centre would
+make the two the same frame.
+
 The **pose** is the robot frame's position and heading in the pose frame:
 three numbers, (x, y, θ). x and y are metres from the start point; θ
 (theta) is the heading, how far Heron has turned anticlockwise since
