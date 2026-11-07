@@ -67,26 +67,170 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 
 ## 3. Frames, time and units
 
+Navigation is mostly about one question asked many times a second: *the
+LiDAR saw something; where is it?* The answer depends on who is asking,
+so this section first says what "where" means, then gives the small
+amount of trigonometry that turns a LiDAR reading into a point on the
+floor, with a worked example.
+
+### 3.1 What a frame is
+
+A **frame** is a choice of origin and axes: where (0, 0) is, which way x
+points and which way y points. The same box on the floor has different
+coordinates in different frames. "0.9 m ahead and 0.5 m to the left"
+is the box in the robot's frame; "1.5 m along and 1.9 m across from where
+Heron started" is the same box in the floor's frame. Navigation keeps
+three:
+
 | Frame | Origin and axes | Who uses it |
 |---|---|---|
-| **Robot** | The centre of the wheelbase on the floor; x forward, y left, heading anticlockwise (REP 103) | The outline, the limiter, commands |
-| **LiDAR** | The LiDAR's spin axis. `Scan` bearings are already rotated to the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter add it |
-| **Pose** (odom) | Where the robot frame was at start-up; fixed to the floor | The pose, the obstacle map, the course line |
+| **Robot** | The centre of the wheelbase, on the floor. x forward, y to the left, angles anticlockwise seen from above (the ROS convention, REP 103). Moves and turns with Heron | The outline, the limiter, commands |
+| **LiDAR** | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
+| **Pose** (also called odom) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does | The pose, the obstacle map, the course line |
 
-- **Placing a point:** a LiDAR point at bearing β, range r becomes
-  `(lx + r cos β, ly + r sin β)` in the robot frame, where `(lx, ly)` is
-  the LiDAR's position from `[lidar]`. In the pose frame it is then
-  rotated and moved by the robot's pose at `scan.timeOf(β)`.
-- **The OTOS's own offset** is written to the sensor (`OtosConfig::offset`),
-  so `Odometry` already reports the robot frame's pose. Its axis directions
-  are to be checked when it is mounted (step N1): a sign error mirrors the
-  map without any error.
-- **Time:** the steady clock throughout, as every library. A reading's own
-  time is `call time − snapshot.age` for odometry, and `Scan::timeOf()`
-  for LiDAR points.
-- **Units:** metres, radians, seconds inside navigation (telemetry D12).
-  Commands to `mix()` stay fractions of full drive; `[geometry] max_speed`
-  converts between the two until the OTOS speed loop exists (§15).
+The **pose** is the robot frame's position and heading in the pose frame:
+three numbers, (x, y, θ). x and y are metres from the start point; θ
+(theta) is the heading, how far Heron has turned anticlockwise since
+start-up. Heron at pose (2.0, 1.0, 90°) is 2 m forward and 1 m to the left
+of where it started, measured along the start-up axes, and has turned a
+quarter turn to the left.
+
+Why three frames: the limiter cares about the robot's own body, so it
+works in the robot frame; the obstacle map must stay put while Heron
+moves through it, so it lives in the pose frame; the LiDAR frame is
+simply where the measurements arrive.
+
+### 3.2 A trigonometry primer
+
+The LiDAR does not report x and y. It reports a **direction and a
+distance**: the bearing β (beta), the angle from straight ahead, and the
+range r, the distance to what it hit. Turning that into x and y is a
+right-angled triangle:
+
+```
+        y (left)
+        ^
+        |          * the point
+        |         /|
+        |      r / |
+        |       /  |  r sin β   (the side opposite the angle)
+        |      /   |
+        |     / β  |
+        +----------+-----> x (forward)
+          r cos β
+          (the side next to the angle)
+```
+
+- **cos β** (cosine) is the share of the distance that goes forward:
+  `x = r cos β`.
+- **sin β** (sine) is the share that goes sideways: `y = r sin β`.
+- The two always satisfy `cos²β + sin²β = 1`, so the point stays at
+  distance r; cos and sin only split it between the two directions.
+
+Values worth knowing:
+
+| β | cos β | sin β | The point is |
+|---|---|---|---|
+| 0° | 1 | 0 | straight ahead |
+| 30° | 0.866 | 0.5 | ahead, a little left |
+| 45° | 0.707 | 0.707 | ahead and left equally |
+| 90° | 0 | 1 | straight to the left |
+| −45° | 0.707 | −0.707 | ahead and right equally |
+| 180° | −1 | 0 | straight behind |
+
+The signs do the work: a negative bearing is to the right, its sine is
+negative, so y comes out negative, which is "right" in a frame where y
+points left. No special cases are needed for left, right or behind.
+
+**Radians.** The code measures angles in radians, not degrees: a full
+turn is 2π radians (about 6.283), so 180° = π ≈ 3.142 and 1° ≈ 0.01745.
+`std::cos` and `std::sin` take radians. This document writes degrees
+where a person reads them.
+
+**Rotating a point.** The second tool is turning a point about the
+origin by an angle θ. A point (a, b) turned anticlockwise by θ lands on
+
+```
+a' = a cos θ − b sin θ
+b' = a sin θ + b cos θ
+```
+
+It is the same triangle idea applied to each axis: the forward part a
+splits into (a cos θ, a sin θ), the sideways part b into
+(−b sin θ, b cos θ), and the two add. Check with θ = 90°: (1, 0), a point
+ahead, becomes (0, 1), a point to the left, which is right for a quarter
+turn anticlockwise.
+
+### 3.3 Placing a LiDAR point, step by step
+
+The symbols:
+
+| Symbol | Meaning | Where it comes from |
+|---|---|---|
+| β | The point's bearing, radians, 0 ahead, positive to the left | `Point::bearingRad`, already in the robot's axes |
+| r | The point's range, metres | `Point::rangeM` |
+| lx, ly | Where the LiDAR's spin axis sits in the robot frame, metres | The profile, `[lidar] x` and `y` (§10) |
+| x, y, θ | The robot's pose when the point was measured | `poseAt(scan.timeOf(β))` (§5) |
+| px, py | The point in the robot frame | Step 1 |
+| X, Y | The point in the pose frame | Step 2 |
+
+**Step 1, LiDAR to robot frame:** split the range into forward and
+sideways, then add where the LiDAR sits.
+
+```
+px = lx + r cos β
+py = ly + r sin β
+```
+
+**Step 2, robot to pose frame:** turn the point by the robot's heading,
+then add the robot's position.
+
+```
+X = x + px cos θ − py sin θ
+Y = y + px sin θ + py cos θ
+```
+
+**A worked example.** The LiDAR sits 6 cm ahead of the robot's centre,
+so (lx, ly) = (0.06, 0). It sees a box at β = 30°, r = 1.0 m.
+
+- Step 1: cos 30° = 0.866 and sin 30° = 0.5, so
+  px = 0.06 + 1.0 × 0.866 = 0.926 and py = 0 + 1.0 × 0.5 = 0.5.
+  The box is 0.93 m ahead of the robot's centre and 0.5 m to its left.
+  This is all the limiter needs: it works in the robot frame.
+- Step 2: Heron is at pose (2.0, 1.0, 90°), so cos θ = 0 and sin θ = 1.
+  X = 2.0 + 0.926 × 0 − 0.5 × 1 = 1.5, and
+  Y = 1.0 + 0.926 × 1 + 0.5 × 0 = 1.926.
+  The box is at (1.5, 1.93) on the floor, measured from where Heron
+  started. Perception marks that cell of the obstacle map.
+
+In words: Heron has turned to face the start frame's left (+y), so "ahead
+of Heron" is +y on the floor, and "Heron's left" is −x. The box ahead
+adds 0.926 to Y; the box being on Heron's left takes 0.5 off X.
+
+**Why the time matters.** One LiDAR revolution takes about 137 ms. At
+0.35 m/s Heron moves about 5 cm in that time, and turning at 1 rad/s it
+turns about 8°. If every point used the pose at the end of the scan, a
+straight wall would come out bent. So each point uses the pose at the
+moment it was measured: `scan.timeOf(β)` gives that time, and the pose
+library's `poseAt()` gives the pose then (P3). This correction is called
+**deskewing**.
+
+### 3.4 The OTOS, time and units
+
+- **The OTOS's own offset** is written to the sensor
+  (`OtosConfig::offset`), so `Odometry` already reports the pose of the
+  robot's centre, not of the sensor. The directions of its axes are to be
+  checked once it is mounted (step N1): a sign error mirrors the map, left
+  for right, and nothing reports an error.
+- **Time:** every library uses the steady clock, a clock that only goes
+  forward and is never adjusted, unlike the time of day. A reading's own
+  time is the time it was fetched minus `snapshot.age` for odometry, and
+  `Scan::timeOf()` for LiDAR points.
+- **Units:** metres, radians and seconds inside navigation (telemetry
+  D12). Speeds are m/s sideways and forward and rad/s for turning. The
+  commands handed to `mix()` stay fractions of full drive, −1 to +1;
+  `[geometry] max_speed` converts between the two until the OTOS speed
+  loop exists (§15).
 
 ## 4. Libraries and threads
 
