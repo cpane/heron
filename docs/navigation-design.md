@@ -88,11 +88,28 @@ three:
 | **LiDAR** | The LiDAR's spin axis, a few centimetres from the robot's centre. Its angles are already turned to match the robot's axes by `Lidar` (P4); only the position offset is left | Perception and the limiter, which add the offset |
 | **Pose** (also called odom) | Where the robot frame was at start-up, then fixed to the floor. It does not move when Heron does | The pose, the obstacle map, the course line |
 
-Each frame's origin is a point, not an area. The robot and LiDAR frames
-point the same way and differ only by where their origins sit: the LiDAR's
-spin axis is (lx, ly) from the wheelbase centre, wherever it is mounted
-(6 cm ahead in this section's example). A LiDAR mounted dead centre would
-make the two the same frame.
+Each frame's origin is a point, not an area. **Why a LiDAR frame at
+all:** the LiDAR measures from its own spin axis, and that axis is rarely
+on the wheelbase centre; with several LiDARs (§13) they cannot all be. So
+each LiDAR has its own frame, its origin (lx, ly) from the wheelbase
+centre, read from its profile section (6 cm ahead in this section's
+example).
+
+It is a light frame. Each `Lidar` already turns its bearings into the
+robot's directions with its own `mountingOffsetRad` (P4), so the LiDAR
+and robot frames point the same way and differ only by the shift (lx, ly),
+applied in perception and the limiter. A LiDAR mounted dead centre would
+make the two the same frame, with lx = ly = 0.
+
+The LiDAR's position matters beyond that conversion:
+
+- **Perception draws each beam from the LiDAR's cell,** not the robot's
+  centre (§6.2, "pass"), which is how it knows the cells the beam crossed
+  are free.
+- **The near blind spot,** the 13 cm circle round the LiDAR, is checked
+  against the stop outline from the LiDAR's position (§7.4).
+- **A tilted or second LiDAR adds height** (`[lidar] height`, §6.2 and
+  §13), and its frame becomes more than a flat shift.
 
 The **pose** is the robot frame's position and heading in the pose frame:
 three numbers, (x, y, θ). x and y are metres from the start point; θ
