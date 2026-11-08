@@ -534,6 +534,13 @@ it again (`captures/e4-arduino_20261108T*`, same settings), measured [ours]:
   unplugged Arduino's deleted tty open and reports `motors NOT OK` after a
   replug; it does not reconnect. (For motor's Inbox at pause.)
 
+By ear during the E4 control [ours, heard, not measured]: the motor sounded
+steady through every start, with no stutter or stop noticed, and possibly a
+short delay before it began to turn. So the silent starts are probably not
+the LiDAR stalling or restarting (that would stop the motor) [inference].
+When listening, note that each phase is followed by `--pause` (2 s) with the
+motor as it was: a normal start spins ~2.6 s, a silent one ~5.5 to 6 s.
+
 So far: the failures all start in the first 0.6 s after motor-on, the
 Arduino is not involved, and the Pi's rail shows no under-voltage.
 
