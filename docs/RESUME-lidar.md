@@ -611,6 +611,16 @@ A's state has followed handling three times (as installed: bad; re-seated:
 controlled test. Next: re-seat firmly, confirm a clean steady baseline, then
 wiggle in a run that starts clean.
 
+**Second wiggle test, 16:34, unit A after a firm re-seat** (the plug felt
+snug, user) [ours]: a hands-off baseline first, motor running steadily,
+491 of 491 (`reseat2-steady`); then the clocked run (`wiggle2`), 1065 of
+1065, no miss at any time. The user wiggled from 16:34:30 to 16:34:40 by
+their clock, but reported it done when the Pi's NTP clock read 16:34:12,
+so their clock runs at least ~20 s ahead and the wiggle may have fallen
+before or at the very start of the requests (they began 16:34:05): the run
+does not show whether a gentle wiggle breaks a snug plug. What it does show:
+seated firmly, unit A answered 1556 of 1556 with the motor running.
+
 A miss with the motor stopping: the first request 0.44 s after the port's
 open stopped a free-running motor got no reply (`dur-check`); e7-check's
 first phase began the same way.
