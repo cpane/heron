@@ -48,11 +48,36 @@ navigation, so SwC to Manual always takes over.
 - **I1 to I9 accepted** as proposed (`navigation-cpp-design.md` §1),
   after the user's review on the page. `Pose2` and `Vec2` keep the 2
   (§2.1 says why).
+- **N2 built with three changes from the accepted interfaces**
+  (`navigation-cpp-design.md` §3, end): `Base` takes a start time;
+  `LidarConfig` gained the housing's yaw, the period's spread, the sync
+  angle and the gap; the simulated OTOS moved to N3. Made while
+  building; the user merged them (PR #39).
+- **The simulated period spread is 0.2 ms**, from the recording, not
+  the findings' 0.8 ms (§3, "The recording").
 
 ## Picking up
 
-1. **N3:** `heron_pose` with the simulated OTOS, `heron_perception`
-   (`navigation-cpp-design.md` §4, §5, §9).
+1. **N3, on the Mac; nothing here needs the robot.** In this order:
+   - **`heron_pose`**, the core first: `PoseHistory`
+     (`navigation-cpp-design.md` §4.1), then the `PoseTracker` wrapper
+     (§4.2), which links `heron_odometry`.
+   - **The simulated OTOS**, `class Otos` in `cpp/src/nav_sim/`
+     (§3, `OtosConfig`), now that `Pose::PoseSample` exists: the true
+     pose plus noise and a heading drift.
+   - **`heron_perception`**: `ObstacleGrid` and `ObstacleMap` (§5.1),
+     then the `Perception` wrapper (§5.2).
+   - **Tests** (§9, the N3 rows): `pose_test` (interpolation the short
+     way round, extrapolation to 50 ms and not past it, a restart raises
+     the epoch) and `perception_test` (design §12.1's list; a skewed
+     scan of a straight wall from the simulator comes out straight).
+     `geometry_test` and `nav_sim_test` show the house style: no
+     framework, `check()`, figures printed beside the checks.
+   - **Build and run:** `cmake --preset host && cmake --build --preset
+     host`, `ctest --test-dir build-host`; then `scripts/build_cpp.sh`
+     (no warnings) and `scripts/deploy_cpp.sh <user>@<pi> pose_test`,
+     which needs only the Pi on, nothing moves. Add each library and
+     test to `docs/cpp-build.md`, as N2's were.
 2. **Before the LiDAR runs on the power block:** on it, the Pi reported
    under-voltage and the LiDAR missed most commands (2026-11-08,
    `navigation-cpp-design.md` §3). Record LiDAR captures on the mains
@@ -74,8 +99,8 @@ other workstreams; check each one's resume file for where it stands:
 4. LiDAR restart, unplug and replug (`RESUME-lidar.md` §9).
 5. Telemetry steps 2 to 4, and an odometry channel (telemetry).
 
-Work this workstream can do before those: phase N2, the simulator and
-replay test bench on the Mac, which needs no robot.
+Work this workstream can do before those: N3 and the limiter's core in
+N4, on the Mac with the simulator, which need no robot.
 
 ## Still open
 
@@ -83,6 +108,23 @@ replay test bench on the Mac, which needs no robot.
 budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
+
+- **The N1 measurement checklist is not written down.** Given in a
+  session on 2026-11-08 and not yet in `rig-calibration.md` §8 (a shared
+  doc, its own `chore/` branch): LiDAR yaw with `lidar_nearest --arc 360
+  --stop 0.1` and a box ahead (yaw = minus the bearing shown); OTOS axes
+  with `odometry_adapter 120`, pushed by hand (forward +x means 0°, +y
+  means -90°, -y +90°, -x 180°); OTOS scalars with `otos_spin` and
+  `heron_teleop`, then `otos_move`; `max_speed` by stopwatch over 2 m;
+  `max_turn_rate` by turns in 10 s; `brake` from v²/(2d) after
+  disarming at a mark. Two blockers: the profile reader rejects unknown
+  sections, so the numbers wait on paper until N1 adds them, and the
+  planned `[geometry]` section clashes with the mixing's `[geometry]`.
+  `odometry_adapter` prints no velocity, so §18's velocity frame cannot
+  be checked yet.
+- **The simulated no-returns are random; real ones cluster** (runs of
+  5.2 samples on average, up to 70). A test that depends on clustering
+  needs a recording (§3).
 
 ## Inbox
 
