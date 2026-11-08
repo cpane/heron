@@ -23,6 +23,14 @@ because a late reply to the previous request lands there.
 A background thread polls ``vcgencmd get_throttled`` every 0.25 s, so an
 under-voltage while the motor runs shows up beside the requests it overlaps.
 
+Phases are ``stopped``, ``running`` (the motor switched fully on at once)
+and ``soft`` (a soft start: a thread switches the motor line on and off at
+``--soft-hz``, on for longer each period, from 10% to 100% over
+``--soft-ms``, while the requests run as usual). If the inrush current at a
+hard start is what loses requests, soft starts lose fewer. Every switch is
+timed and logged, because the line is a USB control request whose speed is
+not known: a ramp the port cannot keep up with is no soft start.
+
 The gap (``--gap-ms``) is idle time from the end of one exchange (reply
 complete, or timeout) to the next request. Several gaps may be given; each
 phase is then run once per gap.
@@ -35,6 +43,8 @@ Usage
   deploy_pi.sh <user>@<pi> probes/lidar_07_requests.py --gap-ms 10,50,200,1000 \
       --phases running
   deploy_pi.sh <user>@<pi> probes/lidar_07_requests.py --command health
+  deploy_pi.sh <user>@<pi> probes/lidar_07_requests.py --gap-ms 10 \
+      --timeout-ms 100 --phases stopped,running,stopped,soft
 """
 
 from __future__ import annotations
@@ -86,6 +96,64 @@ class ThrottlePoller:
     def between(self, t_from: float, t_to: float) -> list[tuple[float, str | None]]:
         with self._lock:
             return [s for s in self.samples if t_from <= s[0] <= t_to]
+
+
+class SoftStart:
+    """Ramps the motor on by switching DTR, on a thread.
+
+    Period ``1/hz``; the on fraction rises linearly from 10% to 100% over
+    ``ramp_s``, then the motor is left on. Records (t_s, on, call_ms) for
+    every switch, so the achieved ramp can be checked against the asked one.
+    """
+
+    def __init__(self, transport, ramp_s: float, hz: float) -> None:
+        self._transport = transport
+        self._ramp_s = ramp_s
+        self._period_s = 1.0 / hz
+        self.switches: list[tuple[float, bool, float]] = []
+        self.t_start_ns = 0
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _switch(self, on: bool) -> None:
+        t_ns = time.monotonic_ns()
+        self._transport.set_motor(on)
+        call_ms = (time.monotonic_ns() - t_ns) / 1e6
+        self.switches.append(((t_ns - self.t_start_ns) / 1e9, on, call_ms))
+
+    @staticmethod
+    def _sleep_until(t_ns: int) -> None:
+        delay = (t_ns - time.monotonic_ns()) / 1e9
+        if delay > 0:
+            time.sleep(delay)
+
+    def _run(self) -> None:
+        period_ns = int(self._period_s * 1e9)
+        periods = max(1, int(self._ramp_s / self._period_s))
+        for k in range(periods):
+            duty = 0.1 + 0.9 * k / periods
+            t_period_ns = self.t_start_ns + k * period_ns
+            self._switch(True)
+            self._sleep_until(t_period_ns + int(duty * period_ns))
+            self._switch(False)
+            self._sleep_until(t_period_ns + period_ns)
+        self._switch(True)
+
+    def start(self) -> None:
+        self.t_start_ns = time.monotonic_ns()
+        self._thread.start()
+
+    def join(self) -> None:
+        self._thread.join()
+
+    def summary(self) -> dict:
+        calls = [c for _, _, c in self.switches]
+        return {
+            "switches": len(self.switches),
+            "call_ms": {"min": round(min(calls), 3),
+                        "median": round(statistics.median(calls), 3),
+                        "max": round(max(calls), 3)},
+            "ramp_end_s": round(self.switches[-1][0], 4),
+        }
 
 
 def under_voltage_now(value: str | None) -> bool:
@@ -170,6 +238,10 @@ def main() -> int:
                              "values run each phase once per gap")
     parser.add_argument("--timeout-ms", type=float, default=500.0)
     parser.add_argument("--command", choices=sorted(PAYLOAD_LEN), default="info")
+    parser.add_argument("--soft-ms", type=float, default=400.0,
+                        help="soft start: ramp length")
+    parser.add_argument("--soft-hz", type=float, default=100.0,
+                        help="soft start: switching frequency")
     parser.add_argument("--settle", type=float, default=0.0,
                         help="seconds after a motor change before the first "
                              "request (0 keeps the spin-up in the data)")
@@ -183,8 +255,12 @@ def main() -> int:
 
     phases = [p.strip() for p in args.phases.split(",") if p.strip()]
     for phase in phases:
-        if phase not in ("stopped", "running"):
-            sys.exit(f"ERROR: unknown phase '{phase}': use stopped or running")
+        if phase not in ("stopped", "running", "soft"):
+            sys.exit(f"ERROR: unknown phase '{phase}': "
+                     "use stopped, running or soft")
+    for before, phase in zip(["stopped"] + phases, phases):
+        if phase == "soft" and before != "stopped":
+            sys.exit("ERROR: a soft phase must follow a stopped one")
     gaps_ms = [float(g) for g in args.gap_ms.split(",")]
     command, payload_len = PAYLOAD_LEN[args.command]
     timeout_s = args.timeout_ms / 1000.0
@@ -210,6 +286,8 @@ def main() -> int:
         "count": args.count,
         "timeout_ms": args.timeout_ms,
         "settle_s": args.settle,
+        "soft_ms": args.soft_ms,
+        "soft_hz": args.soft_hz,
         "t0_mono_ns": t0_ns,
         "host": platform_info.snapshot(),
         "notes": args.note,
@@ -243,9 +321,15 @@ def main() -> int:
         with transport:
             for phase in phases:
                 for gap_ms in gaps_ms:
-                    running = phase == "running"
+                    running = phase in ("running", "soft")
                     changed = running != transport.motor_running
-                    if changed:
+                    ramp = None
+                    if changed and phase == "soft":
+                        ramp = SoftStart(transport, args.soft_ms / 1000.0,
+                                         args.soft_hz)
+                        ramp.start()
+                        t_motor_ns = ramp.t_start_ns
+                    elif changed:
                         transport.set_motor(running)
                         t_motor_ns = time.monotonic_ns()
                     elif not summaries:
@@ -298,6 +382,16 @@ def main() -> int:
                     print()
 
                     t_phase_end = rel(time.monotonic_ns())
+                    ramp_summary = None
+                    if ramp is not None:
+                        ramp.join()
+                        ramp_summary = ramp.summary()
+                        jsonl.write({"type": "ramp", "t_start": rel(ramp.t_start_ns),
+                                     "switches": [(round(t, 5), on, round(c, 3))
+                                                  for t, on, c in ramp.switches]})
+                        print(f"  soft start      {ramp_summary['switches']} switches, "
+                              f"call ms {ramp_summary['call_ms']}, "
+                              f"done at {ramp_summary['ramp_end_s']} s")
                     samples = poller.between(t_phase_start, t_phase_end)
                     uv = sum(1 for _, v in samples if under_voltage_now(v))
                     counts = {k: outcomes.count(k)
@@ -315,6 +409,7 @@ def main() -> int:
                         },
                         "distinct_payloads": len(payloads),
                         "stray_bytes": stray_total,
+                        "ramp": ramp_summary,
                         "throttled_samples": len(samples),
                         "under_voltage_samples": uv,
                         "throttled_values": sorted({v for _, v in samples if v}),

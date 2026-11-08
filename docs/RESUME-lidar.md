@@ -541,6 +541,24 @@ the LiDAR stalling or restarting (that would stop the motor) [inference].
 When listening, note that each phase is followed by `--pause` (2 s) with the
 motor as it was: a normal start spins ~2.6 s, a silent one ~5.5 to 6 s.
 
+E7, soft starts (`--phases ...,soft`: DTR switched at 100 Hz, on 10% to
+100% over 400 ms; each switch took 0.2 to 1.9 ms, median 0.3, so the ramp
+ran as asked), 2026-11-08 ~15:45, measured [ours]:
+
+- **Not comparable with the runs before:** in the same runs the motor-off
+  phases now lost requests too (15 + 1 garbled, then 1, then 2 of 40 at
+  10 ms; the first ended silent with the motor never on), where 1400
+  motor-off requests at 10 ms were clean before 15:25. A motor-off run at
+  50 ms between them was clean (100 of 100, `e7-stoponly`).
+- Soft starts lost 34, 6 and 9 of 40, misses spread through and past the
+  ramp. No conclusion from them until the baseline is stable again.
+- **What changed:** between the E4 control (15:25) and E7, the adapter board
+  was handled to look for a second micro-USB. A disturbed connector between
+  board and sensor would fit everything so far [hypothesis, untested]: a
+  request corrupted on its way in, worse while the motor vibrates, and now
+  intermittent with it off. Next: reseat both connectors with the motor
+  stopped, then repeat the motor-off check and the E4 baseline.
+
 So far: the failures all start in the first 0.6 s after motor-on, the
 Arduino is not involved, and the Pi's rail shows no under-voltage.
 
@@ -556,8 +574,9 @@ Open:
   request or the reply was lost is not known: the probe sees only the Pi's
   side.
 - **Next experiments** (the plan of 2026-11-08; E4 done, above): E5, 15
-  starts with the LiDAR powered from its own supply (a second micro-USB on
-  its adapter board, if it has one [unverified], or a powered hub), same
+  starts with the LiDAR powered from its own supply, through a powered USB
+  hub (its adapter board has only the one micro-USB [ours, looked], so it
+  cannot be fed separately there), same
   settings as E4; E6, the adapter's 5 V on a multimeter at spin-up. The
   baseline at E4's settings is 28 of 30 starts with a miss and 4 of 30
   silent, so none in 15 would be telling.
