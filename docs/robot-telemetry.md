@@ -47,7 +47,10 @@ library must keep that shape.**
    directly. Clients use these times only relative to each other; they mean
    nothing as wall-clock times.
 5. **Every item states its frame.** Scans are in the robot frame (REP 103:
-   x forward, y left, anticlockwise positive), poses in the odometry frame.
+   x forward, y left, anticlockwise positive; ROS calls it `base_link`).
+   Poses are the robot frame's position and heading in the odom frame,
+   fixed to the floor where the robot started (REP 105's `odom`). A pose
+   is not a frame of its own: it relates these two.
    The client places a scan using the pose and the sensors' mounting
    offsets, which come from the rig's profile
    ([`rig-profiles.md`](rig-profiles.md)) once those sections exist.

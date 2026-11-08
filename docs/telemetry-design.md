@@ -120,6 +120,12 @@ steady clock. The `scan` keeps every v1 field (`seq`, `mode`, `t_start_ns`,
 `unobserved`, `dropped`) and adds `"channel":"lidar"`. It is the message
 `lidar_gui_server` sends today, from the same encoder.
 
+Frames use the navigation design's names (`navigation-design.md` §3.1):
+`"robot"` is the robot frame, ROS's `base_link`; `"odom"` is the frame
+fixed to the floor where the robot started, REP 105's `odom`, in which
+poses are given. The scan's `"robot"` stays as v1 sends it: the format
+changes only by additions (D2).
+
 The `robot` item, 10 times a second:
 
 ```json
@@ -201,7 +207,7 @@ struct Channel {
   std::string name;            // "lidar"
   std::vector<std::string> messages;   // the item types, for the hello
   double maxHz{10.0};
-  std::string frame;           // "robot", "odom", "none"
+  std::string frame;           // "robot" (ROS base_link), "odom", "none"
   /** Fields this channel adds to the hello, as `"key":value,...`. */
   std::function<std::string()> helloFields;
   /** Messages sent once to each client after the hello. */
