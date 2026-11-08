@@ -119,10 +119,27 @@ angles clockwise. The `Lidar` library corrects both, with the bearing
 flip and its `mountingOffsetRad` (P4), so every bearing arrives
 as "0 = Heron's forward, positive = Heron's left": the robot frame's
 directions. What is left is the shift (lx, ly), which perception and the
-limiter add (step 1 of §3.3). Three things follow:
+limiter add (step 1 of §3.3).
 
-- **Navigation must not turn the bearings again,** or the yaw would be
-  applied twice.
+**An example.** Say the LiDAR is mounted with its housing's front
+facing Heron's left, so `mountingOffsetRad` is +90° (the bearing, in
+Heron's directions, that the housing's front points along). The box of
+§3.3, 30° to the left of Heron's forward, is then 60° *clockwise* from the
+housing's front, and that is what the sensor reports: 60°. `Lidar` turns
+it round in one line (`ScanBuilder.cpp`, `lidar-cpp-design.md` §2.1):
+
+```
+bearing = −sensor + mountingOffsetRad = −60° + 90° = 30°
+```
+
+The minus sign undoes the clockwise counting; adding the offset undoes
+the housing's direction. Navigation receives 30°, the robot frame's
+bearing, and only has to add the 6 cm shift. Three things follow:
+
+- **Navigation must not turn the bearings again.** Adding the 90° a
+  second time would put the box at 120°, behind Heron's left shoulder,
+  and the whole scan would be turned a quarter turn: the limiter would
+  watch the wrong side of Heron, and nothing would report an error.
 - **`Lidar` knows nothing of Heron's size or layout;** only navigation
   knows where the LiDAR sits.
 - **A LiDAR mounted dead centre** would make the two the same frame,
