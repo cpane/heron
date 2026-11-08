@@ -595,6 +595,26 @@ which could work a plug loose; navigation's 11 of 20 likely came from this
 [inference]. Whether 2 of 30 is a residue of the contact or normal for the
 A1 is not known (unit B: 0 of 15; too few to tell).
 
+**Wiggle test, 16:24, unit A** (`wiggle_20261108T*`; motor running
+steadily, requests every 50 ms for 80 s; plug pressed side to side at
+25-45 s and 65-85 s) [ours]: **379 of 749 unanswered and 2 garbled, in the
+hands-off windows as much as the wiggle ones**, from the first request:
+silences of 4 to 6 s alternating with 1 to 6 s of replies that lost about
+every fifth request. Steady running had been 200 of 200 earlier. No
+under-voltage; the motor sounded as before (user). The user may have
+touched or moved the plug before 16:24 while getting ready, and the robot
+shakes continuously from the LiDAR's own spin. So the contact was probably
+disturbed before the first window; the test could not separate wiggling
+from not [ours: the data; the handling is the user's recollection]. Unit
+A's state has followed handling three times (as installed: bad; re-seated:
+2 of 30; handled: bad), consistent with the contact, but not yet a
+controlled test. Next: re-seat firmly, confirm a clean steady baseline, then
+wiggle in a run that starts clean.
+
+A miss with the motor stopping: the first request 0.44 s after the port's
+open stopped a free-running motor got no reply (`dur-check`); e7-check's
+first phase began the same way.
+
 Untested predictions: unit A's 7.10 Hz rotation (navigation's Inbox, the
 plug as it was) was slowed by the same contact; a recording now would show
 it. A loose plug could also have added to the power block's 4 of 20.
