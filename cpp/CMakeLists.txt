@@ -189,6 +189,32 @@ add_library(heron_profile STATIC src/profile/RigProfile.cpp)
 target_include_directories(heron_profile PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(heron_profile PRIVATE heron_warnings)
 
+# -- navigation: the shared maths ---------------------------------------------
+#
+# Points, poses, twists, the robot's outline and the sweep: the frame moves
+# every navigation library shares, written once. Pure, no I/O, no time, and
+# independent of every sensor library, so the simulator and tests take it
+# alone. docs/navigation-cpp-design.md §2.
+add_library(heron_geometry STATIC
+    src/geometry/Pose2.cpp
+    src/geometry/Outline.cpp)
+target_include_directories(heron_geometry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(heron_geometry PRIVATE heron_warnings)
+
+# The simulator: a world of segments, a mecanum base, and an A1M8 that turns
+# while the base moves. Host-side, for tests only, so its headers are
+# private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
+# revolution with the adapter's own scan builder, so a simulated Scan keeps
+# every invariant a real one does. docs/navigation-cpp-design.md §3.
+add_library(heron_nav_sim STATIC
+    src/nav_sim/World.cpp
+    src/nav_sim/Base.cpp
+    src/nav_sim/Lidar.cpp)
+target_include_directories(heron_nav_sim PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_nav_sim
+    PUBLIC heron_geometry heron_scan_builder
+    PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -267,6 +293,14 @@ add_test(NAME scan_builder_test COMMAND scan_builder_test)
 add_executable(sector_check_test tests/SectorCheckTest.cpp)
 target_link_libraries(sector_check_test PRIVATE heron_lidar_types heron_warnings)
 add_test(NAME sector_check_test COMMAND sector_check_test)
+
+add_executable(geometry_test tests/GeometryTest.cpp)
+target_link_libraries(geometry_test PRIVATE heron_geometry heron_warnings)
+add_test(NAME geometry_test COMMAND geometry_test)
+
+add_executable(nav_sim_test tests/NavSimTest.cpp)
+target_link_libraries(nav_sim_test PRIVATE heron_nav_sim heron_warnings)
+add_test(NAME nav_sim_test COMMAND nav_sim_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.

@@ -200,6 +200,13 @@ heron_drive               sticks to body velocity, mecanum mixing, the
 
 heron_profile             a rig's profile (profiles/<rig>.conf), read and
                           checked, and which rig a Pi is (rig-profiles.md)
+
+heron_geometry            navigation's shared maths: frames, poses, twists,
+                          the robot's outline and the sweep; pure
+  ^                       (navigation-cpp-design.md §2)
+heron_nav_sim             the simulator, for tests: a world, a mecanum base,
+                          an A1M8 built through heron_scan_builder; host
+                          side, private headers (navigation-cpp-design.md §3)
 ```
 
 `heron_lidar` links the SDK and the channels **privately**, so anything
@@ -218,6 +225,7 @@ include path. The boundary is enforced by the build. Rationale in
 | `heron_teleop` | `cpp/tools/` | drives Heron with the remote: RemoteControl, `heron_drive` and Motors at 50 Hz; `--dry-run` without the motors |
 | `motors_test` | `cpp/tests/` | `Motors` against a fake Arduino on a pty that runs the firmware's own logic, run by `ctest` |
 | `motor_adapter` | `cpp/probes/` | `Motors` live on the board, as a 50 Hz robot loop sees it |
+| `geometry_test`, `nav_sim_test` | `cpp/tests/` | navigation's maths against worked examples and brute force; the simulator against the LiDAR's measured figures; run by `ctest` |
 | `rig_profile_test` | `cpp/tests/` | reading and checking rig profiles, every rule, run by `ctest` |
 | `rig_profiles_check` | `profiles/*.conf` | not a program: a `ctest` running `rig_profile check` on every profile in the repository |
 | `rig_profile` | `cpp/tools/` | checks profile files (`check`), and shows a Pi's own profile (`show`) |

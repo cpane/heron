@@ -179,7 +179,8 @@ Heron's front edge, 0.12 m ahead of its centre, reaches it:
 
 Host only, for tests: a world, a LiDAR that produces real `Scan`s, an
 OTOS with drift, and a mecanum base. No threads; the test moves time on.
-Headers in `src/nav_sim/`, private, as tests are its only users.
+Headers in `src/nav_sim/`, private, as tests are its only users. Built in
+N2, apart from the OTOS (below).
 
 ```cpp
 namespace Heron::NavSim {
@@ -199,7 +200,7 @@ struct World {
 struct BaseConfig { double accel{0.6}; double turnAccel{3.0}; Duration lag{std::chrono::milliseconds(60)}; };
 class Base {
   public:
-    Base(BaseConfig config, Geometry::Pose2 start);
+    Base(BaseConfig config, Geometry::Pose2 start, TimePoint startTime);
     void command(const Geometry::Twist &twist, TimePoint now);
     void advance(TimePoint now);
     [[nodiscard]] Geometry::Pose2 truePose() const;
@@ -207,15 +208,20 @@ class Base {
 };
 
 /** The A1M8 as measured [ours]: 7.3 rev/s, ~531 samples a revolution,
- *  turning clockwise, nothing nearer than 126.8 mm, a share of
- *  no-returns. Produces Scans with the adapter's invariants. */
+ *  turning clockwise, one ~8 degree gap a revolution, nothing nearer than
+ *  126.8 mm, a share of no-returns. */
 struct LidarConfig {
   Geometry::Vec2 offset{0.06, 0.0};
+  double yawRad{0.0};             // the housing's front: mountingOffsetRad
   double revolutionsHz{7.3};
-  int samplesPerRevolution{531};
+  double periodStdevS{0.0008};
+  std::int32_t samplesPerRevolution{531};
+  double syncDeg{358.6};          // sensor frame, where a revolution starts
+  double gapStartDeg{40.0};       // sensor frame
+  double gapWidthDeg{7.3};
   double minRangeM{0.1268};
   double maxRangeM{12.0};
-  double noReturnFraction{0.6};  // of samples that would hit
+  double noReturnFraction{0.7};   // of samples that would hit
   double rangeNoiseM{0.005};
   std::uint32_t seed{1};
 };
@@ -227,7 +233,7 @@ class Lidar {
     [[nodiscard]] std::optional<Heron::Scan> advance(TimePoint now, const Base &base);
 };
 
-/** The OTOS: the true pose plus noise and a heading drift. */
+/** The OTOS: the true pose plus noise and a heading drift. N3. */
 struct OtosConfig { double driftDegPerMin{0.5}; double noiseM{0.001}; std::uint32_t seed{1}; };
 class Otos {
   public:
@@ -241,9 +247,67 @@ class Otos {
 
 The simulated LiDAR samples the world at each sample's own time, from
 where the base was then, so its scans carry the same skew a real one does
-and deskewing is tested against it (design §12.2). It reuses the real
-`wrapBearing()` and the `Scan` invariants, and a test compares its scans'
-counts, gaps and timing with a `lidar_record` capture.
+and deskewing is tested against it (design §12.2). It makes each sample as
+the sensor sends it (a Q14 angle, a Q2 distance, the sync flag) and builds
+each revolution with the adapter's own `buildScan()`, so its scans keep
+every `Scan` invariant by construction. `nav_sim_test` holds them against
+the measured figures:
+
+| | Simulated (30 s, Mac) | Findings [ours] | Recorded 2026-11-08 [ours] |
+|---|---|---|---|
+| Samples a revolution | 529 to 533, mean 531.0 | 526 to 532, mean 531 (express) | 549 to 554, mean 550.8 |
+| Widest gap a revolution | 7.3 to 8.0°, mean 7.96° | 8.0 to 8.1° (medians per capture, express) | 6.5 to 8.3°, mean 7.50° |
+| No-returns | 65 to 75% | 61 to 84% | 36 to 40% |
+| Period | 136.5 to 137.5 ms | 134.2 to 138.1 ms | 139.6 to 142.2 ms (stamps) |
+
+On the Pi the same seed gives a different run, still inside the test's
+bounds: `std::mt19937` is the same everywhere, but the standard leaves
+the distributions built on it to each library, and the Mac uses libc++,
+the Pi libstdc++. So a test checks ranges, never exact values.
+
+**The recording.** 220 revolutions in express mode, the robot still on
+the bench rig, the Pi on its mains adapter (`lidar_record --mode 1
+--scans 220`, replayed through the real adapter by `lidar_replay_check`:
+217 scans, every invariant held, nothing dropped). What it settled:
+
+- **The revolution time barely varies.** The sample rate is steady (3908
+  a second here, 3904 in the findings), so the count follows the period;
+  the count's spread of 0.75 samples puts the true period spread near
+  0.2 ms. The findings' 0.8 ms is measured from SDK timestamps, which
+  jitter (the count and the stamped period correlate only 0.40). The
+  simulator used 0.8 ms at first, so its count spread to 521 to 538; it
+  now uses 0.2 ms.
+- **The rotation rate depends on the supply** (the findings say the motor
+  free-runs). 7.10 Hz here, 7.35 Hz in October. Why it differs on the
+  same adapter is not known [unverified]. Tests take the rate from
+  `LidarConfig`, never assume 7.3 Hz.
+- **No-returns depend on the room:** 36 to 40% here, 61 to 84% in the
+  findings. They cluster: runs of 5.2 samples on average, up to 70, where
+  the simulator's random ones at 70% would average 3.3.
+- **The gap sits at one bearing a capture,** 210 to 221° in 204 of 219
+  revolutions here (the findings saw 40° and 106°), and the second-widest
+  gap is 4.7°, so there is one gap each revolution, as simulated.
+- **On the power block, the LiDAR misses commands.** Before this
+  recording the Pi ran from the robot's power block, reported
+  under-voltage every few seconds (`get_throttled` 0x50005), and the
+  LiDAR answered only 4 of 20 GET_INFO requests; the SDK's start-up then
+  failed. On the mains adapter it answered 20 of 20 with the motor
+  stopped, and recorded cleanly, though only 11 of 20 with the motor
+  running and requests 50 ms apart [cause unverified].
+
+One known difference remains: the simulated no-returns are scattered at
+random, so a test that depends on clustering needs a recording.
+
+Changes from the interfaces as accepted, made while building N2:
+
+- **`Base` takes a start time,** as `Lidar` does. Without it, the first
+  `advance()` could only set the clock, and the time before it was lost.
+- **`LidarConfig` gained** the housing's yaw, the period's spread, the
+  sync angle and the gap, each from the findings doc; the no-return share
+  went from 0.6 to 0.7, which puts the simulated share inside the measured
+  61 to 84% in a closed room.
+- **The OTOS waits for N3:** it returns `Pose::PoseSample`, which
+  `heron_pose` defines, and no N2 test needs it.
 
 ## 4. `heron_pose`: where Heron is, and was
 

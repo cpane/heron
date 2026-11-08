@@ -12,7 +12,7 @@ streaming live data to other computers, started 2026-10-28. The builder
 workstream, scripts and a guide for people who build and drive a Heron
 without changing code, started 2026-11-02. The navigation workstream,
 obstacle avoidance from the LiDAR and the OTOS, started 2026-11-04 with
-its design.
+its design; its first libraries, the maths and a simulator, are built.
 
 ## Workstreams
 
@@ -190,7 +190,7 @@ Builder-only facts:
 - Builder scripts use the programs already on the Pi and add no robot
   code; a missing capability is a change in its own workstream first.
 
-### Navigation — obstacle avoidance (active, design only)
+### Navigation — obstacle avoidance (active)
 
 Read before doing navigation work:
 
