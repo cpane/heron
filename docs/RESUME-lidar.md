@@ -577,6 +577,28 @@ supply, the cable or the port. Both report firmware 1.29, hardware 7
 `d6b3fa92c3e49ec8a5eb9bf8406e5463`. Which part of unit A (its adapter
 board, the cable to the head, the head itself) is not known.
 
+**Unit A again after the swap back, ~16:12** (its micro-USB pulled and
+re-inserted at its adapter board; same cable, port and conditions;
+`e8-a2-stopped`, two `e8-a2-starts`) [ours]: motor off 100 of 100; **starts
+2 of 30 with a miss, both at ~20 ms, none silent**, against 42 of 45 with a
+miss and 5 silent for unit A earlier in the day. Serial confirmed as unit A.
+
+**Conclusion so far:** the failures came mainly from the micro-USB
+connection at unit A's adapter board. Re-seating that plug is the only thing
+that changed, and it took unit A from 42 of 45 to 2 of 30 [ours]. How a
+poor contact loses requests is an inference: it adds resistance in the 5 V
+and ground path, so the motor's start-up current makes the board's supply
+and ground bounce, corrupting the UART between the board's CP2102 and the
+head (USB itself is differential and stayed up). That fits the misread SCAN
+and the silences ending when the motor stopped. The robot is driven around,
+which could work a plug loose; navigation's 11 of 20 likely came from this
+[inference]. Whether 2 of 30 is a residue of the contact or normal for the
+A1 is not known (unit B: 0 of 15; too few to tell).
+
+Untested predictions: unit A's 7.10 Hz rotation (navigation's Inbox, the
+plug as it was) was slowed by the same contact; a recording now would show
+it. A loose plug could also have added to the power block's 4 of 20.
+
 **The motor spins whenever no program holds the port** [ours, seen by the
 user: it spins all the time the robot is driven with the remote; no process
 had the port open, and `heron_teleop` does not use the LiDAR]. With the port
