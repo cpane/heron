@@ -206,6 +206,23 @@ right-angled triangle:
 - The two always satisfy `cos²β + sin²β = 1`, so the point stays at
   distance r; cos and sin only split it between the two directions.
 
+**Why x = r cos β.** It follows from what cos and sin are. Draw a circle
+of radius 1 round the LiDAR and go out along bearing β until you meet
+it. The forward and sideways distances of that point are, by
+definition, cos β and sin β: that is what the two functions measure.
+(The school form says the same: in a right-angled triangle,
+cos β = adjacent ÷ hypotenuse and sin β = opposite ÷ hypotenuse.)
+
+Now go out to range r instead of 1. The triangle keeps the same angles
+and just grows r times bigger (similar triangles), so every side grows
+by r: the forward side becomes r cos β and the sideways side r sin β.
+Read as a ratio, cos β = x ÷ r, so x = r cos β.
+
+The identity cos²β + sin²β = 1 is Pythagoras on the radius-1 triangle
+(the two short sides squared add up to the long side squared, 1² = 1).
+Grown by r, it becomes x² + y² = r², which is why the point stays at
+distance r.
+
 Values worth knowing:
 
 | β | cos β | sin β | The point is |
@@ -234,9 +251,11 @@ a' = a cos θ − b sin θ
 b' = a sin θ + b cos θ
 ```
 
-It is the same triangle idea applied to each axis: the forward part a
-splits into (a cos θ, a sin θ), the sideways part b into
-(−b sin θ, b cos θ), and the two add. Check with θ = 90°: (1, 0), a point
+It is the same triangle idea applied to each axis. After the turn, "a
+along the old forward" points at angle θ, so it splits into
+(a cos θ, a sin θ). "b along the old left" points at θ + 90°, a quarter
+turn further, and cos(θ + 90°) = −sin θ, sin(θ + 90°) = cos θ, so it
+splits into (−b sin θ, b cos θ). The two parts add. Check with θ = 90°: (1, 0), a point
 ahead, becomes (0, 1), a point to the left, which is right for a quarter
 turn anticlockwise.
 
