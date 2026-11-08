@@ -13,11 +13,11 @@
 #     entry is seen before its pull request is merged;
 #   - in the working tree, written but not yet committed.
 #
-# An entry still on develop that an unmerged branch deletes has been folded
-# in on that branch, and goes when it is merged; it is listed as such, not
-# as waiting. (Deleted means present where the branch left develop, its
-# merge base, and gone at its tip: a branch that started before the entry
-# was written does not count.)
+# A branch counts only for what it changed since it left develop (its merge
+# base): an entry it added is waiting on it; an entry it deleted has been
+# folded in on it, and goes from develop when it is merged, so it is listed
+# as such, not as waiting. A branch that merely carries an entry from an
+# older develop says nothing about it.
 #
 # Usage:
 #   scripts/inbox_status.sh          # the list, for a person
@@ -86,38 +86,67 @@ REFS="${REFS} $(git for-each-ref --format='%(refname:short)' \
     --no-merged=develop refs/heads refs/remotes/origin \
     | grep -v '^origin/HEAD$' || true)"
 
-for ref in ${REFS}; do
-    where="${ref#origin/}"
-    files="$(git ls-tree --name-only "${ref}" docs/ \
-        | grep '^docs/RESUME-.*\.md$' || true)"
-    for file in ${files}; do
-        area="$(basename "${file}" .md)"
-        area="${area#RESUME-}"
-        git show "${ref}:${file}" | inbox_entries "${area}" "${where}" >> "${ENTRIES}"
+# A resume file's contents at a ref, or in the working tree ("WORKTREE");
+# nothing if it does not exist there.
+show_file() {
+    if [[ "$1" == "WORKTREE" ]]; then
+        cat "$2" 2>/dev/null || true
+    else
+        git show "$1:$2" 2>/dev/null || true
+    fi
+}
+
+resume_files() {
+    if [[ "$1" == "WORKTREE" ]]; then
+        ls docs/RESUME-*.md 2>/dev/null || true
+    else
+        git ls-tree --name-only "$1" docs/ | grep '^docs/RESUME-.*\.md$' || true
+    fi
+}
+
+area_of() {
+    local area
+    area="$(basename "$1" .md)"
+    printf '%s' "${area#RESUME-}"
+}
+
+# develop: every entry on it is there to be folded in.
+for file in $(resume_files develop); do
+    show_file develop "${file}" | inbox_entries "$(area_of "${file}")" develop >> "${ENTRIES}"
+done
+
+# A branch, or the working tree: only what it changed since it left develop
+# (its merge base). Entries it added are waiting there; entries it deleted
+# are folded in there. Entries it merely still carries from an older
+# develop say nothing, so a branch started before an entry was folded does
+# not bring it back.
+scan_changes() {
+    local tip="$1"
+    local base="$2"
+    local where="$3"
+    local file area
+    for file in $( { resume_files "${base}"; resume_files "${tip}"; } | sort -u); do
+        area="$(area_of "${file}")"
+        show_file "${base}" "${file}" | inbox_entries "${area}" "${where}" \
+            | sort > "${WORK}/base"
+        show_file "${tip}" "${file}" | inbox_entries "${area}" "${where}" \
+            | sort > "${WORK}/tip"
+        comm -13 "${WORK}/base" "${WORK}/tip" >> "${ENTRIES}"
+        comm -23 "${WORK}/base" "${WORK}/tip" \
+            | awk -F '\t' -v OFS='\t' '{ $4 = "gone"; print }' >> "${ENTRIES}"
     done
+}
+
+for ref in ${REFS}; do
     if [[ "${ref}" == "develop" ]]; then
         continue
     fi
-    # Entries at the merge base that the branch no longer has.
-    base="$(git merge-base develop "${ref}")"
-    for file in $(git ls-tree --name-only "${base}" docs/ \
-            | grep '^docs/RESUME-.*\.md$' || true); do
-        area="$(basename "${file}" .md)"
-        area="${area#RESUME-}"
-        git show "${base}:${file}" | inbox_entries "${area}" "${where}" | cut -f1-3 \
-            | sort > "${WORK}/base"
-        git show "${ref}:${file}" 2>/dev/null | inbox_entries "${area}" "${where}" \
-            | cut -f1-3 | sort > "${WORK}/tip" || true
-        comm -23 "${WORK}/base" "${WORK}/tip" | sed 's/$/\tgone/' >> "${ENTRIES}"
-    done
+    scan_changes "${ref}" "$(git merge-base develop "${ref}")" "${ref#origin/}"
 done
 
-for file in docs/RESUME-*.md; do
-    [[ -f "${file}" ]] || continue
-    area="$(basename "${file}" .md)"
-    area="${area#RESUME-}"
-    inbox_entries "${area}" "working tree" < "${file}" >> "${ENTRIES}"
-done
+if [[ -n "$(git status --porcelain -- 'docs/RESUME-*.md')" ]]; then
+    scan_changes WORKTREE HEAD "working tree"
+fi
 
 # One line per entry: "<area><TAB><heading><TAB><where it is>". An entry on
 # develop is simply waiting; otherwise say which branches carry it, since it
