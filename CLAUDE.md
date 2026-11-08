@@ -30,7 +30,10 @@ Workstreams pause and resume independently, so their context must not mix:
   its resume file: dated, saying which workstream found it, where, and
   how sure ([ours], [unverified]). Never into its own docs: the owner
   checks and folds it in on resuming, then deletes the entry. Read the
-  Inbox first when resuming.
+  Inbox first when resuming. `scripts/inbox_status.sh` lists every
+  Inbox's entries, on develop and on unmerged branches; a SessionStart
+  hook (`.claude/settings.json`) runs it, so a session opens with what
+  is waiting.
 - **`/pickup <area>` and `/pause <area>`** (`.claude/skills/`) run the
   routine at each end of a session: read in, and hand over.
 - **Telemetry:** external clients will read the LiDAR and odometry live
@@ -285,6 +288,7 @@ scripts/set_rig.sh         <user>@<pi> <rig>   # once per Pi: which profile
 scripts/teleop_autostart.sh <user>@<pi> on|off|status  # heron_teleop at boot
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
 builder/wheel_check.sh     <user>@<pi>         # each wheel and stick, by eye
+scripts/inbox_status.sh                        # what waits in every Inbox
 ```
 
 `deploy_pi.sh` and `deploy_cpp.sh` with extra arguments deploy *and* run, so
