@@ -129,8 +129,8 @@ The LiDAR's position matters beyond that conversion:
 
 A **pose** is not a frame. It is the position and orientation of one
 frame measured in another; here, of the robot frame in the odom frame
-(ROS writes it as `base_link` in `odom`). It is three numbers, (x, y, θ). x and y are metres from the start point; θ
-(theta) is the heading, how far Heron has turned anticlockwise since
+(ROS writes it as `base_link` in `odom`). It is three numbers, (x, y, θ).
+x and y are metres from the start point; θ (theta) is the heading, how far Heron has turned anticlockwise since
 start-up. Heron at pose (2.0, 1.0, 90°) is 2 m forward and 1 m to the left
 of where it started, measured along the start-up axes, and has turned a
 quarter turn to the left.
@@ -266,7 +266,62 @@ moment it was measured: `scan.timeOf(β)` gives that time, and the pose
 library's `poseAt()` gives the pose then (P3). This correction is called
 **deskewing**.
 
-### 3.4 The OTOS, time and units
+### 3.4 One box, three frames, as Heron moves
+
+The worked example placed one box once. Following the same box while
+Heron moves shows what each frame is for. The box never moves: it is at
+(1.5, 1.93) in the odom frame throughout.
+
+**Going back the other way.** To ask "where is this floor point from
+where I stand now?", undo step 2: take away the robot's position, then
+turn back by its heading.
+
+```
+px =  (X − x) cos θ + (Y − y) sin θ
+py = −(X − x) sin θ + (Y − y) cos θ
+```
+
+Then take away (lx, ly) for the LiDAR frame, and the LiDAR's bearing and
+range are the angle and length of what is left.
+
+**Three moments.** Heron starts at pose (2.0, 1.0, 90°), as in §3.3,
+drives 0.5 m straight ahead, then turns a quarter turn left on the spot:
+
+| Moment | Pose (x, y, θ) | LiDAR frame: β, r | Robot frame: px, py | Odom frame: X, Y |
+|---|---|---|---|---|
+| Sees the box | (2.0, 1.0, 90°) | 30°, 1.00 m | 0.93 ahead, 0.50 left | (1.5, 1.93) |
+| After 0.5 m ahead | (2.0, 1.5, 90°) | 54°, 0.62 m | 0.43 ahead, 0.50 left | (1.5, 1.93) |
+| After turning left | (2.0, 1.5, 180°) | −44°, 0.61 m | 0.50 ahead, 0.43 right | (1.5, 1.93) |
+
+Read down each column. The LiDAR and robot frame numbers change with
+every move, though the box stays put; only the odom numbers stay the
+same. After the turn the box has swung from Heron's left to its right,
+because Heron's "ahead" now points along the odom frame's −x.
+
+**What each part of Heron asks, and in which frame:**
+
+- **The LiDAR frame: "what did the sensor see?"** A bearing and a range
+  from the spin axis, as `Lidar` delivers them. Perception uses this
+  frame's origin to draw each beam from the LiDAR's cell (§6.2), and the
+  limiter checks the 13 cm blind spot round it (§7.4).
+- **The robot frame: "will I hit it if I keep going?"** The limiter's
+  question (§7). Heron's outline and its commands are fixed in this
+  frame, so the answer needs no pose: "0.43 m ahead and 0.50 m left" is
+  checked against the outline directly. The pose only corrects for the
+  motion during a scan, and the limiter keeps working, more cautiously,
+  when the pose is not fresh (§7).
+- **The odom frame: "where is it on the floor?"** Perception's obstacle
+  map (§6) and the planner's course line (§8). A box seen at the first
+  moment and passed by the third is still in the same map cell, so the
+  map remembers what the LiDAR can no longer see, such as an obstacle
+  now beside or behind Heron.
+
+The planner joins the two. For each course it tries, it imagines Heron
+at a series of future poses, places the outline (fixed in the robot
+frame) onto the map with step 2 at each one, and checks the cells it
+covers (§8.2).
+
+### 3.5 The OTOS, time and units
 
 - **The OTOS's own offset** is written to the sensor
   (`OtosConfig::offset`), so `Odometry` already reports the pose of the
