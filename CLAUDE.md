@@ -198,6 +198,8 @@ Read before doing navigation work:
   waits on.
 - `docs/navigation-design.md` — the design: five layers, the obstacle
   map, the SwC modes, phases N0 to N7.
+- `docs/navigation-cpp-design.md` — the C++ interfaces of the
+  navigation libraries. Read before writing any of them.
 
 Navigation-only facts:
 
@@ -207,7 +209,7 @@ Navigation-only facts:
   LiDAR points, never the map, so a map or planner bug cannot drive the
   robot into a wall; it is built first.
 - Our own code, not ROS 2 and Nav2, on this hardware (design D4).
-- Most of phase N1 is other workstreams' work (design §9): record it in
+- Most of phase N1 is other workstreams' work (design §15): record it in
   theirs, not here.
 
 ## Development model
