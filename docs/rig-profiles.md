@@ -28,6 +28,28 @@ start. That is why calibration belongs to the rig, not to the build.
 A rig is the whole assembly: each has its own Pi, and an Arduino stays with
 its motors.
 
+### Powering the Pi
+
+The Pi feeds the LiDAR (its motor too) and the Arduino from its own USB
+5 V, so its supply must hold 5 V under that load. Check with
+`vcgencmd get_throttled` on the Pi: `0x0` is good, bit 0 (`0x1`) means
+under-voltage now, bit 16 (`0x10000`) that it happened since boot; the
+kernel logs each dip (`journalctl -k | grep -i voltage`).
+
+Measured on the bench rig, 2026-11-08 [ours]:
+
+| Pi supply | `get_throttled` | Under-voltage | LiDAR, GET_INFO answered |
+|---|---|---|---|
+| The robot's power block | `0x50005` | every few seconds, 19 in the first minutes | 4 of 20 (motor running), 0 of 20 (stopped); the SDK's start-up failed |
+| The Pi's mains adapter | `0x50000` | once, at boot | 20 of 20 (stopped), 11 of 20 (running, requests 50 ms apart); the SDK started every time and recorded cleanly |
+
+So the power block does not run the Pi and the LiDAR. A rig that drives
+untethered with the LiDAR needs a 5 V supply that keeps bit 0 of
+`get_throttled` clear; which supply that is has not been chosen. What the power block is
+rated for, and why the running LiDAR still misses some requests on the
+mains adapter, are not known [unverified]. The LiDAR's rotation rate
+also follows its supply (7.10 Hz that day, 7.35 Hz in October).
+
 ## 2. The profile file
 
 One per rig, in the repository, so every calibration has a history in git.

@@ -24,6 +24,7 @@ rediscovery. Its results are in `profiles/bench.conf` and
 | The Arduino in USB port 1-1.2 | Only that port is named `/dev/arduino` (`target/udev/`) |
 | The firmware for the rig's platform | `scripts/build_firmware.sh`, then `scripts/flash_firmware.sh <user>@<pi>` (default `uno-l293d`) |
 | The C++ built | `scripts/build_cpp.sh` |
+| The Pi on a supply that holds 5 V | `vcgencmd get_throttled` with no current under-voltage (bit 0 clear). The robot's power block failed this on the bench rig ([`rig-profiles.md`](rig-profiles.md) §1, "Powering the Pi") |
 | On an L293D shield: the PWR jumper **off** | Otherwise the Pi's USB 5 V back-feeds the motor supply |
 | The motor battery on EXT_PWR | The battery the rig will run on: the dead band depends on its voltage |
 | **The wheels off the ground** | Steps 3 and 4 drive one motor at a time; on the floor the rig would spin |
