@@ -501,6 +501,23 @@ Measured [ours]:
   motor-on was always answered here. Consistent with "the SDK started every
   time" in the Inbox entry; not measured on the SDK path itself.
 
+E4, the Arduino unplugged (`captures/e4-noarduino_20261108T*`, 15 starts,
+requests every ~10 ms, 100 ms timeout, otherwise as above), measured [ours]:
+
+- **Single misses as before:** 13 of 15 starts lost a request (one lost
+  two), at 20 to 272 ms, one at 0.7 ms. The baseline at the same settings
+  (e1-spinup) lost one in 4 of 5, so no change shown.
+- **A second failure: the LiDAR stayed silent while the motor ran.** In 2
+  of 15 starts it stopped answering at 27 and 172 ms after motor-on and
+  sent not one byte for the rest of the phase (39 and 32 requests, about 4
+  s). It answered at once when the motor was stopped (DTR asserted), and the
+  next starts were normal. The kernel logged nothing for its port
+  (ttyUSB1) in that time: the USB link stayed up. This could be what
+  navigation saw as 11 of 20 [inference].
+- **Whether the Arduino matters is not settled:** the silent mode is 2 in 15
+  here against 0 in 14 earlier, but the earlier runs used other spacings.
+  Needs the same run with the Arduino back in.
+
 Open:
 
 - **What navigation's test did differently** [unverified]. A test that
