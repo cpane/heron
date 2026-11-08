@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/inbox_status.sh --hook",
+            "timeout": 15,
+            "statusMessage": "Checking workstream Inboxes"
+          }
+        ]
+      }
+    ]
+  }
+}
