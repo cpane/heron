@@ -148,7 +148,7 @@ About 1.6 s in all on the bench rig, almost all of it the Uno's bootloader.
 | Status | Published, latest wins; `configured` from its checksum |
 | A Boot after start-up | The Arduino reset: counted in `resets`; Configure sent again at once |
 | A Status without our checksum | Configure sent again, at most once per 500 ms. Covers a lost or corrupted Configure, not only a reset |
-| A device error | The thread ends, `state = Failed`, `lastError` set; `drive()` returns false from then on |
+| A device error | The thread ends, `state = Failed`, `lastError` set; `drive()` returns false from then on. No reconnect: the program decides. `heron_teleop` exits, and its service starts it again (2026-11-08) |
 
 The reader and `drive()` both write to the port, so writes go under a
 mutex; a frame is never interleaved with another. Reads happen only on the
@@ -195,7 +195,7 @@ configured.
 
 | Test | Covers |
 |---|---|
-| `motors_test` (`ctest`) | `Motors` against a **fake Arduino on a pseudo-terminal**, as `remote_control_test` fakes the receiver. The fake's loop must not sleep holding its lock: `std::mutex` is not fair, and on the Pi that starved the test's own calls for seconds (found 2026-10-25). The fake runs the firmware's own `MotorController` and `FrameParser` on the host, so it refuses, configures and reports exactly as the board does. Cases: start-up and its checksum; no Boot; another protocol version; another platform; an invalid profile; `drive()` scaling, clamping and NaN to Stop; `drive()` before `start()`; stale when the fake goes quiet; a reset mid-run, configured again; a lost Configure, sent again; `stop()` sends Stop |
+| `motors_test` (`ctest`) | `Motors` against a **fake Arduino on a pseudo-terminal**, as `remote_control_test` fakes the receiver. The fake's loop must not sleep holding its lock: `std::mutex` is not fair, and on the Pi that starved the test's own calls for seconds (found 2026-10-25). The fake runs the firmware's own `MotorController` and `FrameParser` on the host, so it refuses, configures and reports exactly as the board does. Cases: start-up and its checksum; no Boot; another protocol version; another platform; an invalid profile; `drive()` scaling, clamping and NaN to Stop; `drive()` before `start()`; stale when the fake goes quiet; a reset mid-run, configured again; a lost Configure, sent again; `stop()` sends Stop; the port hung up mid-run (the fake closes its end, as an unplug would): `Failed`, naming the device, nothing more sent |
 | `motor_adapter` (probe) | `Motors` on the real board: the snapshot and health once a second, and optionally four wheel values driven at 50 Hz |
 
 The conversion `toMotorConfig()` gets its own checks in the same test.

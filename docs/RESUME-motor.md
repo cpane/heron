@@ -36,7 +36,8 @@ frame-level bench tool (`info`, `drive`, `sweep`, `watchdog`, `noise`);
 
 **At boot, for driving with no laptop:** `teleop_autostart.sh <user>@<pi>
 on` installs `target/systemd/heron-teleop@.service` and enables it, so
-`heron_teleop` starts at every boot and restarts if it exits; `off` undoes
+`heron_teleop` starts at every boot and restarts if it exits (including
+when the Arduino's USB drops: teleop then exits on purpose); `off` undoes
 it, `status` shows it and its recent output. While it is on it holds
 `/dev/arduino` and `/dev/serial0`: turn it off before bench work with
 `motor_link` or `ibus_reader`.
@@ -85,9 +86,19 @@ checked on the Pi).
    designed below it: `Motors` ends its reader on a device error and stays
    `Failed` (`motor-cpp-design.md`, the reader table), and `heron_teleop`
    exits only if start-up fails, so systemd's `Restart=always` never ran.
-   Being fixed 2026-11-08 (decided by Chris): teleop exits when `Motors`
-   fails and the service restarts it. Whether `Motors` should reconnect
-   by itself is left to the robot design.
+   **Fixed 2026-11-08** (decided by Chris): teleop exits with status 1
+   when `Motors` fails, and the service starts it again 3 s later.
+   Checked on the bench rig [ours], robot disarmed: unplugged at
+   18:10:26.216, teleop reported `device hung up` 10 ms later and exited;
+   five restarts while unplugged each failed at start-up (`cannot open
+   /dev/arduino`); replugged at 18:10:45.477 (now `ttyUSB1`), the next
+   restart came 0.27 s later and was running, `motors OK`, at 18:10:47.4.
+   Replug to running is a restart's wait (up to ~3.2 s) plus start-up
+   (1.6 s). `motors_test` covers the library's side ("the port gone
+   mid-run"). Not checked: unplugging while driving; the Arduino's
+   watchdog should stop the wheels within 250 ms [unverified for this
+   case]. Whether `Motors` should reconnect by itself is left to the
+   robot design.
 7. **The LiDAR's motor on the 5 V budget.** Found by LiDAR 2026-11-08
    [ours, seen]: with no program holding `/dev/rplidar` the LiDAR's motor
    runs, so it spins all the time the robot is driven with
