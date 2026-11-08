@@ -1,8 +1,10 @@
 # LiDAR workstream — resume point
 
-**2026-11-08: resumed for one Inbox item,** the missed requests (section
-10), on `feature/lidar-missed-requests`. The rest of the Inbox entry is not
-folded in yet: its facts wait to be confirmed.
+**2026-11-08: resumed for navigation's Inbox entry** (section 10), on
+`feature/lidar-missed-requests`. The missed requests were unit A's poorly
+seated micro-USB (findings, trap 12); the entry's other facts were
+re-measured and folded into the findings, except the no-returns, which wait
+for a description of the room (section 10, "Open").
 
 Last updated 2026-10-04. Branch **`develop`**, everything pushed. The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
@@ -462,7 +464,7 @@ post-stall burst and was dropped.
 Restart, unplug and replug with reconnection, and the ~1 s `stop()`. Then
 mode 3, once something independent can check its ultra decode.
 
-## 10. IN PROGRESS — missed requests with the motor running (2026-11-08)
+## 10. DONE — missed requests with the motor running (2026-11-08)
 
 From navigation's Inbox entry: on the mains adapter the LiDAR answered 20 of
 20 GET_INFO stopped but 11 of 20 running, requests 50 ms apart. How that
@@ -669,55 +671,55 @@ has free-run between every run here and through every drive. To fix later
 Up to 15:25: the failures all start in the first 0.6 s after motor-on, the
 Arduino is not involved, and the Pi's rail shows no under-voltage.
 
+Folded into the findings 2026-11-08: trap 12 (the plug), trap 1 (the
+motor turns while nothing holds the port), and the rotation, period jitter,
+samples per revolution, gap and sync-node figures. Navigation was told
+through its Inbox.
+
 Open:
 
-- **What navigation's test did differently** [unverified]. A test that
-  restarted the motor, or reopened the port (which stops it), for each
-  request would put every request in the spin-up window; a reply timeout
-  under ~16 ms would count slow replies as misses. Neither is known.
-- **Why spin-up loses a request:** a supply dip from the motor's inrush, or
-  the firmware busy starting up. `get_throttled` saw no under-voltage, but
-  it samples the Pi's rail every 0.25 s, not the LiDAR's. Whether the
-  request or the reply was lost is not known: the probe sees only the Pi's
-  side.
-- **Next experiments** (the plan of 2026-11-08; E4 done, above): E5, 15
-  starts with the LiDAR powered from its own supply, through a powered USB
-  hub (its adapter board has only the one micro-USB [ours, looked], so it
-  cannot be fed separately there), same
-  settings as E4; E6, the adapter's 5 V on a multimeter at spin-up. The
-  baseline at E4's settings is 28 of 30 starts with a miss and 4 of 30
-  silent, so none in 15 would be telling.
-
----
-
-## Validating the C++ against the Python
-
-Now built: `lidar_sdkcheck.py` decodes an SDK-recorded `.rpraw` with the
-Python decoder and requires every SDK scan to match it node for node (section
-4b). Same bytes in, same numbers out. Python-recorded captures are still
-checked with:
-
-```
-python3 python/tools/lidar_rawcat.py captures/<name>.rpraw --verify
-```
-
-**Note:** captures are git-ignored, so the local `captures/` directory may be
-empty after a fresh clone. Record SDK sessions with `lidar_record`, Python
-ones with `probes/lidar_04_capture.py`. Worth keeping a few fixtures: an open
-room, a close wall, a cluttered scene. One ultra fixture now exists, locally
-only (section 4b).
+- **No-returns 33-40%** in two recordings (navigation's and unit A
+  re-seated, same room): not folded, because the room is not described.
+  With a sentence about it (size, what is near the robot, distances to the
+  walls), it widens the findings' 61-84%.
+- **What navigation's test did differently** [unverified]: how it counted
+  a miss is not recorded. Its 11 of 20 fits unit A's plug as it was then
+  [inference].
+- **Navigation's power-block result** (4 of 20 GET_INFO answered, the SDK's
+  start-up failing, the Pi under-voltage) was not re-tested with the plug
+  seated. Both may have played a part.
+- **Whether a firmly seated plug ever loses a request at start-up:** 0 of 15
+  starts for each unit, so a low rate is not excluded. The supply
+  experiments planned before the cause was found (a powered hub; a
+  multimeter on the board's 5 V) are no longer needed for this.
+- **The socket:** whether unit A's micro-USB socket is weak (solder) as
+  well as the plug having been unseated. Not inspected.
+- **The motor stopping:** one request was lost 0.44 s after opening the
+  port stopped a free-running motor (`dur-check`), with the plug possibly
+  marginal then. Once only.
+- **Turning the motor off while the LiDAR is unused** (trap 1): design
+  work, with section 9's lifecycle.
+- **`lidar_07_requests.py`** stays as a probe: it is how to check a unit's
+  plug (`--phases` of 15 `stopped,running` pairs, `--gap-ms 10 --count 40
+  --timeout-ms 100`; a healthy unit loses nothing).
 
 ---
 
 ## State of the hardware
 
-- Pi 3B, hostname `heron`, reached at `<pi>` over its wired link. Access
+- Pi 3B, hostname `heron-<suffix>`, reached at `<pi>` over its wired link. Access
   details (user, SSH key, `sudo`) are per-developer: see `CLAUDE.local.md`.
 - LiDAR at `/dev/rplidar` (udev rule `99-heron-rplidar.rules`, installed by
   provisioning). Firmware 1.29, HW 7, health 0. Deployed code and binaries
   live under `~/heron` on the Pi.
 - **Power issue resolved.** New supply, `throttled=0x0` idle, while scanning,
   and under CPU load. The old `0x50000` readings are historical.
+- **The LiDAR's micro-USB at its adapter board must be seated firmly**
+  (findings, trap 12). Unit A was re-seated on 2026-11-08; a second unit, B,
+  exists and behaved cleanly in the same place.
+- On the bench rig (since 2026-11-03 a complete small robot), the LiDAR
+  shares the Pi with the Arduino; `heron_teleop` runs at boot and does not
+  use the LiDAR, so its motor turns while the robot is driven (trap 1).
 
 ## What is still genuinely unverified
 
@@ -772,8 +774,8 @@ only (section 4b).
 |---|---|
 | Legacy rate | 1954 samples/s (device claims 1969) |
 | Express rate | 3911 samples/s (claims 3937) |
-| Rotation | ~7.3-7.5 Hz, period stdev ~1-2 ms |
-| Samples/rev | ~262-267 legacy, ~530 express |
+| Rotation | ~7.3-7.5 Hz (7.52 Hz on the mains adapter, 2026-11-08); true period spread ~0.2 ms, SDK stamps add ~0.5 ms of jitter. Below ~7.4 Hz on a good supply, suspect the micro-USB plug |
+| Samples/rev | ~262-267 legacy, ~520-530 express (follows the rotation) |
 | Invalid returns | 61-84% in the recorded scenes; 38-53% seen live in a closer one (not yet captured) |
 | Stream order | **Not angular** — ~12% arrive behind the previous angle |
 | S flag | Fires at ~358.6 deg, never at 0 |
@@ -795,37 +797,4 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-### From navigation, 2026-11-08: a 220-revolution express recording
-
-Recorded for the simulator's comparison: `lidar_record --mode 1 --scans 220
---tag navsim` on the bench rig, robot still, the Pi on its mains adapter;
-`captures/navsim-sdk1_20261108T185202Z.*` on the host (git-ignored).
-Replayed by `lidar_replay_check`: 217 scans, invariants held, nothing
-dropped. The full write-up is `navigation-cpp-design.md` §3 (branch
-`feature/navigation-geometry` until merged). Against the findings:
-
-- **Rotation 7.10 Hz** (stamped period 139.6 to 142.2 ms, mean 140.9),
-  not the findings' 7.35 Hz, on the same adapter as October. Why is not
-  known [unverified].
-- **Samples a revolution 549 to 554**, mean 550.8, stdev 0.75. The sample
-  rate held: 3908 a second, against 3904 from the findings' 531 at 136.0
-  ms. So the count follows the period, as the findings say.
-- **The findings' period stdev of 0.8 ms is probably timestamp jitter**
-  [ours, inference from one recording]: the count's 0.75-sample spread
-  at 254 us a sample puts the true spread near 0.2 ms, the stamped spread
-  here was 0.51 ms, and count and stamped period correlate only 0.40.
-  Worth a second recording before it goes into the findings as measured.
-- **Widest gap 6.5 to 8.3°, mean 7.50°** (findings: medians 8.0 to 8.1°),
-  at one bearing, 210 to 221° in 204 of 219 revolutions; the second-widest
-  gap median 4.7°.
-- **No-returns 36 to 40%** in this room (findings: 61 to 84%), in runs of
-  5.2 samples on average, median 2, longest 70.
-- **Sync** at a median of 355.2° (findings 351.4 to 359.5°).
-- **Supply.** On the robot's power block the Pi was under-voltage and the
-  LiDAR answered 4 of 20 GET_INFO requests, so `lidar_info` and
-  `lidar_record` failed at start-up: the SDK's own GET_INFO in `connect()`
-  was answered, the probe's second one was not (strace). On the mains
-  adapter: 20 of 20 with the motor stopped, but 11 of 20 with it running
-  and requests 50 ms apart [cause unverified]; the SDK then started every
-  time. The supply table is `rig-profiles.md` §1, "Powering the Pi"
-  (branch `chore/rig-pi-power` until merged).
+No entries.
