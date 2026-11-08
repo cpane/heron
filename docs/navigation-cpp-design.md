@@ -7,7 +7,7 @@ the libraries already built. The design they implement is
 2026-11-08); this document is its C++ shape, and section numbers like
 "design §7" point there.
 
-**Proposed 2026-11-08, for review.** It covers what phases N2 to N4
+**Accepted 2026-11-08** (I1 to I9, as proposed). It covers what phases N2 to N4
 build: `heron_geometry`, `heron_nav_sim`, `heron_pose`,
 `heron_perception`, `heron_limiter`, and the parts of `heron_robot` that
 glue them. The planner (N5) is sketched in §8 and written out when N5

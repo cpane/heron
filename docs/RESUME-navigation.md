@@ -1,13 +1,13 @@
 # Navigation workstream — resume point
 
 Last updated 2026-11-08. Started 2026-11-04; nothing built. **In
-progress: the C++ interfaces, proposed for review; then phase N2.**
+progress: phase N2, `heron_geometry` and `heron_nav_sim`.**
 
 ## Read this first when resuming
 
 **Phase N0 is done: the goal, D1 to D5 and the design (P1 to P12) are
 accepted. The C++ interfaces (`navigation-cpp-design.md`, I1 to I9) are
-written and awaiting review; phase N2 starts once they are accepted.** Heron is to see obstacles, slide
+accepted; phase N2 is next.** Heron is to see obstacles, slide
 around them and return to its course, in a new SwC mode, Navigate. Five
 layers, each its own library: sensors, pose, perception (a rolling
 obstacle map), a safety limiter on the raw LiDAR points, and a local
@@ -43,11 +43,12 @@ navigation, so SwC to Manual always takes over.
 - **N2 first, on the Mac; N1 alongside it** at the bench, which the user
   is always at. The bench rig is a complete Heron, LiDAR and OTOS
   mounted; their positions are measured in N1 (design §10's table).
+- **I1 to I9 accepted** as proposed (`navigation-cpp-design.md` §1),
+  after the user's review on the page. `Pose2` and `Vec2` keep the 2
+  (§2.1 says why).
 
 ## Picking up
 
-0. **Review the interfaces** (`navigation-cpp-design.md`, I1 to I9) with
-   the user; record what is accepted or changed.
 1. **N2:** `heron_geometry` and `heron_nav_sim`, with `geometry_test`
    and `nav_sim_test` (`navigation-cpp-design.md` §2, §3, §9).
 
