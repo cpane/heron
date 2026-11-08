@@ -57,3 +57,11 @@ replay test bench on the Mac, which needs no robot.
 `navigation-design.md` §18: the OTOS axes once mounted, the Pi 3's time
 budget, the grid counts and planner weights, which end of SwC is up.
 Settled 2026-11-04: the bench rig carries navigation.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

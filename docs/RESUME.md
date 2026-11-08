@@ -19,7 +19,8 @@ Planned, not started: the robot design that ties the workstreams together. The t
 ## Starting a new workstream
 
 1. Create `docs/RESUME-<area>.md`, written as a handover: what exists, how to
-   run it, and where to pick up.
+   run it, and where to pick up. End it with an empty `## Inbox` section,
+   copied from another resume file, for facts other workstreams find.
 2. Add a row to the table above.
 3. Name its other documents `docs/<area>-*.md`, so they never collide with
    another workstream's.

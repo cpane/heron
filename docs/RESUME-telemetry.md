@@ -58,3 +58,11 @@ writer; SI units for new messages.
   runs: turn the service off first, as for `motor_link`.
 - Check the LiDAR is still on USB port 1-1.4 (`/dev/rplidar`) before step 4;
   it has not been used since the LiDAR workstream paused.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

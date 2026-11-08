@@ -99,3 +99,11 @@ behaviour beyond ±10 m.
 ## Open questions
 
 The rest are in the reference, §10.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

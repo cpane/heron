@@ -26,6 +26,13 @@ Workstreams pause and resume independently, so their context must not mix:
   docs. Shared facts (hardware, build chain, conventions) go in this file,
   `docs/cpp-build.md`, or `docs/rig-profiles.md` (how each physical rig is
   described) and `docs/rig-calibration.md` (how to measure one).
+- **A fact for another workstream goes in its Inbox,** the last section of
+  its resume file: dated, saying which workstream found it, where, and
+  how sure ([ours], [unverified]). Never into its own docs: the owner
+  checks and folds it in on resuming, then deletes the entry. Read the
+  Inbox first when resuming.
+- **`/pickup <area>` and `/pause <area>`** (`.claude/skills/`) run the
+  routine at each end of a session: read in, and hand over.
 - **Telemetry:** external clients will read the LiDAR and odometry live
   through a server inside the robot process, read-only, never slowing the
   control loop. Every library keeps the `getLatest()` shape that allows it;
