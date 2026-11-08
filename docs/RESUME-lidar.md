@@ -1,5 +1,9 @@
 # LiDAR workstream — resume point
 
+**2026-11-08: resumed for one Inbox item,** the missed requests (section
+10), on `feature/lidar-missed-requests`. The rest of the Inbox entry is not
+folded in yet: its facts wait to be confirmed.
+
 Last updated 2026-10-04. Branch **`develop`**, everything pushed. The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
 re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
@@ -457,6 +461,62 @@ post-stall burst and was dropped.
 
 Restart, unplug and replug with reconnection, and the ~1 s `stop()`. Then
 mode 3, once something independent can check its ultra decode.
+
+## 10. IN PROGRESS — missed requests with the motor running (2026-11-08)
+
+From navigation's Inbox entry: on the mains adapter the LiDAR answered 20 of
+20 GET_INFO stopped but 11 of 20 running, requests 50 ms apart. How that
+test counted a miss was not recorded, so it was repeated with a probe that
+classifies each one: `python/probes/lidar_07_requests.py` (ok, none,
+garbled, partial; every byte timed; bytes waiting before a request logged
+as stray; `get_throttled` polled every 0.25 s).
+
+Conditions for every run below: the bench rig, the Pi on its mains adapter
+(`throttled=0x50000` throughout, the boot event only; bit 0 never set in
+any sample), `heron_teleop` running with the Arduino attached, robot still,
+the Pi reached over Wi-Fi. Captures `captures/{smoke,e1,e1-spinup,e1-window,
+e2-gaps,e3-health,e3-rate}_20261108T19*` on the host.
+
+Measured [ours]:
+
+- **11 of 20 did not reproduce.** With the motor running steadily (3 s
+  after motor-on), GET_INFO was answered 200 of 200 at gaps of 10, 50, 200
+  and 1000 ms. No reply was ever late, garbled or partial, and no stray
+  bytes were ever found before a request.
+- **Motor stopped: 810 of 810 answered.**
+- **Spin-up loses at most one request.** In 8 of 14 motor starts, exactly
+  one request got no reply at all (nothing within 20 to 500 ms), at 20, 21,
+  21, 41, 60, 60, 167 and 177 ms after motor-on [the 14 runs: e1, smoke,
+  e3-health, e3-rate, five in e1-spinup, five in e1-window]. Requests 0.6
+  ms after motor-on were always answered; nothing was missed later than 177
+  ms. The miss is not at a fixed time: with requests every ~12 ms
+  (e1-window) only 2 of 5 starts lost one, both late in the window.
+- **Not GET_INFO-specific:** GET_SAMPLERATE lost one at spin-up too
+  (e3-rate); GET_HEALTH's one spin-up lost none.
+- **Reply latency does not change with the motor:** 3.2 to 4.7 ms typically,
+  with occasional 7 to 16 ms replies both stopped and running.
+- **The SDK's start-up is clear of the window** [ours, from the code]:
+  `startScanExpress()` sends EXPRESS_SCAN right after `startMotor()`
+  (`sl_lidar_driver.cpp`, 10 ms after only), and a request 0.6 ms after
+  motor-on was always answered here. Consistent with "the SDK started every
+  time" in the Inbox entry; not measured on the SDK path itself.
+
+Open:
+
+- **What navigation's test did differently** [unverified]. A test that
+  restarted the motor, or reopened the port (which stops it), for each
+  request would put every request in the spin-up window; a reply timeout
+  under ~16 ms would count slow replies as misses. Neither is known.
+- **Why spin-up loses a request:** a supply dip from the motor's inrush, or
+  the firmware busy starting up. `get_throttled` saw no under-voltage, but
+  it samples the Pi's rail every 0.25 s, not the LiDAR's. Whether the
+  request or the reply was lost is not known: the probe sees only the Pi's
+  side.
+- **Next experiments** (the plan of 2026-11-08): E4, spin-ups with the
+  Arduino unplugged; E5, spin-ups with the LiDAR powered from its own supply
+  (a second micro-USB on its adapter board, if it has one [unverified], or a
+  powered hub); E6, the adapter's 5 V on a multimeter at spin-up. About 15
+  spin-ups each: at the baseline 8 in 14, none in 15 would be telling.
 
 ---
 
