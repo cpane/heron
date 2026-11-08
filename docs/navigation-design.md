@@ -272,6 +272,14 @@ The symbols:
 | px, py | The point in the robot frame | Step 1 |
 | X, Y | The point in the odom frame | Step 2 |
 
+**Why the time matters.** One LiDAR revolution takes about 137 ms. At
+0.35 m/s Heron moves about 5 cm in that time, and turning at 1 rad/s it
+turns about 8°. If every point used the pose at the end of the scan, a
+straight wall would come out bent. So each point uses the pose at the
+moment it was measured: `scan.timeOf(β)` gives that time, and the pose
+library's `poseAt()` gives the pose then (P3). This correction is called
+**deskewing**.
+
 **Step 1, LiDAR to robot frame:** split the range into forward and
 sideways, then add where the LiDAR sits.
 
@@ -289,7 +297,9 @@ Y = y + px sin θ + py cos θ
 ```
 
 **A worked example.** The LiDAR sits 6 cm ahead of the robot's centre,
-so (lx, ly) = (0.06, 0). It sees a box at β = 30°, r = 1.0 m.
+so (lx, ly) = (0.06, 0). It sees a box at β = 30°, r = 1.0 m. The pose
+below is Heron's pose at the moment that point was measured, as
+`poseAt()` gives it.
 
 - Step 1: cos 30° = 0.866 and sin 30° = 0.5, so
   px = 0.06 + 1.0 × 0.866 = 0.926 and py = 0 + 1.0 × 0.5 = 0.5.
@@ -304,14 +314,6 @@ so (lx, ly) = (0.06, 0). It sees a box at β = 30°, r = 1.0 m.
 In words: Heron has turned to face the odom frame's left (+y), so "ahead
 of Heron" is +y on the floor, and "Heron's left" is −x. The box ahead
 adds 0.926 to Y; the box being on Heron's left takes 0.5 off X.
-
-**Why the time matters.** One LiDAR revolution takes about 137 ms. At
-0.35 m/s Heron moves about 5 cm in that time, and turning at 1 rad/s it
-turns about 8°. If every point used the pose at the end of the scan, a
-straight wall would come out bent. So each point uses the pose at the
-moment it was measured: `scan.timeOf(β)` gives that time, and the pose
-library's `poseAt()` gives the pose then (P3). This correction is called
-**deskewing**.
 
 ### 3.4 One box, three frames, as Heron moves
 
