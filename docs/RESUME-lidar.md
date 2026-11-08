@@ -621,6 +621,36 @@ before or at the very start of the requests (they began 16:34:05): the run
 does not show whether a gentle wiggle breaks a snug plug. What it does show:
 seated firmly, unit A answered 1556 of 1556 with the motor running.
 
+**Unit A, firmly seated, 16:36-16:40** [ours]: 15 starts, 0 with a miss,
+1200 of 1200 answered (`e8-a3-starts`), as unit B. Then an express
+recording, 220 revolutions, robot still, Pi on its mains adapter, the
+same room as navigation's (`unitA-reseat-sdk1_20261108T213830Z`; replay
+check 217 scans, invariants held, nothing dropped). Both recordings run
+through one script (scratch, not kept: the SDK dump's every sample, first
+two scans dropped; it reproduces navigation's figures from theirs exactly):
+
+| | navsim 18:52 (plug as installed) | unit A re-seated 21:38 UTC |
+|---|---|---|
+| Rotation | 7.10 Hz, period 139.6-142.2 ms | **7.52 Hz**, 131.9-134.1 ms |
+| Samples a revolution | 549-554, mean 550.8 | 519-521, mean 519.8 |
+| Sample rate | 3908/s | 3908/s |
+| Count-implied period sd / stamped sd / correlation | 0.19 / 0.51 ms / 0.40 | 0.14 / 0.59 ms / 0.00 |
+| No-returns | 36-40%, runs mean 5.2, max 70 | 33-39%, runs mean 4.4, max 25 |
+| Widest gap | 6.5-8.3°, mean 7.50°, at ~220° | 7.7-8.2°, mean 7.97°, at ~188° |
+| First (sync) node | median 355.2° | median 359.6° (359.3-360.0) |
+
+- **The 7.10 Hz was the plug** [ours: same unit, same supply, before and
+  after re-seating; mechanism inference: the contact's resistance lowered
+  the motor's voltage]. 7.52 Hz is the findings' range on this supply
+  (7.45-7.52 Hz).
+- **The stamped period spread is timestamp jitter**, now from two
+  recordings: the count puts the true spread at 0.14-0.19 ms, stamps show
+  0.5-0.6 ms, and they barely correlate (0.40, 0.00).
+- **The gap's bearing is not a property:** 220° then 188° in the same room;
+  one wide gap a revolution in both.
+- **No-returns 33-40%** in both, same room; the room is not yet described,
+  which the findings' open item asks for.
+
 A miss with the motor stopping: the first request 0.44 s after the port's
 open stopped a free-running motor got no reply (`dur-check`); e7-check's
 first phase began the same way.
