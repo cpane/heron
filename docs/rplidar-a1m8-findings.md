@@ -5,7 +5,10 @@ Reproduce any of it with the probe named in each entry.
 
 **Unit under test:** model `0x18`, firmware 1.29, hardware 7,
 serial `6946595DF298E6A5C998EAC093ED87C8`, on a Raspberry Pi 3B (Debian 13,
-Python 3.13.5) over a Silicon Labs CP2102 bridge at 115200 8N1.
+Python 3.13.5) over a Silicon Labs CP2102 bridge at 115200 8N1. Called
+**unit A** where a second unit is involved: unit B (same model, firmware
+and hardware, serial `63546E40F89BEBA5C89EE4C392FAB3D6`) was used only as
+a comparison on 2026-11-08 (trap 12).
 
 **Power — resolved 2026-09-21.** The original captures were taken with a
 marginal supply (`throttled=0x50000`: under-voltage and throttling had both
@@ -46,9 +49,9 @@ S flag makes it.
 | Question | Answer | Probe |
 |---|---|---|
 | Does the advertised sample rate hold? | **Yes.** Legacy: 1954 measured vs 1969 claimed (508 µs), −0.7%. Express: 3911 vs 3937 claimed (254 µs), −0.7%. | 4, 5 |
-| Rotation rate | **7.3 Hz**, not the 5.5 Hz nominal. The motor is free-running at whatever the supply gives it; there is no speed control on the A1. | 4 |
-| Rotation stability | **Very stable.** Period 134.2–138.1 ms, mean 136.0 ms, stdev 0.8 ms — 3.5% spread. | 4 |
-| Samples per revolution | Legacy 264–267 (mean 265.8, stdev 0.43). Express 526–532 (mean 531). Varies because sample rate and rotation rate are independent — nothing locks them. | 4, 5 |
+| Rotation rate | **7.3 Hz**, not the 5.5 Hz nominal. The motor is free-running at whatever the supply gives it; there is no speed control on the A1. Re-measured 2026-11-08 on the Pi's mains adapter: **7.52 Hz** (express, 218 revolutions, SDK recording). The same day, with the adapter board's micro-USB poorly seated, it turned at **7.10 Hz**; re-seating alone restored 7.52 Hz (trap 12). | 4, `lidar_record` |
+| Rotation stability | **Very stable.** Period 134.2–138.1 ms, mean 136.0 ms, stdev 0.8 ms — 3.5% spread. **Most of that stdev is timestamp jitter, not the motor** (2026-11-08, two SDK express recordings): the sample count, at a steady sample rate, puts the true period spread at 0.14–0.19 ms, the stamped periods spread 0.51–0.59 ms, and count and stamped period barely correlate (0.40, 0.00). | 4, `lidar_record` |
+| Samples per revolution | Legacy 264–267 (mean 265.8, stdev 0.43). Express 526–532 (mean 531). Varies because sample rate and rotation rate are independent — nothing locks them. Confirmed 2026-11-08: the express sample rate held at 3908/s in two SDK recordings while the count followed the rotation, 519–521 at 7.52 Hz and 549–554 at 7.10 Hz. | 4, 5, `lidar_record` |
 | Chunk arrival latency | p50 2.0 ms, p95 4.5 ms, p99 7.0 ms. This bounds the *measurable* part of sensor-to-Python latency; the sensor-internal term is unknown and would need an external trigger. | 4 |
 
 > An earlier, cruder measurement during planning reported 1509 samples/s and
@@ -66,7 +69,9 @@ S flag makes it.
   this reason. (probe 3)
 - **The S start flag does not fire at 0°.** Measured over 139 revolutions it
   fires at 351.4°–359.5°, mean 358.6°, stdev 1.4°. It marks a *transmission*
-  boundary, not an angular one. (probe 4)
+  boundary, not an angular one. (probe 4) In SDK express recordings the
+  first node of each scan sat at a median 359.6° (359.3–360.0°) with the
+  unit healthy and 355.2° with its micro-USB poorly seated (2026-11-08).
 - **Angular spacing is not uniform.** Legacy: median 1.40°, p95 3.3°, p99 5.5°,
   worst gap per revolution ~8–9°. Express halves it: median 0.70°, p95 1.40°.
   (probes 3, 4, 5)
@@ -75,7 +80,9 @@ S flag makes it.
   closed: per-capture medians 8.3–8.7° legacy and 8.0–8.1° express; worst
   single revolution 8.9° legacy, 8.1° express. Within a capture the widest gap usually sits at
   one bearing (~40° in two captures, ~106° in another), so it is not a fixed
-  hole in the sensor frame. Cause not understood.
+  hole in the sensor frame. Cause not understood. Two SDK express recordings
+  in the same room on 2026-11-08 agree: one wide gap a revolution, mean 7.50°
+  at ~220° and 7.97° at ~188°, the second-widest ~4.7°.
 - **These gaps are between *samples*, not returns.** Over valid returns only,
   the same revolutions read 30–115° (median per capture), because 61–84% of
   samples return nothing and they cluster. That figure measures the scene,
@@ -234,7 +241,11 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
 1. **DTR is the motor.** Asserted = stopped, de-asserted = running. Opening the
    port asserts it. The motor spins whenever DTR is low **even with no scan
    running**, so a crashed process leaves it spinning. There is no PWM speed
-   control on the A1 (`SET_MOTOR_PWM` 0xF0 is A2/A3).
+   control on the A1 (`SET_MOTOR_PWM` 0xF0 is A2/A3). **With no program
+   holding the port, it spins too** (observed 2026-11-08: the motor ran all
+   the time the robot was driven by remote, with no process holding the
+   port). So from power-on and between programs, the LiDAR turns unless
+   something opens the port and keeps it open.
 2. **The descriptor packs 30 bits of length and 2 bits of mode** into a
    little-endian uint32. Read naively, SCAN's `length=5, mode=1` becomes
    `0x40000005` — a plausible-looking buffer size, so it fails late.
@@ -341,11 +352,40 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
     `target/udev/99-heron-rplidar.rules`). The LiDAR's protocol-level serial
     is invisible to udev; the CP2102's USB serial descriptor is the generic
     `"0001"`.
+12. **A poorly seated micro-USB at the adapter board loses requests, and
+    slows the motor.** Measured 2026-11-08 with `python/probes/lidar_07_requests.py`,
+    which classifies every request's reply, on the bench rig with the Pi on
+    its mains adapter. With the plug as it had been since installation,
+    unit A lost a request (no reply at all) in 42 of 45 motor starts, mostly
+    20 to 200 ms after motor-on (from 0.7 to 580 ms); in 5 starts it went **silent for seconds**, not one
+    byte back, ending at or soon after motor stop; and once it answered a
+    GET_INFO with a legacy SCAN descriptor (`a5 5a 05 00 00 40 81`). With the
+    motor stopped or running steadily, it answered (810 of 810 and 200 of
+    200), apart from one unexplained episode with the motor stopped (about
+    16 of 40 lost in one run, then clean again untouched). The USB link itself stayed up throughout (no kernel errors). Unit
+    B on the same cable and port: 0 of 15 starts. Unit A after its plug was
+    pulled and pushed back: 2 of 30, then, pushed firmly home, 0 of 15 and
+    1556 of 1556 with the motor running steadily. After it was handled again
+    and left to the robot's vibration (the LiDAR's spin shakes the robot), it
+    lost half its requests in seconds-long silences, motor running steadily.
+    The same poor contact slowed the rotation to 7.10 Hz (7.52 Hz re-seated).
+    Not established: the mechanism (inference: the contact's resistance makes
+    the board's 5 V and ground bounce under the motor's current, corrupting
+    the UART between the board's CP2102 and the head, while differential USB
+    survives), and whether the socket's solder is also weak. **Seat the plug
+    fully and give the cable strain relief near the board.** A probe that
+    sees a request go unanswered at start-up, or the rotation below ~7.4 Hz
+    on a good supply, should suspect this plug first.
 
 ## Still open
 
 - Invalid fraction against controlled surfaces and distances.
 - Startup transient: how many revolutions to discard after motor-on.
+- Whether a request at motor start is ever lost with the plug firmly
+  seated: 0 of 15 starts for unit A re-seated and for unit B, so a rate
+  below a few percent is not excluded.
+- Keeping the motor stopped while nothing is using the LiDAR (trap 1): a
+  program must hold the port, or the motor turns.
 - Behaviour on USB re-enumeration, and the reconnect state machine it implies.
 - Whether the SDK's decode of the ultra modes (2, 3, 4) is correct. They
   stream genuine 0x84 frames and the SDK decodes them reproducibly, but
