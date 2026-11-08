@@ -111,11 +111,22 @@ each LiDAR has its own frame, its origin (lx, ly) from the wheelbase
 centre, read from its profile section (6 cm ahead in this section's
 example).
 
-It is a light frame. Each `Lidar` already turns its bearings into the
-robot's directions with its own `mountingOffsetRad` (P4), so the LiDAR
-and robot frames point the same way and differ only by the shift (lx, ly),
-applied in perception and the limiter. A LiDAR mounted dead centre would
-make the two the same frame, with lx = ly = 0.
+**The LiDAR frame needs only a shift, not a rotation.** In general,
+going from one frame to another undoes a rotation and a shift. For the
+LiDAR, the rotation is already done before navigation sees a point. The
+sensor's own 0° is wherever its housing happens to point, and it counts
+angles clockwise. The `Lidar` library corrects both, with the bearing
+flip and its `mountingOffsetRad` (P4), so every bearing arrives
+as "0 = Heron's forward, positive = Heron's left": the robot frame's
+directions. What is left is the shift (lx, ly), which perception and the
+limiter add (step 1 of §3.3). Three things follow:
+
+- **Navigation must not turn the bearings again,** or the yaw would be
+  applied twice.
+- **`Lidar` knows nothing of Heron's size or layout;** only navigation
+  knows where the LiDAR sits.
+- **A LiDAR mounted dead centre** would make the two the same frame,
+  with lx = ly = 0.
 
 The LiDAR's position matters beyond that conversion:
 
