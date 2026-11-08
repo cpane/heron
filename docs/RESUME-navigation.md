@@ -1,13 +1,15 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04; nothing built. **In
-progress: phase N2, `heron_geometry` and `heron_nav_sim`.**
+Last updated 2026-11-08. Started 2026-11-04. **In progress: phase N2.**
+`heron_geometry` and `heron_nav_sim` are built and pass their tests on
+the Mac; the run on the Pi and the comparison with a recording are left.
 
 ## Read this first when resuming
 
 **Phase N0 is done: the goal, D1 to D5 and the design (P1 to P12) are
 accepted. The C++ interfaces (`navigation-cpp-design.md`, I1 to I9) are
-accepted; phase N2 is next.** Heron is to see obstacles, slide
+accepted. Phase N2 is built and tested on the Mac: `heron_geometry` and
+`heron_nav_sim`.** Heron is to see obstacles, slide
 around them and return to its course, in a new SwC mode, Navigate. Five
 layers, each its own library: sensors, pose, perception (a rolling
 obstacle map), a safety limiter on the raw LiDAR points, and a local
@@ -49,8 +51,13 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N2:** `heron_geometry` and `heron_nav_sim`, with `geometry_test`
-   and `nav_sim_test` (`navigation-cpp-design.md` §2, §3, §9).
+1. **N2, to finish:** run `geometry_test` and `nav_sim_test` on the Pi
+   (`scripts/deploy_cpp.sh <user>@<pi> geometry_test`, then
+   `nav_sim_test`); they cross-build cleanly, but the Pi did not answer
+   on 2026-11-08. Then compare the simulated scans with a `lidar_record`
+   capture (`navigation-cpp-design.md` §3).
+2. **N3:** `heron_pose` with the simulated OTOS, `heron_perception`
+   (`navigation-cpp-design.md` §4, §5, §9).
 
 Phase N1, the prerequisites (`navigation-design.md` §15), is work in
 other workstreams; check each one's resume file for where it stands:
