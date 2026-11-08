@@ -37,6 +37,12 @@ it. Headers in `include/heron/geometry/`.
 
 ### 2.1 `Pose2.h`: points, poses, twists
 
+The 2 means planar: x, y and one heading, as in ROS's `Pose2D` and
+GTSAM's `Pose2`. It also keeps the type apart from the `Heron::Pose`
+namespace (I9), and leaves room for a `Pose3` and `Vec3` beside them if
+a mount ever needs one. Type names follow the coding standard:
+PascalCase, no prefix.
+
 ```cpp
 namespace Heron::Geometry {
 
