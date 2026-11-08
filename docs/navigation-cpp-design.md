@@ -253,29 +253,50 @@ each revolution with the adapter's own `buildScan()`, so its scans keep
 every `Scan` invariant by construction. `nav_sim_test` holds them against
 the measured figures:
 
-| | Simulated (30 s, Mac) | Measured [ours] |
-|---|---|---|
-| Samples a revolution | 521 to 538, mean 530.7 | 526 to 532, mean 531 (express) |
-| Widest gap a revolution | 7.3 to 8.6°, mean 7.96° | 8.0 to 8.1° (medians per capture, express) |
-| No-returns | 65 to 75% | 61 to 84% |
-| Period | 134.3 to 138.8 ms | 134.2 to 138.1 ms |
+| | Simulated (30 s, Mac) | Findings [ours] | Recorded 2026-11-08 [ours] |
+|---|---|---|---|
+| Samples a revolution | 529 to 533, mean 531.0 | 526 to 532, mean 531 (express) | 549 to 554, mean 550.8 |
+| Widest gap a revolution | 7.3 to 8.0°, mean 7.96° | 8.0 to 8.1° (medians per capture, express) | 6.5 to 8.3°, mean 7.50° |
+| No-returns | 65 to 75% | 61 to 84% | 36 to 40% |
+| Period | 136.5 to 137.5 ms | 134.2 to 138.1 ms | 139.6 to 142.2 ms (stamps) |
 
-On the Pi the same seed gives a different run (522 to 540, mean 531.0;
-gap mean 7.97°; 65 to 74%; 134.9 to 139.3 ms), still inside the test's
+On the Pi the same seed gives a different run, still inside the test's
 bounds: `std::mt19937` is the same everywhere, but the standard leaves
 the distributions built on it to each library, and the Mac uses libc++,
 the Pi libstdc++. So a test checks ranges, never exact values.
 
-Two ways it differs, both known:
+**The recording.** 220 revolutions in express mode, the robot still on
+the bench rig, the Pi on its mains adapter (`lidar_record --mode 1
+--scans 220`, replayed through the real adapter by `lidar_replay_check`:
+217 scans, every invariant held, nothing dropped). What it settled:
 
-- **The count spreads wider** than measured. The period's 0.8 ms
-  variation moves it by about 3 samples here, so the real count must vary
-  less than the real period does. Not understood [unverified].
-- **No-returns are scattered at random;** real ones cluster by surface.
-  A test that depends on clustering needs a recording.
+- **The revolution time barely varies.** The sample rate is steady (3908
+  a second here, 3904 in the findings), so the count follows the period;
+  the count's spread of 0.75 samples puts the true period spread near
+  0.2 ms. The findings' 0.8 ms is measured from SDK timestamps, which
+  jitter (the count and the stamped period correlate only 0.40). The
+  simulator used 0.8 ms at first, so its count spread to 521 to 538; it
+  now uses 0.2 ms.
+- **The rotation rate depends on the supply** (the findings say the motor
+  free-runs). 7.10 Hz here, 7.35 Hz in October. Why it differs on the
+  same adapter is not known [unverified]. Tests take the rate from
+  `LidarConfig`, never assume 7.3 Hz.
+- **No-returns depend on the room:** 36 to 40% here, 61 to 84% in the
+  findings. They cluster: runs of 5.2 samples on average, up to 70, where
+  the simulator's random ones at 70% would average 3.3.
+- **The gap sits at one bearing a capture,** 210 to 221° in 204 of 219
+  revolutions here (the findings saw 40° and 106°), and the second-widest
+  gap is 4.7°, so there is one gap each revolution, as simulated.
+- **On the power block, the LiDAR misses commands.** Before this
+  recording the Pi ran from the robot's power block, reported
+  under-voltage every few seconds (`get_throttled` 0x50005), and the
+  LiDAR answered only 4 of 20 GET_INFO requests; the SDK's start-up then
+  failed. On the mains adapter it answered 20 of 20 with the motor
+  stopped, and recorded cleanly, though only 11 of 20 with the motor
+  running and requests 50 ms apart [cause unverified].
 
-The comparison with a `lidar_record` capture, scan by scan, is still to
-do; the table above compares against the findings doc's figures.
+One known difference remains: the simulated no-returns are scattered at
+random, so a test that depends on clustering needs a recording.
 
 Changes from the interfaces as accepted, made while building N2:
 
