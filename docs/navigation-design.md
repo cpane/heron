@@ -723,8 +723,23 @@ stop_margin = 0.05       # m round the outline
 slow_margin = 0.25       # m
 ```
 
-The values shown are placeholders, not the bench rig's: each is measured
-in N1 and recorded with its method, as `[motor.calibration]` is.
+The values shown are placeholders, not the bench rig's. Before
+navigation runs on a robot, the builder measures each rig's own, in N1,
+and each is recorded with its method, as `[motor.calibration]` is. How
+each kind of number is found:
+
+| Numbers | How | Why it matters |
+|---|---|---|
+| `[geometry] length`, `width` | Tape, at the outermost points, wheels and anything sticking out included | The limiter and planner sweep this rectangle (§7, §8) |
+| `[lidar] x`, `y`, `height`; `[odometry] x`, `y` | Tape, from the wheelbase centre to the LiDAR's spin axis and to the OTOS's centre; x forward, y left. About 5 mm is plenty, against 5 cm map cells | The shift between the frames (§3.1) |
+| `[lidar] yaw_deg` | Which way the housing's front faces; then checked with a box at a known bearing | A wrong value turns the whole scan, and nothing reports an error (§3.1) |
+| `[odometry] yaw_deg`, and its axes' signs | Checked by pushing Heron forward and left and watching the pose | A sign error mirrors the map, left for right (§3.5) |
+| `[odometry] linear_scalar`, `angular_scalar` | Driving a known distance and a known turn, by the odometry reference's method (`odometry-otos-reference.md` §5) | The pose's scale |
+| `[geometry] max_speed`, `max_turn_rate`, `brake` | Driving at full command, and stopping from it, read from the OTOS | Converting commands to speeds, and the stopping distance (§7) |
+| `[geometry] accel`, `[navigation]` margins | Not measured: starting values, tuned in the simulator, then on the floor | |
+
+A guided checklist for these, in the builder's words, belongs with the
+rig calibration guide (`rig-calibration.md` §8) when N1 starts.
 
 ## 11. Telemetry
 
