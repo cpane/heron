@@ -253,10 +253,9 @@ int main() {
     // period varies as the real one does, so the count with it.
     check("samples a revolution: mean 526 to 532 (measured mean 531)",
           countMean >= 526.0 && countMean <= 532.0);
-    // Wider than the measured 526 to 532: the period's 0.8 ms spread moves
-    // the count by about 3 samples (one standard deviation) here, so the
-    // real count must vary less than its period does. Not yet understood.
-    check("samples a revolution: each within 520 to 542", countMin >= 520 && countMax <= 542);
+    // Measured: each within 526 to 532 at 7.35 Hz, and 549 to 554 at 7.10 Hz
+    // (2026-11-08), a spread of 0.75 samples. The count follows the period.
+    check("samples a revolution: each within 526 to 536", countMin >= 526 && countMax <= 536);
     // Measured: the widest gap per revolution, 8.0 to 8.1 deg in express
     // (medians per capture), and 8.9 the widest of any healthy revolution.
     // Ours is a whole number of sample spacings, 11 or 12 (7.3 or 7.95).

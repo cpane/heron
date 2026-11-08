@@ -75,7 +75,10 @@ struct LidarConfig {
   Geometry::Vec2 offset{0.06, 0.0};  // spin axis in the robot frame, m
   double yawRad{0.0};                // the housing's front, robot frame (mountingOffsetRad)
   double revolutionsHz{7.3};
-  double periodStdevS{0.0008};
+  // The revolution time's true spread. The findings' 0.8 ms comes from SDK
+  // timestamps, which jitter; the sample count, at a steady 254 us a
+  // sample, varies by 0.75 samples, so the period by about 0.2 ms.
+  double periodStdevS{0.0002};
   std::int32_t samplesPerRevolution{531};
   double syncDeg{358.6};             // sensor frame, where each revolution starts
   double gapStartDeg{40.0};          // sensor frame, the per-revolution gap
