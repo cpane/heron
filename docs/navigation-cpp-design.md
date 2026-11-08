@@ -253,12 +253,18 @@ each revolution with the adapter's own `buildScan()`, so its scans keep
 every `Scan` invariant by construction. `nav_sim_test` holds them against
 the measured figures:
 
-| | Simulated (30 s) | Measured [ours] |
+| | Simulated (30 s, Mac) | Measured [ours] |
 |---|---|---|
 | Samples a revolution | 521 to 538, mean 530.7 | 526 to 532, mean 531 (express) |
 | Widest gap a revolution | 7.3 to 8.6°, mean 7.96° | 8.0 to 8.1° (medians per capture, express) |
 | No-returns | 65 to 75% | 61 to 84% |
 | Period | 134.3 to 138.8 ms | 134.2 to 138.1 ms |
+
+On the Pi the same seed gives a different run (522 to 540, mean 531.0;
+gap mean 7.97°; 65 to 74%; 134.9 to 139.3 ms), still inside the test's
+bounds: `std::mt19937` is the same everywhere, but the standard leaves
+the distributions built on it to each library, and the Mac uses libc++,
+the Pi libstdc++. So a test checks ranges, never exact values.
 
 Two ways it differs, both known:
 

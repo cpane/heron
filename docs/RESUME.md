@@ -12,7 +12,7 @@ another's. Start from the workstream you are picking up.
 | Motor controller (Arduino, 4 motors) | [`RESUME-motor.md`](RESUME-motor.md) | bench rig with mecanum wheels drives every move on the floor 2026-11-03 | re-measure the bench dead band, then the mini robot |
 | Telemetry (live data to other computers) | [`RESUME-telemetry.md`](RESUME-telemetry.md) | started 2026-10-28, design proposed | reviewing the design (step 1) |
 | Builder (scripts and guide for builders) | [`RESUME-builder.md`](RESUME-builder.md) | `wheel_check.sh` run on the bench rig 2026-11-03, passing | the next builder script |
-| Navigation (obstacle avoidance) | [`RESUME-navigation.md`](RESUME-navigation.md) | started 2026-11-04, design accepted (D1–D5, P1–P12), C++ interfaces accepted (I1–I9), N2 built on the Mac | N2's tests on the Pi, then N3 |
+| Navigation (obstacle avoidance) | [`RESUME-navigation.md`](RESUME-navigation.md) | started 2026-11-04, design accepted (D1–D5, P1–P12), C++ interfaces accepted (I1–I9), N2 built, tests pass on the Mac and the Pi | the recording comparison, then N3 |
 
 Planned, not started: the robot design that ties the workstreams together. The three sensor workstreams are paused; the motor controller is next, since the robot cannot move without it.
 

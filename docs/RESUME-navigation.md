@@ -51,11 +51,11 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N2, to finish:** run `geometry_test` and `nav_sim_test` on the Pi
-   (`scripts/deploy_cpp.sh <user>@<pi> geometry_test`, then
-   `nav_sim_test`); they cross-build cleanly, but the Pi did not answer
-   on 2026-11-08. Then compare the simulated scans with a `lidar_record`
-   capture (`navigation-cpp-design.md` §3).
+1. **N2, to finish:** compare the simulated scans with a `lidar_record`
+   capture (`navigation-cpp-design.md` §3). `geometry_test` and
+   `nav_sim_test` pass on the Pi (2026-11-08, 0 failures; on the Pi the
+   simulated count ran 522 to 540, gap mean 7.97°, no-returns 65 to 74%,
+   period 134.9 to 139.3 ms, deskewed points within 17.6 mm of a wall).
 2. **N3:** `heron_pose` with the simulated OTOS, `heron_perception`
    (`navigation-cpp-design.md` §4, §5, §9).
 
