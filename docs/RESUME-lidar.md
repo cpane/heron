@@ -514,9 +514,28 @@ requests every ~10 ms, 100 ms timeout, otherwise as above), measured [ours]:
   next starts were normal. The kernel logged nothing for its port
   (ttyUSB1) in that time: the USB link stayed up. This could be what
   navigation saw as 11 of 20 [inference].
-- **Whether the Arduino matters is not settled:** the silent mode is 2 in 15
-  here against 0 in 14 earlier, but the earlier runs used other spacings.
-  Needs the same run with the Arduino back in.
+E4 control, the Arduino back in and `heron_teleop` restarted so it talks to
+it again (`captures/e4-arduino_20261108T*`, same settings), measured [ours]:
+
+- **The Arduino makes no difference.** Single misses in 15 of 15 starts
+  (some lost two or three, at 20 to 576 ms), and **2 of 15 silent starts
+  again** (from 163 and 465 ms after motor-on). The same as unplugged.
+- **One silence outlasted the motor:** after one silent start the next
+  stopped phase got no reply for its first 6 requests, 0.56 s after motor
+  stop, then answered normally. The other silence ended at motor stop.
+- **One reply was another command's:** a GET_INFO at 131 ms after motor-on
+  was answered `a5 5a 05 00 00 40 81`, the descriptor of a legacy SCAN
+  (length 5, multi, type 0x81), with no scan nodes after it; the next
+  GET_INFO was answered normally. A well-formed descriptor for a different
+  command points to the request being corrupted on its way **into** the
+  LiDAR, not the reply on its way out [inference]; the probe cannot see the
+  LiDAR's side of the cable.
+- **Side finding for the motor workstream:** `heron_teleop` keeps the
+  unplugged Arduino's deleted tty open and reports `motors NOT OK` after a
+  replug; it does not reconnect. (For motor's Inbox at pause.)
+
+So far: the failures all start in the first 0.6 s after motor-on, the
+Arduino is not involved, and the Pi's rail shows no under-voltage.
 
 Open:
 
@@ -529,11 +548,12 @@ Open:
   it samples the Pi's rail every 0.25 s, not the LiDAR's. Whether the
   request or the reply was lost is not known: the probe sees only the Pi's
   side.
-- **Next experiments** (the plan of 2026-11-08): E4, spin-ups with the
-  Arduino unplugged; E5, spin-ups with the LiDAR powered from its own supply
-  (a second micro-USB on its adapter board, if it has one [unverified], or a
-  powered hub); E6, the adapter's 5 V on a multimeter at spin-up. About 15
-  spin-ups each: at the baseline 8 in 14, none in 15 would be telling.
+- **Next experiments** (the plan of 2026-11-08; E4 done, above): E5, 15
+  starts with the LiDAR powered from its own supply (a second micro-USB on
+  its adapter board, if it has one [unverified], or a powered hub), same
+  settings as E4; E6, the adapter's 5 V on a multimeter at spin-up. The
+  baseline at E4's settings is 28 of 30 starts with a miss and 4 of 30
+  silent, so none in 15 would be telling.
 
 ---
 
