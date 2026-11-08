@@ -559,6 +559,20 @@ ran as asked), 2026-11-08 ~15:45, measured [ours]:
   intermittent with it off. Next: reseat both connectors with the motor
   stopped, then repeat the motor-off check and the E4 baseline.
 
+Unit A again, ~16:05, nothing touched since (`e8-a-stopped`, `e8-a-starts`,
+E4's settings) [ours]: motor off 700 of 700; starts lost a request in 14 of
+15, one silent (29 misses). Back to the pattern before 15:25: the motor-off
+misses of ~15:45 were transient, cause unknown. The board was not handled
+then after all (the user looked at it without touching the LiDAR), so the
+connector hypothesis is weakened.
+
+**The motor spins whenever no program holds the port** [ours, seen by the
+user: it spins all the time the robot is driven with the remote; no process
+had the port open, and `heron_teleop` does not use the LiDAR]. With the port
+closed, DTR is not held and the motor runs (findings, protocol trap 1), so it
+has free-run between every run here and through every drive. To fix later
+(wear, the 5 V budget); for navigation's and motor's Inboxes at pause.
+
 Up to 15:25: the failures all start in the first 0.6 s after motor-on, the
 Arduino is not involved, and the Pi's rail shows no under-voltage.
 
