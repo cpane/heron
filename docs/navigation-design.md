@@ -249,7 +249,7 @@ The symbols:
 | β | The point's bearing, radians, 0 ahead, positive to the left | `Point::bearingRad`, already in the robot's axes |
 | r | The point's range, metres | `Point::rangeM` |
 | lx, ly | Where the LiDAR's spin axis sits in the robot frame, metres | The profile, `[lidar] x` and `y` (§10) |
-| x, y, θ | The robot's pose when the point was measured | `poseAt(scan.timeOf(β))` (§5) |
+| x, y, θ | The robot's pose in the odom frame (`base_link` in `odom`) when the point was measured | `poseAt(scan.timeOf(β))` (§5) |
 | px, py | The point in the robot frame | Step 1 |
 | X, Y | The point in the odom frame | Step 2 |
 
