@@ -339,3 +339,11 @@ Results, 2026-10-25 **[ours]**: all nine pass, after one fix.
 | 7 | SwA up while driving: stopped at once, DISARMED |
 | 8 | Re-armed with the throttle up: nothing until it came down |
 | 9 | Transmitter off while driving: stopped |
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

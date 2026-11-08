@@ -558,3 +558,44 @@ only (section 4b).
 | Adapter cost on the Pi | 1.2% CPU, 3.5 MiB, 4 threads (2 of them the SDK's) |
 
 Full detail in `docs/rplidar-a1m8-findings.md`.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+### From navigation, 2026-11-08: a 220-revolution express recording
+
+Recorded for the simulator's comparison: `lidar_record --mode 1 --scans 220
+--tag navsim` on the bench rig, robot still, the Pi on its mains adapter;
+`captures/navsim-sdk1_20261108T185202Z.*` on the host (git-ignored).
+Replayed by `lidar_replay_check`: 217 scans, invariants held, nothing
+dropped. The full write-up is `navigation-cpp-design.md` §3 (branch
+`feature/navigation-geometry` until merged). Against the findings:
+
+- **Rotation 7.10 Hz** (stamped period 139.6 to 142.2 ms, mean 140.9),
+  not the findings' 7.35 Hz, on the same adapter as October. Why is not
+  known [unverified].
+- **Samples a revolution 549 to 554**, mean 550.8, stdev 0.75. The sample
+  rate held: 3908 a second, against 3904 from the findings' 531 at 136.0
+  ms. So the count follows the period, as the findings say.
+- **The findings' period stdev of 0.8 ms is probably timestamp jitter**
+  [ours, inference from one recording]: the count's 0.75-sample spread
+  at 254 us a sample puts the true spread near 0.2 ms, the stamped spread
+  here was 0.51 ms, and count and stamped period correlate only 0.40.
+  Worth a second recording before it goes into the findings as measured.
+- **Widest gap 6.5 to 8.3°, mean 7.50°** (findings: medians 8.0 to 8.1°),
+  at one bearing, 210 to 221° in 204 of 219 revolutions; the second-widest
+  gap median 4.7°.
+- **No-returns 36 to 40%** in this room (findings: 61 to 84%), in runs of
+  5.2 samples on average, median 2, longest 70.
+- **Sync** at a median of 355.2° (findings 351.4 to 359.5°).
+- **Supply.** On the robot's power block the Pi was under-voltage and the
+  LiDAR answered 4 of 20 GET_INFO requests, so `lidar_info` and
+  `lidar_record` failed at start-up: the SDK's own GET_INFO in `connect()`
+  was answered, the probe's second one was not (strace). On the mains
+  adapter: 20 of 20 with the motor stopped, but 11 of 20 with it running
+  and requests 50 ms apart [cause unverified]; the SDK then started every
+  time. The supply table is `rig-profiles.md` §1, "Powering the Pi"
+  (branch `chore/rig-pi-power` until merged).

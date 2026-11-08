@@ -83,3 +83,11 @@ replay test bench on the Mac, which needs no robot.
 budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

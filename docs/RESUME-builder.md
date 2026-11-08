@@ -52,3 +52,11 @@ passing [ours].** The first runs found three things, all fixed:
    to end (provision, rig, deploy, autostart) as one guided script; turning
    the teleop service on and off; a status check (is the Pi reachable, are
    the devices there, what is running).
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.

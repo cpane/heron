@@ -88,3 +88,11 @@ protocol doc):
   on the Pi.
 
 **Not verified:** failsafe out of range, 8N1 vs 8N2 on the wire.
+
+## Inbox
+
+Facts other workstreams found that belong here, waiting to be checked and
+folded into this workstream's docs when it resumes (`CLAUDE.md`,
+"Workstreams"). Newest last; delete an entry once folded in.
+
+Nothing waiting.
