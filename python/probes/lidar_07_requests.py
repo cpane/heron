@@ -233,6 +233,9 @@ def main() -> int:
                         help="comma-separated motor states, run in order")
     parser.add_argument("--count", type=int, default=50,
                         help="requests per phase and gap")
+    parser.add_argument("--duration", type=float, default=0.0,
+                        help="seconds of requests per phase and gap, in place "
+                             "of --count (for tests run to the clock)")
     parser.add_argument("--gap-ms", default="50",
                         help="idle ms between exchanges; comma-separated "
                              "values run each phase once per gap")
@@ -289,6 +292,7 @@ def main() -> int:
         "soft_ms": args.soft_ms,
         "soft_hz": args.soft_hz,
         "t0_mono_ns": t0_ns,
+        "t0_wall": time.time(),
         "host": platform_info.snapshot(),
         "notes": args.note,
     }
@@ -347,7 +351,15 @@ def main() -> int:
                     payloads: set[bytes] = set()
                     stray_total = 0
 
-                    for index in range(args.count):
+                    t_requests_ns = time.monotonic_ns()
+                    index = -1
+                    while True:
+                        index += 1
+                        if args.duration > 0:
+                            if time.monotonic_ns() - t_requests_ns >= args.duration * 1e9:
+                                break
+                        elif index >= args.count:
+                            break
                         stray = drain(transport)
                         stray_bytes = sum(len(d) for _, d in stray)
                         stray_total += stray_bytes
@@ -419,7 +431,7 @@ def main() -> int:
 
                     print(f"  ok {counts['ok']}  none {counts['none']}  "
                           f"garbled {counts['garbled']}  partial {counts['partial']}"
-                          f"   (of {args.count})")
+                          f"   (of {len(outcomes)})")
                     if latencies:
                         lat = summary["latency_ms"]
                         print(f"  latency ms      min {lat['min']}  "
@@ -438,7 +450,7 @@ def main() -> int:
     for s in summaries:
         c = s["counts"]
         print(f"  {s['phase']:8s} gap {s['gap_ms']:>6g} ms   ok {c['ok']:3d}/"
-              f"{args.count}   none {c['none']}  garbled {c['garbled']}  "
+              f"{sum(c.values())}   none {c['none']}  garbled {c['garbled']}  "
               f"partial {c['partial']}   uv {s['under_voltage_samples']}")
     return 0
 
