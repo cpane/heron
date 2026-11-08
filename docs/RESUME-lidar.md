@@ -566,6 +566,17 @@ misses of ~15:45 were transient, cause unknown. The board was not handled
 then after all (the user looked at it without touching the LiDAR), so the
 connector hypothesis is weakened.
 
+**E8, the second A1M8 (unit B), ~16:10:** same cable, Pi port, settings
+and conditions, minutes after unit A's check (`e8-b-stopped`,
+`e8-b-starts`) [ours]: motor off 700 of 700; **starts 0 of 15 with a miss,
+0 silent, 600 of 600 answered while running.** Unit A at ~16:05: 14 of 15
+and 1 silent. **The spin-up failures belong to unit A**, not the Pi, its
+supply, the cable or the port. Both report firmware 1.29, hardware 7
+(GET_INFO `1d01 07`), so not a firmware version. GET_INFO serial fields
+(payload order): unit A `c887ed93c0ea98c9a5e698f25d594669`, unit B
+`d6b3fa92c3e49ec8a5eb9bf8406e5463`. Which part of unit A (its adapter
+board, the cable to the head, the head itself) is not known.
+
 **The motor spins whenever no program holds the port** [ours, seen by the
 user: it spins all the time the robot is driven with the remote; no process
 had the port open, and `heron_teleop` does not use the LiDAR]. With the port
