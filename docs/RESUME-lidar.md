@@ -1,12 +1,7 @@
 # LiDAR workstream — resume point
 
-**2026-11-08: resumed for navigation's Inbox entry** (section 10), on
-`feature/lidar-missed-requests`. The missed requests were unit A's poorly
-seated micro-USB (findings, trap 12); the entry's other facts were
-re-measured and folded into the findings, except the no-returns, which wait
-for a description of the room (section 10, "Open").
-
-Last updated 2026-10-04. Branch **`develop`**, everything pushed. The Pi
+Last updated 2026-11-08: navigation's Inbox entry checked and closed, the
+park work next. Branch **`develop`**, everything merged (#43). The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
 re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
 live (section 6, "Re-verified").
@@ -16,6 +11,17 @@ live (section 6, "Re-verified").
 **Paused 2026-10-04** to work on something else. The LiDAR work is at a clean
 stopping point: a reusable C++ library, a test program and a GUI backend, all
 verified on recordings and live on the Pi.
+
+**One session on 2026-11-08** for navigation's Inbox entry (section 10):
+its missed requests and slow rotation were unit A's poorly seated micro-USB
+(findings, trap 12); its other figures were re-measured and folded into the
+findings, except the no-returns, which wait for a description of the room.
+On the way it found that the motor turns whenever no program holds the port
+(findings, trap 1), so it spins all the time the robot is driven.
+
+**Decided 2026-11-08 (user): stopping the motor while the LiDAR is unused
+("park") is the next LiDAR work, done later at the user's request.** The
+approach is in section 9a; it starts with a feasibility check.
 
 **Scope (decided 2026-10-04): a reusable LiDAR, not a robot.** Odometry and
 the remote control have not been explored yet, so robot-level design (motion
@@ -30,21 +36,23 @@ What exists, and where it is written up:
 | `lidar_gui_server` + the viewer | `scripts/deploy_cpp.sh <user>@<pi> lidar_gui_server`, then `.venv/bin/python python/tools/lidar_gui.py --host <pi> --connect` | 8, `lidar-gui.md` |
 | `lidar_adapter`: live health, once a second | `scripts/deploy_cpp.sh <user>@<pi> lidar_adapter 20` | 6 |
 | Record a session / replay it | `lidar_record --mode 1 --scans 40 --tag x` on the Pi; `--replay` on the host | 4b |
+| `lidar_07_requests.py`: is every request answered? (checks a unit's plug) | `scripts/deploy_pi.sh <user>@<pi> probes/lidar_07_requests.py --phases stopped,running,... --gap-ms 10 --count 40 --timeout-ms 100` | 10 |
 
 Build first with `scripts/build_cpp.sh` (Pi) or `cmake --build --preset host`.
 The viewer needs a `.venv` built on a Python that has Tkinter; the README's
 host setup says how, and why plain `python3` can pick one without it.
 Recordings are git-ignored and live in `captures/` on this host and the Pi.
 
-**Picking up: lifecycle hardening** (section 9): restart the same `Lidar`
-repeatedly; unplug and replug with reconnection (needs someone at the Pi to
-pull the cable); measure and shorten the ~1 s `stop()`. Then mode 3, once
-something independent can check its ultra decode.
+**Picking up: park the motor** (section 9a), then **lifecycle hardening**
+(section 9b): restart the same `Lidar` repeatedly; unplug and replug with
+reconnection (needs someone at the Pi to pull the cable); measure and
+shorten the ~1 s `stop()`. Then mode 3, once something independent can
+check its ultra decode.
 
 History, in order: the 0-degree question (1), the live viewer (2), the C++
 build chain (3), the `Scan` type (4), SDK record and replay (4b),
 starved-reader recordings (4c), the adapter (6), the test program (7), the
-GUI backend (8).
+GUI backend (8), the missed requests (10).
 
 ---
 
@@ -459,7 +467,51 @@ corner, and the stats panel names REP 103 too. **Still unexercised:** the
 shaded unobserved arcs; every lossy scan in the recordings arrived in a
 post-stall burst and was dropped.
 
-## 9. NEXT — lifecycle hardening
+## 9. NEXT — park the motor, then lifecycle hardening
+
+### 9a. Park: the motor stopped while nothing uses the LiDAR
+
+With no program holding `/dev/rplidar`, DTR is not held and the motor
+turns (findings, trap 1): from power-on, between programs, and all the time
+the robot is driven with `heron_teleop`, which does not use the LiDAR. That
+wears the motor and loads the 5 V supply. A program that crashes with the
+motor running leaves it running too.
+
+The approach (outlined 2026-11-08, nothing built or measured yet): a small
+"park" program holds the port open with DTR asserted and never reads.
+Linux lets other programs open the same tty, so the robot, the GUI server
+and the probes open it as now and run the motor; when they close, park
+still holds the port and the motor stays stopped [unverified: that is what
+step 1 checks].
+
+1. **Feasibility, no hands.** In one ssh session hold the port open with
+   DTR asserted (pyserial: `serial.Serial('/dev/rplidar', 115200)` then
+   `dtr = True`, then sleep). In another, run
+   `probes/lidar_07_requests.py` (15 starts: all answered?) and
+   `lidar_record --mode 1 --scans 220` plus `lidar_replay_check` on the host
+   (217 scans, nothing dropped?). Then ask the user: does the motor stay
+   stopped after each exits? If the holder breaks the reads, stop here
+   and record why. The SDK opens the port `O_RDWR | O_NOCTTY | O_NDELAY`
+   and never sets `TIOCEXCL` (`third_party/rplidar_sdk/sdk/src/arch/linux/net_serial.cpp:101`),
+   so it does not lock others out [ours, from the code; not run].
+2. **The park program** in `target/` (Python, pyserial from apt): hold the
+   port with DTR asserted; every ~2 s, if no other process has the port
+   open (`/proc/*/fd`), assert DTR again, so a crashed program's motor
+   stops; reopen after an unplug.
+3. **A systemd service** to run it at boot, and a host script to install it,
+   like `scripts/teleop_autostart.sh` (on/off/status; `sudo`, so the user
+   runs it with `!`).
+4. **Bench checks, with the user listening:** after a reboot the motor stays
+   stopped; driving with the remote leaves it stopped; a probe killed with
+   `kill -9` while scanning has its motor stopped within a few seconds;
+   unplug and replug recovers; `lidar_gui_server` and the viewer work.
+5. **Docs:** findings trap 1, this file, `CLAUDE.md`'s common commands and
+   hardware notes, `docs/lidar-gui.md` if the viewer's steps change.
+
+Whether the robot program later takes this over is robot design, not this
+step.
+
+### 9b. Lifecycle hardening
 
 Restart, unplug and replug with reconnection, and the ~1 s `stop()`. Then
 mode 3, once something independent can check its ultra decode.
@@ -755,9 +807,9 @@ Open:
 - **Invalid fraction below 61%.** One express revolution read 33% on
   2026-09-29; on 2026-10-01 the live server read a median 38% express and 53%
   legacy over ~140 revolutions each. So the 61–84% range is scene-specific,
-  not a property of the sensor. Still wanted: a proper *capture* of the
-  closer scene with the scene described, before the findings' range is
-  widened — the live runs were not recorded.
+  not a property of the sensor. Two captures of that closer room now exist
+  (2026-11-08, 33-40%: section 10); still wanted is a sentence describing
+  the room, from the user, before the findings' range is widened.
 
 - Health states 1 and 2 — never observed, cannot be produced without a fault.
 - FORCE_SCAN returns nulls on a stationary head in 10 of 12 runs, real data in
