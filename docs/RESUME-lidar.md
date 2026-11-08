@@ -559,7 +559,7 @@ ran as asked), 2026-11-08 ~15:45, measured [ours]:
   intermittent with it off. Next: reseat both connectors with the motor
   stopped, then repeat the motor-off check and the E4 baseline.
 
-So far: the failures all start in the first 0.6 s after motor-on, the
+Up to 15:25: the failures all start in the first 0.6 s after motor-on, the
 Arduino is not involved, and the Pi's rail shows no under-voltage.
 
 Open:
