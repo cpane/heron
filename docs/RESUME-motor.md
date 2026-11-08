@@ -77,6 +77,23 @@ checked on the Pi).
 4. **Does the shield twitch a motor during the 1.5 s reset,** while the
    pins float? Not observed either way.
 5. **Battery voltage** in Status: no divider fitted, reads 0.
+6. **The Arduino's USB dropping mid-run.** Found by LiDAR 2026-11-08
+   [ours, once]: unplugged and replugged with `heron_teleop` running as
+   the service, the Arduino came back as `ttyUSB2` (`/dev/arduino`
+   followed it), but `heron_teleop` kept the deleted `ttyUSB0` open and
+   showed `motors NOT OK` until the service was restarted by hand. As
+   designed below it: `Motors` ends its reader on a device error and stays
+   `Failed` (`motor-cpp-design.md`, the reader table), and `heron_teleop`
+   exits only if start-up fails, so systemd's `Restart=always` never ran.
+   Being fixed 2026-11-08 (decided by Chris): teleop exits when `Motors`
+   fails and the service restarts it. Whether `Motors` should reconnect
+   by itself is left to the robot design.
+7. **The LiDAR's motor on the 5 V budget.** Found by LiDAR 2026-11-08
+   [ours, seen]: with no program holding `/dev/rplidar` the LiDAR's motor
+   runs, so it spins all the time the robot is driven with
+   `heron_teleop`, from the Pi's USB 5 V. Count it in any supply or
+   battery sizing until LiDAR's park program exists
+   (`RESUME-lidar.md` §9a).
 
 AFMotor's licence, once open here, was checked 2026-10-25: public domain.
 It is not used ([`motor-design.md`](motor-design.md) §3).
@@ -346,33 +363,4 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-### From LiDAR, 2026-11-08: `heron_teleop` does not reconnect after the Arduino is replugged
-
-Seen on the bench rig during LiDAR tests (`RESUME-lidar.md` §10, E4)
-[ours, one occurrence]. The Arduino's USB cable was unplugged at 15:17 and
-plugged back at 15:23, with `heron_teleop` running as
-`heron-teleop@cpane.service` (started at boot, robot disarmed):
-
-- The kernel logged the CP2102 at USB port 1-1.2 disconnecting from
-  `ttyUSB0`, then reattaching as **`ttyUSB2`**; `/dev/arduino` followed it.
-- `heron_teleop` (the same process, from boot) still held fd 4 ->
-  `/dev/ttyUSB0 (deleted)` and logged `DISARMED ... motors NOT OK
-  resets 0` every second; it never reopened `/dev/arduino`.
-- `sudo systemctl restart heron-teleop@cpane.service` fixed it: fd 4 ->
-  `/dev/ttyUSB2`, `motors OK`.
-
-Not tested: what `Motors` does on its own (without `heron_teleop`) when the
-port disappears, or whether the service should exit and let systemd
-restart it instead. A cable jolted loose while the robot drives would leave
-it like this until someone restarts the service.
-
-### From LiDAR, 2026-11-08: the LiDAR motor spins all the time the robot is driven
-
-For the 5 V budget [ours, seen by the user; findings trap 1]: with no
-program holding `/dev/rplidar`, the LiDAR's motor runs. `heron_teleop` does
-not use the LiDAR, so while the robot is driven with the remote, the LiDAR
-spins and draws from the Pi's USB 5 V the whole time (its own vibration
-also shakes the robot). Nothing for motor to change: LiDAR plans a "park"
-program that keeps the motor stopped while unused (`RESUME-lidar.md` §9a,
-not built). Until then, count the LiDAR motor in any supply or battery
-sizing.
+Nothing waiting.
