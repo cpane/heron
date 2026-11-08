@@ -3,8 +3,9 @@
 How the LiDAR and the odometry sensor turn Heron from a remote-controlled
 base into a semi-autonomous one: it knows where it is, sees obstacles,
 slides around them, and goes back to its course. **Goal and decisions
-D1 to D5 accepted 2026-11-04; the design below (P1 to P12) proposed
-2026-11-04, for review.** Nothing is built.
+D1 to D5 accepted 2026-11-04; the design below, P1 to P12, accepted
+2026-11-08.** Its C++ interfaces are
+[`navigation-cpp-design.md`](navigation-cpp-design.md). Nothing is built.
 
 It builds on what exists and is measured: `Lidar` and its `Scan`
 ([`lidar-cpp-design.md`](lidar-cpp-design.md),
@@ -48,7 +49,7 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 | D4 | **Our own code, not ROS 2 and Nav2,** on this hardware | ROS 2 is heavy for a 1 GB Pi 3, not packaged for this Debian, and would replace the architecture already built. §16 maps a later move |
 | D5 | **Three modes on SwC, kept: Manual, Assisted, Navigate. Manual is exactly today's remote control,** and nothing in navigation can change it: in Manual the sticks go straight to the mix, with no limiter, planner, LiDAR or OTOS in the path, and a failure in any of them leaves Manual working | One switch position you can always trust, to take over from the robot at any time. Assisted tests the limiter with you steering before anything steers for you; the three positions match SwC's three. SwA still stops everything in every mode |
 
-### 2.2 Proposed (2026-11-04), for review
+### 2.2 Accepted (proposed 2026-11-04, accepted 2026-11-08)
 
 | # | Proposal | Why | § |
 |---|---|---|---|
@@ -773,7 +774,8 @@ view for N3 to N5.
 
 - **A world** of line segments: walls and boxes.
 - **A LiDAR** producing real `Scan`s with our measured numbers **[ours]**:
-  7.3 revolutions a second, about 530 valid points each, nothing nearer
+  7.3 revolutions a second, about 531 samples each of which 16 to 39%
+  return indoors, nothing nearer
   than 126.8 mm, a share of no-returns, the clockwise sweep and its
   timing, so deskewing is tested against the skew it must undo.
 - **An OTOS** with noise and a heading drift in the measured range,
@@ -893,3 +895,6 @@ mapping is from general knowledge of ROS 2, not tried here.
 3. **The grid counts and planner weights** (§6.1, §8.2): starting values,
    settled in the simulator.
 4. **Which end of SwC is up** on our transmitter (§9).
+5. **The frame of the OTOS's velocity:** its own (the robot's) or the
+   odom frame. `PoseTracker` stores it in the robot frame either way
+   (`navigation-cpp-design.md` §4.2); checked with the axes in N1.
