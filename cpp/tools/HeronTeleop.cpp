@@ -40,6 +40,12 @@
 // target/systemd/heron-teleop@.service runs it at every boot, for driving
 // with no laptop; scripts/teleop_autostart.sh turns that on and off. Its
 // output then goes to the journal (journalctl -u heron-teleop@<user> -f).
+//
+// If the Arduino's port fails while running (its USB unplugged or jolted
+// loose), Motors stops for good: it does not reconnect. So this exits with
+// status 1 and the service starts it again 3 s later, when start() waits for
+// the Arduino to come back and configures it. The wheels are safe meanwhile:
+// with no Drive arriving, the Arduino's 250 ms watchdog stops them.
 
 #include <chrono>
 #include <cinttypes>
@@ -162,9 +168,18 @@ int main(int argc, char **argv) {
   auto nextLine = next;
   std::uint64_t cycles = 0;
   std::uint64_t driving = 0;
+  int status = 0;
 
   try {
     while (s_stopRequested == 0) {
+      // The port gone: Motors will not recover by itself; exit and let the
+      // service start again (see "At boot" above).
+      if (motors && motors->getHealth().state == Heron::Motor::MotorsState::Failed) {
+        std::fprintf(stderr, "ERROR: motors failed: %s\n",
+                     motors->getHealth().lastError.c_str());
+        status = 1;
+        break;
+      }
       const auto now = steady_clock::now();
       const Heron::Remote::RemoteSnapshot r = remote.getLatest(now);
       const double throttle = Heron::Drive::readThrottle(r.frame, sticks);
@@ -209,6 +224,7 @@ int main(int argc, char **argv) {
     }
   } catch (const std::exception &e) {
     std::fprintf(stderr, "ERROR: %s\n", e.what());
+    status = 1;
   }
 
   if (motors) {
@@ -216,5 +232,5 @@ int main(int argc, char **argv) {
   }
   remote.stop();
   std::printf("\nStopped. %" PRIu64 " cycles, %" PRIu64 " driving.\n", cycles, driving);
-  return 0;
+  return status;
 }
