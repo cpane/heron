@@ -46,9 +46,11 @@ Measured on the bench rig, 2026-11-08 [ours]:
 So the power block does not run the Pi and the LiDAR. A rig that drives
 untethered with the LiDAR needs a 5 V supply that keeps bit 0 of
 `get_throttled` clear; which supply that is has not been chosen. What the power block is
-rated for, and why the running LiDAR still misses some requests on the
-mains adapter, are not known [unverified]. The LiDAR's rotation rate
-also follows its supply (7.10 Hz that day, 7.35 Hz in October).
+rated for is not known [unverified]. The misses on the mains adapter, and
+that day's slow rotation (7.10 Hz), were the LiDAR's micro-USB plug, not
+the supply: seated firmly, it lost nothing and turned at 7.52 Hz
+(`rplidar-a1m8-findings.md`, trap 12) [ours]. Whether the plug also played
+a part in the power block's 4 of 20 was not tested.
 
 ## 2. The profile file
 
