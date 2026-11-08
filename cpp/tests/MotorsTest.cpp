@@ -109,10 +109,8 @@ class FakeBoard {
     }
 
     ~FakeBoard() {
-      m_thread.request_stop();
-      m_thread.join();
+      hangUp();
       ::close(m_slave);
-      ::close(m_master);
     }
 
     FakeBoard(const FakeBoard &) = delete;
@@ -128,6 +126,19 @@ class FakeBoard {
       m_parser = FrameParser{};
       m_booted = false;
       m_bootAt = Clock::now() + delay;
+    }
+
+    /** The board's end of the line closes, as when the Arduino's USB is
+     *  unplugged: the port's reads then fail with a hangup. */
+    void hangUp() {
+      m_thread.request_stop();
+      if (m_thread.joinable()) {
+        m_thread.join();
+      }
+      if (m_master >= 0) {
+        ::close(m_master);
+        m_master = -1;
+      }
     }
 
     void setQuiet(bool quiet) { m_quiet = quiet; }
@@ -414,6 +425,30 @@ int main() {
     board.bootIn(kBootDelay);
     check("restart: start() again works, counters from zero",
           motors.start() && motors.getHealth().boots == 1 && motors.getHealth().resets == 0);
+  }
+
+  std::printf("The port gone mid-run\n");
+
+  {
+    // As when the Arduino's USB is unplugged: Motors does not reconnect; it
+    // fails, says why, and sends nothing more. heron_teleop exits on this so
+    // its service starts it again.
+    FakeBoard board;
+    Motors motors(configFor(board));
+    board.bootIn(kBootDelay);
+    check("hangup: started", motors.start());
+    driveFor(motors, {0.3, 0.3, 0.3, 0.3}, 100);
+    board.hangUp();
+    sleepMs(200);
+    const MotorsHealth h = motors.getHealth();
+    check("hangup: state FAILED", h.state == MotorsState::Failed);
+    check("hangup: lastError names the device", contains(h.lastError, board.getDevice()));
+    check("hangup: drive() sends nothing", !motors.drive({0.3, 0.3, 0.3, 0.3}));
+    sleepMs(300);  // no Status since the hangup: stale once past ~450 ms
+    check("hangup: the snapshot goes stale, not OK", !motors.getLatest().isOk());
+    motors.stop();
+    check("hangup: stop() is safe and leaves it FAILED",
+          motors.getHealth().state == MotorsState::Failed);
   }
 
   std::printf("Start-up failures\n");
