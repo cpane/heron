@@ -10,7 +10,9 @@ workstream is active: everything up to driving by hand with the remote
 the floor is next (`docs/RESUME-motor.md`). The telemetry workstream,
 streaming live data to other computers, started 2026-10-28. The builder
 workstream, scripts and a guide for people who build and drive a Heron
-without changing code, started 2026-11-02.
+without changing code, started 2026-11-02. The navigation workstream,
+obstacle avoidance from the LiDAR and the OTOS, started 2026-11-04 with
+its design.
 
 ## Workstreams
 
@@ -188,6 +190,26 @@ Builder-only facts:
 - Builder scripts use the programs already on the Pi and add no robot
   code; a missing capability is a change in its own workstream first.
 
+### Navigation — obstacle avoidance (active, design only)
+
+Read before doing navigation work:
+
+- **`docs/RESUME-navigation.md`** — where the work stands and what it
+  waits on.
+- `docs/navigation-design.md` — the design: five layers, the obstacle
+  map, the SwC modes, phases N0 to N7.
+
+Navigation-only facts:
+
+- Five layers, each its own library, each handing its newest result on
+  through `getLatest()`: sensors, pose, perception (the rolling obstacle
+  map), the safety limiter, the local planner. The limiter reads the raw
+  LiDAR points, never the map, so a map or planner bug cannot drive the
+  robot into a wall; it is built first.
+- Our own code, not ROS 2 and Nav2, on this hardware (design D4).
+- Most of phase N1 is other workstreams' work (design §9): record it in
+  theirs, not here.
+
 ## Development model
 
 Code is written on the host (macOS) and stored in git. **The Pi is a
@@ -227,8 +249,9 @@ deploy scripts need SSH to it, and provisioning needs `sudo` there.
 Attached: the RPLIDAR A1M8 (USB), a FlySky FS-iA6B receiver (iBUS on the
 GPIO UART) for the FS-i6X remote, and a SparkFun OTOS optical odometry
 sensor on I2C. An Arduino motor controller on USB
-(`/dev/arduino`), driving 4 motors for a holonomic drive: the bench rig
-has four motors and no wheels; the mini robot has mecanum wheels.
+(`/dev/arduino`), driving 4 motors for a holonomic drive on mecanum wheels. The bench rig
+is a complete small robot (since 2026-11-03): it drives on the floor, or
+sits on a block for wheels-free checks. The mini robot is planned.
 
 GPIO header use, through a HAT that passes the Pi's pins through and adds
 spare 5 V and GND connections (the full build guide is `docs/wiring.md`;
