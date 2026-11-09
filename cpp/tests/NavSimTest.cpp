@@ -1,7 +1,7 @@
 // File        : NavSimTest.cpp
 // Author      : Chris Pane
-// Description : The simulator: its world, its base, and its LiDAR against
-//               what the real A1M8 was measured to do.
+// Description : The simulator: its world, its base, its LiDAR against what
+//               the real A1M8 was measured to do, and its OTOS.
 //
 // Copyright (c) 2026 Chris Pane
 // SPDX-License-Identifier: MIT
@@ -14,7 +14,9 @@
 // a square room sees the four walls where they are, with the LiDAR turned
 // or not, and a turning robot's scan lands on the walls only when each
 // point is placed with the pose at its own time (Scan::timeOf()). That is
-// the skew deskewing will remove (docs/navigation-design.md §12.2).
+// the skew deskewing will remove (docs/navigation-design.md §12.2). Last,
+// the OTOS: its heading drifts at the rate asked, and the drift bends the
+// position it reports as the base drives.
 //
 // The random numbers differ between standard libraries, so every check is
 // a range or a statistic, never an exact value. Same style as the other
@@ -33,6 +35,7 @@
 #include "heron/geometry/Pose2.h"
 #include "nav_sim/Base.h"
 #include "nav_sim/Lidar.h"
+#include "nav_sim/Otos.h"
 #include "nav_sim/World.h"
 
 namespace {
@@ -46,6 +49,8 @@ using Heron::NavSim::Base;
 using Heron::NavSim::BaseConfig;
 using Heron::NavSim::Lidar;
 using Heron::NavSim::LidarConfig;
+using Heron::NavSim::Otos;
+using Heron::NavSim::OtosConfig;
 using Heron::NavSim::World;
 
 constexpr double kPi = std::numbers::pi;
@@ -348,6 +353,68 @@ int main() {
     check("placed with the pose at the scan's end: off the walls by over 20 cm",
           worstAtEnd > 0.20);
     check("placed with the pose at its own time (timeOf): within 3 cm", worstAtOwnTime <= 0.03);
+  }
+
+  std::printf("The OTOS: drift and noise\n");
+  {
+    // Still for a minute: the heading drifts by the rate, the position not.
+    TimePoint now{};
+    Base base(BaseConfig{}, Pose2{1.0, 2.0, 0.3}, now);
+    Otos otos(OtosConfig{0.6, 0.0, 1}, now);
+    const Pose2 first = otos.read(now, base).pose;
+    check("the first reading is the true pose", near(first.x, 1.0, 1e-12) &&
+                                                    near(first.y, 2.0, 1e-12) &&
+                                                    near(first.heading, 0.3, 1e-12));
+    Pose2 last{};
+    for (std::int32_t i = 0; i < 6000; ++i) {
+      now += kTick;
+      base.advance(now);
+      last = otos.read(now, base).pose;
+    }
+    const double driftDeg = wrapAngle(last.heading - 0.3) * kRadToDeg;
+    std::printf("        still for 60 s at 0.6 deg/min: heading off by %.3f deg\n", driftDeg);
+    check("still for a minute: the heading off by 0.6 deg", near(driftDeg, 0.6, 1e-6));
+    check("  and the position not moved", near(last.x, 1.0, 1e-9) && near(last.y, 2.0, 1e-9));
+
+    // Driving 2 m straight along x while the heading drifts 6 deg/min: the
+    // believed heading ends 0.8 deg out, and the path bends to the left by
+    // about the mean angle times the distance, 0.4 deg x 2 m = 14 mm.
+    now = TimePoint{};
+    Base driver(BaseConfig{1000.0, 1000.0, Duration::zero()}, Pose2{}, now);
+    Otos drifting(OtosConfig{6.0, 0.0, 1}, now);
+    (void)drifting.read(now, driver);
+    driver.command(Twist{0.25, 0.0, 0.0}, now);
+    for (std::int32_t i = 0; i < 800; ++i) {
+      now += kTick;
+      driver.advance(now);
+      last = drifting.read(now, driver).pose;
+    }
+    std::printf("        2 m straight at 6 deg/min: believed (%.4f, %.4f), true (%.4f, %.4f)\n",
+                last.x, last.y, driver.truePose().x, driver.truePose().y);
+    check("driving 2 m: the drift bends the believed path left, about 14 mm",
+          near(last.y, 0.014, 0.002) && near(driver.truePose().y, 0.0, 1e-9));
+
+    // The noise: per reading, not accumulated.
+    now = TimePoint{};
+    Base still(BaseConfig{}, Pose2{}, now);
+    Otos noisy(OtosConfig{0.0, 0.001, 7}, now);
+    double sum = 0.0;
+    double sumSq = 0.0;
+    double worst = 0.0;
+    for (std::int32_t i = 0; i < 2000; ++i) {
+      now += kTick;
+      still.advance(now);
+      const double x = noisy.read(now, still).pose.x;
+      sum += x;
+      sumSq += x * x;
+      worst = std::max(worst, std::abs(x));
+    }
+    const double mean = sum / 2000.0;
+    const double sd = std::sqrt(sumSq / 2000.0 - mean * mean);
+    std::printf("        noise on x: mean %.2f mm, sd %.2f mm, worst %.2f mm\n", 1000.0 * mean,
+                1000.0 * sd, 1000.0 * worst);
+    check("noise 1 mm sd, centred, not accumulated",
+          near(sd, 0.001, 0.0001) && near(mean, 0.0, 0.0001) && worst < 0.006);
   }
 
   std::printf("\n%s: %" PRId32 " failure(s)\n", s_failures == 0 ? "OK" : "FAILED", s_failures);

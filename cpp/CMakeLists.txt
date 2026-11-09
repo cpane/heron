@@ -214,18 +214,19 @@ target_link_libraries(heron_pose
     PUBLIC heron_geometry heron_lidar_types heron_odometry
     PRIVATE Threads::Threads heron_warnings)
 
-# The simulator: a world of segments, a mecanum base, and an A1M8 that turns
-# while the base moves. Host-side, for tests only, so its headers are
-# private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
+# The simulator: a world of segments, a mecanum base, an A1M8 that turns
+# while the base moves, and an OTOS whose heading drifts. Host-side, for
+# tests only, so its headers are private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
 # revolution with the adapter's own scan builder, so a simulated Scan keeps
 # every invariant a real one does. docs/navigation-cpp-design.md §3.
 add_library(heron_nav_sim STATIC
     src/nav_sim/World.cpp
     src/nav_sim/Base.cpp
-    src/nav_sim/Lidar.cpp)
+    src/nav_sim/Lidar.cpp
+    src/nav_sim/Otos.cpp)
 target_include_directories(heron_nav_sim PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(heron_nav_sim
-    PUBLIC heron_geometry heron_scan_builder
+    PUBLIC heron_geometry heron_pose heron_scan_builder
     PRIVATE heron_warnings)
 
 # -- tests -------------------------------------------------------------------
