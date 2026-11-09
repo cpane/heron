@@ -354,6 +354,10 @@ add_executable(limiter_test tests/LimiterTest.cpp)
 target_link_libraries(limiter_test PRIVATE heron_limiter heron_warnings)
 add_test(NAME limiter_test COMMAND limiter_test)
 
+add_executable(nav_scenario_test tests/NavScenarioTest.cpp)
+target_link_libraries(nav_scenario_test PRIVATE heron_limiter heron_nav_sim heron_warnings)
+add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
+
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.
 add_executable(scan_builder_check tests/ScanBuilderCheck.cpp)
