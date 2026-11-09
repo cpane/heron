@@ -46,6 +46,7 @@
 #define HERON_GEOMETRY_OUTLINE_H
 
 #include <optional>
+#include <vector>
 
 #include "heron/geometry/Pose2.h"
 
@@ -84,7 +85,47 @@ struct SweepStep {
  */
 [[nodiscard]] std::optional<double> firstContact(const Outline &outline, Vec2 point,
                                                  const Twist &twist, double horizonS,
-                                                 const SweepStep &step = {}) noexcept;
+                                                 const SweepStep &step = {});
+
+/**
+ * firstContact() for many points and one motion: the robot's pose at each
+ * step is worked out once, when the Sweep is made, not once per point. The
+ * limiter sweeps ~530 points per motion every 20 ms, and the sines and
+ * cosines of the steps were most of the cost. firstContact() is this, for
+ * one point.
+ *
+ * Thread Safety: a plain value; contact() is const.
+ */
+class Sweep {
+  public:
+    Sweep(const Outline &outline, const Twist &twist, double horizonS, const SweepStep &step = {});
+
+    /** @return As firstContact(): seconds until contact, 0 if inside, no
+     *          value if clear for the horizon */
+    [[nodiscard]] std::optional<double> contact(Vec2 point) const noexcept {
+      return contact(point, m_horizonS);
+    }
+
+    /** @return As contact(), looking only up to withinS (at most the
+     *          horizon): for the earliest contact among many points */
+    [[nodiscard]] std::optional<double> contact(Vec2 point, double withinS) const noexcept;
+
+  private:
+    /** The robot at a step's start, in the frame of time 0. */
+    struct StepPose {
+      double x;
+      double y;
+      double cosH;
+      double sinH;
+    };
+
+    Outline m_outline;
+    Vec2 m_velocity;
+    double m_horizonS;
+    double m_dt{0.0};
+    bool m_turning{false};
+    std::vector<StepPose> m_steps;
+};
 
 }  // namespace Heron::Geometry
 

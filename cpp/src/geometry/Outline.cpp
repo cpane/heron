@@ -68,37 +68,61 @@ bool contains(const Outline &outline, Vec2 p) noexcept {
 }
 
 std::optional<double> firstContact(const Outline &outline, Vec2 point, const Twist &twist,
-                                   double horizonS, const SweepStep &step) noexcept {
-  if (contains(outline, point)) {
-    return 0.0;
-  }
-  if (!(horizonS > 0.0)) {
-    return std::nullopt;
-  }
-  const Vec2 velocity{twist.vx, twist.vy};
-  if (twist.wz == 0.0) {
-    return translationContact(outline, point, velocity, horizonS);
-  }
+                                   double horizonS, const SweepStep &step) {
+  return Sweep(outline, twist, horizonS, step).contact(point);
+}
 
+Sweep::Sweep(const Outline &outline, const Twist &twist, double horizonS, const SweepStep &step)
+    : m_outline(outline), m_velocity{twist.vx, twist.vy}, m_horizonS(horizonS) {
+  if (!(horizonS > 0.0) || twist.wz == 0.0) {
+    return;
+  }
   // Each step at most maxStepM along the path and maxStepRad of turn.
   double dt = step.maxStepRad / std::abs(twist.wz);
-  const double speed = norm(velocity);
+  const double speed = norm(m_velocity);
   if (speed > kStill) {
     dt = std::min(dt, step.maxStepM / speed);
   }
   if (!(dt > 0.0)) {
-    return std::nullopt;
+    m_horizonS = 0.0;  // a bad step: nothing can be swept
+    return;
   }
   // Capped as a double, before the cast: a huge quotient would overflow it.
   const double wanted = std::min(static_cast<double>(kMaxSteps), std::ceil(horizonS / dt));
   const auto steps = static_cast<std::int64_t>(wanted);
-  dt = horizonS / static_cast<double>(steps);
-
+  m_dt = horizonS / static_cast<double>(steps);
+  m_turning = true;
+  m_steps.reserve(static_cast<std::size_t>(steps));
   for (std::int64_t k = 0; k < steps; ++k) {
-    const double t0 = dt * static_cast<double>(k);
-    // Where the point is, seen from where the robot is at the step's start.
-    const Vec2 seen = toChild(integrate(Pose2{}, twist, t0), point);
-    if (const auto hit = translationContact(outline, seen, velocity, dt)) {
+    const Pose2 at = integrate(Pose2{}, twist, m_dt * static_cast<double>(k));
+    m_steps.push_back(StepPose{at.x, at.y, std::cos(at.heading), std::sin(at.heading)});
+  }
+}
+
+std::optional<double> Sweep::contact(Vec2 point, double withinS) const noexcept {
+  if (contains(m_outline, point)) {
+    return 0.0;
+  }
+  const double limit = std::min(withinS, m_horizonS);
+  if (!(limit > 0.0)) {
+    return std::nullopt;
+  }
+  if (!m_turning) {
+    return translationContact(m_outline, point, m_velocity, limit);
+  }
+  for (std::size_t k = 0; k < m_steps.size(); ++k) {
+    const double t0 = m_dt * static_cast<double>(k);
+    if (t0 > limit) {
+      break;
+    }
+    // Where the point is, seen from where the robot is at the step's start:
+    // toChild(), with the step's cosine and sine already known.
+    const StepPose &s = m_steps[k];
+    const double dx = point.x - s.x;
+    const double dy = point.y - s.y;
+    const Vec2 seen{s.cosH * dx + s.sinH * dy, -s.sinH * dx + s.cosH * dy};
+    const double window = std::min(m_dt, limit - t0);
+    if (const auto hit = translationContact(m_outline, seen, m_velocity, window)) {
       return t0 + *hit;
     }
   }
