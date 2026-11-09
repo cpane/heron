@@ -95,8 +95,20 @@ checked on the Pi).
    restart came 0.27 s later and was running, `motors OK`, at 18:10:47.4.
    Replug to running is a restart's wait (up to ~3.2 s) plus start-up
    (1.6 s). `motors_test` covers the library's side ("the port gone
-   mid-run"). Not checked: unplugging while driving; the Arduino's
-   watchdog should stop the wheels within 250 ms [unverified for this
+   mid-run").
+   **Unplugged while driving, 2026-11-08** [ours], wheels off the ground,
+   PWR jumper off, motor battery on EXT_PWR: driving forward at +0.33,
+   USB pulled at 19:25:07.500; the wheels stopped at once (seen by
+   Chris); teleop reported the hangup 4 ms later and the service retried
+   until the replug (19:25:22.924), still armed with the throttle at
+   0.81. The new teleop was running 2.5 s later in "ARMED: bring the
+   throttle down" and drove nothing for 13 s with the throttle up; with
+   the throttle brought down it drove again (+0.31). No lurch at the
+   replug: a restarted teleop starts with a fresh arming gate. On this
+   rig pulling the USB also unpowers the Uno and the shield's logic
+   (the PWR jumper is off), so the wheels stop for lack of power, not by
+   the watchdog: the watchdog's case, data lost with the Arduino still
+   powered, is not produced by an unplug here [unverified for that
    case]. Whether `Motors` should reconnect by itself is left to the
    robot design.
 7. **The LiDAR's motor on the 5 V budget.** Found by LiDAR 2026-11-08
