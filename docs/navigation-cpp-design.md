@@ -547,8 +547,9 @@ old one meanwhile (design §6.4).
 
 ### 5.3 N3 as built (2026-11-08)
 
-`heron_pose`, `heron_perception` and the simulated OTOS are built; `pose_test`
-and `perception_test` pass on the Mac (and the Pi build has no warnings).
+`heron_pose`, `heron_perception` and the simulated OTOS are built; `pose_test`,
+`perception_test` and `nav_sim_test` pass on the Mac and the Pi, built with
+no warnings by both compilers.
 Additions to the interfaces above, made while building; nothing accepted
 was changed:
 
@@ -576,7 +577,8 @@ was changed:
 Measured in `perception_test`: a turning robot (1.5 rad/s, 0.2 m/s) sees
 a straight wall 1.2 m away; placed at each point's own time, every blocked
 cell is within 25 mm of the wall (one cell); placed at the scan's end, 325
-mm off.
+mm off on the Mac, 375 on the Pi (the random numbers differ between
+standard libraries, §3).
 
 **One hit blocks.** With the accepted counts (+3, blocked at +3), a
 single hit blocks an unknown cell; a cell seen free (−2 or lower) takes
