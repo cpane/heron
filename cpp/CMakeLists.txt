@@ -214,6 +214,18 @@ target_link_libraries(heron_pose
     PUBLIC heron_geometry heron_lidar_types heron_odometry
     PRIVATE Threads::Threads heron_warnings)
 
+# The obstacle map: ObstacleGrid and addScan(), the pure core, place each
+# LiDAR point at its own time and keep hit and pass counts in a rolling
+# grid; Perception is the thread that builds a map per scan from
+# heron_lidar and heron_pose. docs/navigation-cpp-design.md §5.
+add_library(heron_perception STATIC
+    src/perception/ObstacleGrid.cpp
+    src/perception/ObstacleMap.cpp
+    src/perception/Perception.cpp)
+target_link_libraries(heron_perception
+    PUBLIC heron_geometry heron_pose heron_lidar_types heron_lidar
+    PRIVATE Threads::Threads heron_warnings)
+
 # The simulator: a world of segments, a mecanum base, an A1M8 that turns
 # while the base moves, and an OTOS whose heading drifts. Host-side, for
 # tests only, so its headers are private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
@@ -324,6 +336,11 @@ target_include_directories(pose_test PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
 target_link_libraries(pose_test PRIVATE heron_pose Threads::Threads heron_warnings)
 add_test(NAME pose_test COMMAND pose_test)
+
+add_executable(perception_test tests/PerceptionTest.cpp)
+target_link_libraries(perception_test
+    PRIVATE heron_perception heron_nav_sim Threads::Threads heron_warnings)
+add_test(NAME perception_test COMMAND perception_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.
