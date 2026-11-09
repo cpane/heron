@@ -1,8 +1,10 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-11-03. **The bench rig, now with mecanum wheels,
-drives every move on the floor** ("The bench rig on the floor", below).
-Next: the mini robot, or the bench rig's dead band re-measured first.
+Last updated 2026-11-08: `heron_teleop` now recovers by itself when the
+Arduino's USB drops (Still open, 6), checked on the bench rig, idle and
+while driving. **The bench rig, with mecanum wheels, drives every move on
+the floor** ("The bench rig on the floor", below). Next: the bench rig's
+dead band re-measured ("Picking up next", step 0), then the mini robot.
 
 Up to 2026-10-25, everything the bench rig can prove lifted was done:
 steps 1 to 6 below, each checked on the bench rig. The remote drives the
@@ -66,6 +68,7 @@ checked on the Pi).
 | Toolchain | PlatformIO in a container, like the Pi build; flash through the Pi with `avrdude` ([`motor-design.md`](motor-design.md) §3) |
 | Baud rate | 115200 |
 | Platforms | Bench, then a 3D-printed mini robot, then the full-size robot (about 4 ft) |
+| The Arduino's port lost mid-run | `heron_teleop` exits with status 1 and its service starts it again; `Motors` does not reconnect, the program decides (2026-11-08, Chris; Still open, 6) |
 
 ## Still open
 
@@ -172,6 +175,26 @@ measure it on the hardware before building motor logic on top.
    value, so that axis is read reversed (`StickConfig::forwardReadsLow`).
 
 ## Picking up next: the mini robot on the floor
+
+0. **First, the bench rig's dead band** ("The bench rig on the floor",
+   left open 1): `min_duty_forward`/`min_duty_backward` in
+   `profiles/bench.conf` predate the rewiring, and motors 3 and 4 likely
+   have forward and backward swapped. Needs Chris at the bench to watch
+   the wheels; wheels off the ground, PWR jumper off, motor battery on
+   EXT_PWR.
+   - `scripts/teleop_autostart.sh <user>@<pi> off` (sudo: Chris runs it
+     with `!`), so `motor_link` can have `/dev/arduino`.
+   - `rig-calibration.md` §4: `ssh -t <user>@<pi> '~/heron/bin/motor_link
+     sweep 1 --step 20 --min-duty 0'`, then motors 2, 3, 4; the first
+     value turning steadily from rest, forward and backward.
+   - Duties plus 10 into `profiles/bench.conf`, the measured values in its
+     comment beside the 2026-10-25 ones; `scripts/deploy_cpp.sh <user>@<pi>`,
+     then `motor_link drive 1 1 1 1 --seconds 3` and `-1 -1 -1 -1`: all
+     four turn slowly both ways.
+   - Under load (open item 1) is still not worked out: a wheels-off sweep
+     reads low for the floor. Decide then whether to try a way of
+     measuring on the floor, and write it into `rig-calibration.md` §4.
+   - `scripts/teleop_autostart.sh <user>@<pi> on` afterwards.
 
 The mini has the same parts as the bench (Uno, HW-130, yellow motors) and
 its own Pi; mecanum wheels and its weight are what is new. The bench
