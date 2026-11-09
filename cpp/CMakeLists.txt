@@ -355,7 +355,8 @@ target_link_libraries(limiter_test PRIVATE heron_limiter heron_warnings)
 add_test(NAME limiter_test COMMAND limiter_test)
 
 add_executable(nav_scenario_test tests/NavScenarioTest.cpp)
-target_link_libraries(nav_scenario_test PRIVATE heron_limiter heron_nav_sim heron_warnings)
+target_link_libraries(nav_scenario_test
+    PRIVATE heron_limiter heron_nav_sim Threads::Threads heron_warnings)
 add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by

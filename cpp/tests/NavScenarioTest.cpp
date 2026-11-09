@@ -27,7 +27,8 @@
 //
 // To look into a run: HERON_SCENARIO_DEBUG=1 lists scenario 2's runs that
 // came within 3 cm, with their start; HERON_SCENARIO_TRACE=<run> prints
-// that run cycle by cycle (clearance, velocity, command, reason, T).
+// that run cycle by cycle (clearance, velocity, command, reason, T) before
+// the rest.
 
 #include <algorithm>
 #include <chrono>
@@ -40,6 +41,7 @@
 #include <numbers>
 #include <optional>
 #include <random>
+#include <thread>
 #include <vector>
 
 #include "heron/limiter/Limiter.h"
@@ -101,8 +103,7 @@ struct Run {
         base(Heron::NavSim::BaseConfig{}, start, now),
         lidar(world, lidarConfig(seed), now),
         otos(Heron::NavSim::OtosConfig{0.5, 0.001, seed}, now),
-        limiter(scenarioConfig()),
-        startHeading(start.heading) {
+        limiter(scenarioConfig()) {
     history.add(otos.read(now, base));
   }
 
@@ -174,13 +175,40 @@ struct Run {
   std::optional<Scan> scan;
   bool lidarOn{true};
   Limiter limiter;
-  double startHeading{0.0};
 };
 
 Heron::NavSim::World wallAcross(double x) {
   Heron::NavSim::World world;
   world.segments.push_back(Heron::NavSim::Segment{Vec2{x, -20.0}, Vec2{x, 20.0}});
   return world;
+}
+
+/** One run of scenario 2: how it starts, and how it went. */
+struct WallRun {
+  double wallX{0.0};
+  double headingRad{0.0};
+  Twist stick{};
+  std::uint32_t seed{0};
+  double closest{1e9};  // the nearest the body came to the wall
+  double final{0.0};    // and where it was at the end
+};
+
+/** Drives Heron at the wall for 6 s; fills in closest and final. With
+ *  trace, prints every cycle: clearance, velocity, command, reason, T. */
+void driveAtWall(WallRun &w, bool trace) {
+  Run run(wallAcross(w.wallX), Pose2{0.0, 0.0, w.headingRad}, w.seed);
+  for (std::int32_t c = 0; c < 300; ++c) {
+    const LimitResult r = run.cycle(w.stick);
+    const double clearance = run.clearanceTo(w.wallX);
+    if (trace) {
+      const Twist v = run.base.trueVelocity();
+      std::printf("          %3d clear %6.1f mm  v (%.3f, %.3f)  cmd (%.3f, %.3f)  %s  T %.3f\n", c,
+                  1000.0 * clearance, v.vx, v.vy, r.command.vx, r.command.vy,
+                  Heron::Limiter::toString(r.reason), r.horizonS);
+    }
+    w.closest = std::min(w.closest, clearance);
+  }
+  w.final = run.clearanceTo(w.wallX);
 }
 
 }  // namespace
@@ -190,65 +218,76 @@ int main() {
   {
     // The wall across the way at 0.6 to 1.5 m; Heron facing it within 60
     // deg either side, pushed at 0.2 to 0.6 m/s with a random sideways
-    // part, sensor noise on, each run its own seed. Run until stopped for
-    // half a second, or 6 s: a run with the sideways part along the wall
-    // may go on sliding, and that is allowed.
+    // part, sensor noise on, each run its own seed, for 6 s: long enough
+    // to reach the wall and creep through the slow zone, where the margin
+    // is tested.
+    //
+    // Every run's start is drawn first, then the runs share the cores:
+    // they are independent, and 1000 of them took 88 s on the Pi one at a
+    // time. The results do not depend on how many threads there are.
     std::mt19937 random(2026);
     std::uniform_real_distribution<double> distance(0.6, 1.5);
     std::uniform_real_distribution<double> angle(-60.0, 60.0);
     std::uniform_real_distribution<double> push(0.2, 0.6);
     std::uniform_real_distribution<double> sideways(-0.15, 0.15);
+    constexpr std::int32_t kRuns = 1000;
+    std::vector<WallRun> runs;
+    for (std::int32_t i = 0; i < kRuns; ++i) {
+      WallRun w;
+      w.wallX = distance(random);
+      w.headingRad = angle(random) * kDegToRad;
+      w.stick = Twist{push(random), sideways(random), 0.0};
+      w.seed = static_cast<std::uint32_t>(i + 1);
+      runs.push_back(w);
+    }
+
+    // One run, printed cycle by cycle, to look into it.
+    if (const char *trace = std::getenv("HERON_SCENARIO_TRACE")) {
+      WallRun one = runs[static_cast<std::size_t>(std::atoi(trace))];
+      driveAtWall(one, true);
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+    const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
+    std::vector<std::thread> threads;
+    for (std::size_t w = 0; w < workers; ++w) {
+      threads.emplace_back([&runs, w, workers]() {
+        for (std::size_t i = w; i < runs.size(); i += workers) {
+          driveAtWall(runs[i], false);
+        }
+      });
+    }
+    for (std::thread &t : threads) {
+      t.join();
+    }
+    const double took =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+
     std::int32_t touched = 0;
     double worstClearance = 1e9;
     double worstFinal = 1e9;
     double sumFinal = 0.0;
-    double slowest = 0.0;
     std::vector<double> finals;
-    constexpr std::int32_t kRuns = 1000;
-    const auto start = std::chrono::steady_clock::now();
-    for (std::int32_t i = 0; i < kRuns; ++i) {
-      const double wallX = distance(random);
-      Run run(wallAcross(wallX), Pose2{0.0, 0.0, angle(random) * kDegToRad},
-              static_cast<std::uint32_t>(i + 1));
-      const Twist stick{push(random), sideways(random), 0.0};
-      double runWorst = 1e9;
-      double stillFor = 0.0;
-      bool stopped = false;
-      const bool trace = std::getenv("HERON_SCENARIO_TRACE") != nullptr &&
-                         std::atoi(std::getenv("HERON_SCENARIO_TRACE")) == i;
-      for (std::int32_t c = 0; c < 300 && !stopped; ++c) {
-        const LimitResult traced = run.cycle(stick);
-        if (trace) {
-          const Twist v = run.base.trueVelocity();
-          std::printf("          %3d clear %6.1f mm  v (%.3f, %.3f)  cmd (%.3f, %.3f)  %s  T %.3f\n",
-                      c, 1000.0 * run.clearanceTo(wallX), v.vx, v.vy, traced.command.vx,
-                      traced.command.vy, Heron::Limiter::toString(traced.reason), traced.horizonS);
-        }
-        runWorst = std::min(runWorst, run.clearanceTo(wallX));
-        stillFor = run.speed() < 0.002 ? stillFor + 0.02 : 0.0;
-        stopped = c > 50 && stillFor >= 0.5;
-      }
-      const double final = run.clearanceTo(wallX);
-      if (runWorst < 0.03 && std::getenv("HERON_SCENARIO_DEBUG") != nullptr) {
-        std::printf("        run %d: wall %.2f m, heading %.1f deg, stick (%.2f, %.2f), "
+    for (std::size_t i = 0; i < runs.size(); ++i) {
+      const WallRun &w = runs[i];
+      if (w.closest < 0.03 && std::getenv("HERON_SCENARIO_DEBUG") != nullptr) {
+        std::printf("        run %zu: wall %.2f m, heading %.1f deg, stick (%.2f, %.2f), "
                     "closest %.1f mm\n",
-                    i, wallX, run.startHeading / kDegToRad, stick.vx, stick.vy, 1000.0 * runWorst);
+                    i, w.wallX, w.headingRad / kDegToRad, w.stick.vx, w.stick.vy,
+                    1000.0 * w.closest);
       }
-      touched += runWorst <= 0.0 ? 1 : 0;
-      worstClearance = std::min(worstClearance, runWorst);
-      worstFinal = std::min(worstFinal, final);
-      sumFinal += final;
-      finals.push_back(final);
-      slowest = std::max(slowest, seconds(run.now - TimePoint{std::chrono::seconds(100)}));
+      touched += w.closest <= 0.0 ? 1 : 0;
+      worstClearance = std::min(worstClearance, w.closest);
+      worstFinal = std::min(worstFinal, w.final);
+      sumFinal += w.final;
+      finals.push_back(w.final);
     }
-    const double took =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     std::sort(finals.begin(), finals.end());
-    std::printf("        closest the body came to the wall: %.1f mm; stopped at %.1f mm "
+    std::printf("        closest the body came to the wall: %.1f mm; at the end %.1f mm "
                 "(nearest), %.1f (median), %.1f mm (mean)\n",
                 1000.0 * worstClearance, 1000.0 * worstFinal,
                 1000.0 * finals[finals.size() / 2], 1000.0 * sumFinal / kRuns);
-    std::printf("        longest run %.1f s simulated; %d runs in %.2f s\n", slowest, kRuns, took);
+    std::printf("        %d runs of 6 s in %.2f s, %zu threads\n", kRuns, took, workers);
     check("the body never touched the wall, in 1000 runs", touched == 0);
     // The margin is 5 cm. With no range noise the closest any run comes is
     // 49 mm; with the simulator's 5 mm (a guess, not measured) 23.5 mm:
