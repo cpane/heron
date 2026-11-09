@@ -59,4 +59,16 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+### From motor, 2026-11-08: a knocked-loose Arduino cable now recovers by itself
+
+For the builder's guide, if it has troubleshooting for driving
+[ours, bench rig, `heron_teleop` as the boot service; write-up in
+`RESUME-motor.md`, Still open 6]. If the Arduino's USB cable is pulled or
+knocked loose, the wheels stop at once (on these rigs the Uno loses its
+power with the cable). `heron_teleop` logs `motors failed ... device hung
+up` and the service keeps restarting it; once the cable is back in, it is
+running again within about 5 s (2.5 s measured). If the robot is still
+armed with the throttle up, nothing moves: the builder brings the throttle
+to the bottom, then drives as normal. Before 2026-11-08 (PR #46) it showed
+`motors NOT OK` until the Pi was rebooted or the service restarted, so a
+Pi with older binaries needs `scripts/deploy_cpp.sh` first.
