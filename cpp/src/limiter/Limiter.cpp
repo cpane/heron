@@ -125,6 +125,15 @@ std::optional<double> earliest(const std::vector<Vec2> &points, const Outline &o
   return best;
 }
 
+/** Heron's pose at one moment of the scan, seen from its pose now. */
+struct Motion {
+  Geometry::Pose2 pose{};
+  bool ok{false};
+};
+
+// The moments a revolution is cut into for moving its points (limit()).
+constexpr std::size_t kMotionSteps = 64;
+
 /** How one axis came out. */
 struct AxisLimit {
   double scale{1.0};
@@ -197,15 +206,48 @@ LimitResult Limiter::limit(const LimitInput &input) const {
   const double reach = halfDiag + std::max(std::hypot(command.vx, command.vy) * horizonS,
                                            m_config.slowMarginM) + m_config.stopMarginM;
 
+  // How Heron has moved since each moment of the revolution: the pose then,
+  // seen from the pose now. Worked out at kMotionSteps + 1 moments and
+  // interpolated for each point, rather than looked up per point: a lookup
+  // and two rotations per point were most of a call's time. relative() is
+  // linear in the pose's x, y and heading, so interpolating it is
+  // interpolating the pose, which PoseHistory::at() does anyway between
+  // readings. The one difference is a reading that falls between two of
+  // these moments, 2 ms apart: a change of velocity over 2 ms, far below a
+  // millimetre.
+  std::array<Motion, kMotionSteps + 1> since{};
+  const double spanS = seconds(scan->tEnd - scan->tStart);
+  if (poseNow) {
+    for (std::size_t k = 0; k <= kMotionSteps; ++k) {
+      const double at = spanS * static_cast<double>(k) / kMotionSteps;
+      const Pose::PoseLookup then = input.history->at(
+          scan->tStart + std::chrono::duration_cast<Duration>(std::chrono::duration<double>(at)));
+      if (then.ok) {
+        since[k] = Motion{Geometry::relative(*poseNow, then.pose), true};
+      }
+    }
+  }
+
   // Every point now, robot frame.
   std::vector<Vec2> points;
   points.reserve(scan->points.size());
   for (const Heron::Point &point : scan->points) {
     Vec2 p = Geometry::polarToRobot(point.bearingRad, point.rangeM, m_config.lidarOffset);
     if (poseNow) {
-      const Pose::PoseLookup then = input.history->at(scan->timeOf(point.bearingRad));
-      if (then.ok) {
-        p = Geometry::toChild(*poseNow, Geometry::toParent(then.pose, p));
+      const double f = spanS > 0.0
+                           ? seconds(scan->timeOf(point.bearingRad) - scan->tStart) / spanS *
+                                 kMotionSteps
+                           : 0.0;
+      const auto k = static_cast<std::size_t>(
+          std::clamp(std::floor(f), 0.0, static_cast<double>(kMotionSteps - 1)));
+      const Motion &a = since[k];
+      const Motion &b = since[k + 1];
+      if (a.ok && b.ok) {
+        const double u = std::clamp(f - static_cast<double>(k), 0.0, 1.0);
+        const Geometry::Pose2 moved{
+            a.pose.x + u * (b.pose.x - a.pose.x), a.pose.y + u * (b.pose.y - a.pose.y),
+            a.pose.heading + u * Geometry::wrapAngle(b.pose.heading - a.pose.heading)};
+        p = Geometry::toParent(moved, p);
       }
     }
     points.push_back(p);
