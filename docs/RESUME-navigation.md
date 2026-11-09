@@ -1,8 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04. **Phase N3 done; N4 next.**
-`heron_pose`, `heron_perception` and the simulated OTOS pass their tests
-on the Mac and the Pi, on `feature/navigation-n3`.
+Last updated 2026-11-08. Started 2026-11-04. **Phase N4 begun: the
+limiter's core is built** (`feature/navigation-limiter`) and passes on the
+Mac; its Pi run, then the scenarios, are next. N3 (pose and perception) is
+done and merged.
 
 ## Read this first when resuming
 
@@ -60,16 +61,30 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N4, on the Mac:** the limiter's core (`navigation-cpp-design.md`
-   §6), `limiter_test`, and `nav_scenario_test` with the simulator (§9's
-   N4 rows; design §12.2 scenarios 2, 3 and 5). `heron_robot` (§7) needs
-   N1's profile sections first.
-2. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
+1. **The limiter on the Pi:** `scripts/build_cpp.sh`, then
+   `scripts/deploy_cpp.sh <user>@<pi> limiter_test`; only the Pi on,
+   nothing moves. Its last section prints the time a worst-case call
+   takes: 0.34 ms on the Mac, to be measured on the Pi against the 20 ms
+   cycle (design §7.2 estimated "well under a millisecond").
+   `navigation-cpp-design.md` §6.1 is what was built and why.
+2. **N4's scenarios, on the Mac:** `nav_scenario_test` with the simulator
+   and the cores (§9; design §12.2 scenarios 2, 3 and 5): driven at a wall
+   at full speed, stop outside it over 1000 random runs; slide along a
+   wall; the LiDAR stops mid-run, stop within 300 ms. `heron_robot` (§7)
+   needs N1's profile sections first.
+3. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
    seated, made it miss commands and turn at 7.10 Hz instead of 7.52
    (LiDAR workstream, findings trap 12). Seat it firmly before recording,
    and give the cable strain relief before the robot drives. Whether the
    power block's under-voltage also costs commands is not re-tested
    (`navigation-cpp-design.md` §3).
+
+N4's limiter (2026-11-08): `limiter_test` passes on the Mac, each rule
+and blind row by hand, and 2000 random scenes in which no limited command
+brings a point within 4 cm of the body within T. Rule 4 needed the margin
+to shrink while something is in it, or a wall in the margin stopped a
+slide along it (§6.1). A worst-case call: 4.8 ms first, 0.34 ms with
+`Sweep`.
 
 N3's results (2026-11-08): `pose_test`, `perception_test` and
 `nav_sim_test` pass on the Mac and the Pi. A turning robot's wall, from

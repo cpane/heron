@@ -599,7 +599,9 @@ one scan period (about 0.3 s), and `brake` from `[geometry]`.
    from full speed at the last moment.
 4. **Already too close:** a point inside the stop outline now blocks only
    motion that brings it closer; motion away is allowed, so Heron can
-   always back off.
+   always back off. Sliding along it is allowed too: while anything is
+   inside the margin, the sweep's margin shrinks to just short of it
+   (`navigation-cpp-design.md` §6.1).
 
 ### 7.4 When it cannot see
 

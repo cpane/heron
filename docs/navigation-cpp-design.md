@@ -649,6 +649,50 @@ their own time, then moved by `relative(poseAt(pointTime), poseAt(now))`
 to where they are now; with the pose not fresh, that step is skipped and
 the reaction time doubles (design §7.4).
 
+### 6.1 The core as built (2026-11-08)
+
+`heron_limiter` is built and `limiter_test` passes on the Mac; the Pi
+build has no warnings. Not yet run on the Pi. Against the interface
+above:
+
+- **The rule is exact, not searched.** Scaling a twist leaves the path
+  the outline sweeps unchanged; only the speed changes. So if a motion
+  touches a point at t < T, the same motion scaled by t / T reaches it at
+  exactly T, and each axis's cut, and the cut of the whole, is one sweep.
+  The slow zone is the distance travelled before contact against
+  `slowMarginM`; for a turn, the angle times the outline's half-diagonal.
+- **Rule 4 needed more than "motion away".** With a wall inside the stop
+  margin ahead, its points just past the outline's sides come into the
+  margin as Heron slides along it, so the sweep alone would stop the
+  slide. So, with anything inside the margin: the sweep's margin shrinks
+  to 1 mm short of the closest point, and the points at that closest
+  distance stop only the axes that bring them closer (measured as
+  `grown()` grows the outline: the larger of the gaps along x and y; a
+  point at a corner comes closer only if both shrink). It follows that
+  while something is in the margin, the margin for everything else is
+  that distance too; it returns once the thing is left behind.
+- **`Unobserved` per axis:** vx and vy look for an unobserved arc within
+  45° of their direction; a turn needs none anywhere. With the default
+  coverage threshold (10°, the same as the unobserved arcs'), a scan that
+  passes the coverage check has none, so this row cannot fire on its own
+  today; it is kept for a coverage threshold set wider.
+- **`LimitResult` gained `horizonS`**, the T used, and `toString(Reason)`.
+  `BackingOff` is reported whenever something is inside the stop margin.
+- **`heron_geometry` gained `Sweep`:** `firstContact()` for many points
+  and one motion, the step poses worked out once. `firstContact()` is now
+  a `Sweep` for one point (no longer `noexcept`: it allocates the steps).
+  The first limiter took 4.8 ms a call on the Mac in the worst case (530
+  points in reach, all three axes), most of it the sines and cosines of
+  the steps, recomputed per point; with `Sweep` and skipping points a
+  motion cannot reach, 0.34 ms. The Pi's figure is to be measured.
+
+**The promise, tested:** in 2000 random scenes with random commands, no
+limited command, held for T, brings a point within 4 cm of the body
+(the 5 cm margin less 1 cm, the sweep's resolution: a 2° step moves a
+corner 9 mm, and contact is found at a step's start; checked with steps
+ten times finer). On the sweep's own steps, 19 scenes touched the 5 cm
+outline up to 8.6 ms before T, which is that resolution.
+
 ## 7. `heron_robot`: what joins them (N4)
 
 `heron_robot`'s control loop is a program, not a library, but its
