@@ -64,9 +64,8 @@ navigation, so SwC to Manual always takes over.
 1. **`heron_robot`** (`navigation-cpp-design.md` §7, the rest of N4)
    needs N1's profile sections: `[lidar]` and `[geometry]` in the
    profile, which the reader refuses today, and the `[geometry]` name
-   clash ("Still open"). Until then, work that needs no robot: making
-   scenario 2 faster (95 s on the Pi), or the planner's interfaces (N5,
-   §8).
+   clash ("Still open"). Until then, the work that needs no robot is
+   the planner's interfaces (N5, §8).
 2. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.

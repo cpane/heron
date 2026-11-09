@@ -677,7 +677,9 @@ interface above:
   The first limiter took 4.8 ms a call on the Mac in the worst case (530
   points in reach, all three axes), most of it the sines and cosines of
   the steps, recomputed per point; with `Sweep` and skipping points a
-  motion cannot reach, 0.34 ms; on the Pi, 0.68 ms, 3% of the 20 ms cycle.
+  motion cannot reach, 0.34 ms; on the Pi, 0.68 ms, 3% of the 20 ms cycle
+  (0.62 ms after the scenarios' speed-up, below). These Mac figures are the
+  Debug build's; an optimised one is about 20 µs.
 
 **The promise, tested:** in 2000 random scenes with random commands, no
 limited command, held for T, brings a point within 4 cm of the body
@@ -697,8 +699,17 @@ late, the limiter told the same brake.
 | 3: pushed along a wall and into it, 6 s | Closed to 63 mm, kept sliding at 0.30 m/s |
 | 5: the LiDAR stops after 2 s at 0.4 m/s | The command stops 302 ms after the last scan ended (Stale); the base is still 740 ms later (lag and braking) |
 
-Scenario 2 takes 40 s on the Mac (the host preset is a Debug build) and
-95 s on the Pi; worth making faster before more scenarios join it.
+Scenario 2 first took 40 s on the Mac (the host preset is a Debug build)
+and 95 s on the Pi. Its 1000 runs are independent, so their starts are
+drawn first and the runs share the cores: 9 s on the Mac, 23 s on the
+Pi's four, with the same results. Two changes to the libraries came with
+it, worth having on the robot anyway: `wrapAngle()` returns an angle
+already in range at once, without `fmod` (the largest single cost of a
+limiter call), and the limiter moves its points with a table of Heron's
+motion over the revolution, 65 moments interpolated, instead of a
+pose lookup and two rotations per point. A worst-case limiter call on
+the Pi went from 0.68 to 0.62 ms; the simulated LiDAR is the rest of the
+scenario's time.
 
 ### 6.2 Rule 4: something already inside the margin (accepted 2026-11-08)
 
