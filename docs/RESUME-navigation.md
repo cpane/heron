@@ -78,10 +78,12 @@ navigation, so SwC to Manual always takes over.
      (no warnings) and `scripts/deploy_cpp.sh <user>@<pi> pose_test`,
      which needs only the Pi on, nothing moves. Add each library and
      test to `docs/cpp-build.md`, as N2's were.
-2. **Before the LiDAR runs on the power block:** on it, the Pi reported
-   under-voltage and the LiDAR missed most commands (2026-11-08,
-   `navigation-cpp-design.md` §3). Record LiDAR captures on the mains
-   adapter until that is understood.
+2. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
+   seated, made it miss commands and turn at 7.10 Hz instead of 7.52
+   (LiDAR workstream, findings trap 12). Seat it firmly before recording,
+   and give the cable strain relief before the robot drives. Whether the
+   power block's under-voltage also costs commands is not re-tested
+   (`navigation-cpp-design.md` §3).
 
 N2's results (2026-11-08): both tests pass on the Mac and the Pi. A
 220-revolution `lidar_record` capture (`captures/navsim-sdk1_20261108T185202Z`,
@@ -123,7 +125,7 @@ Settled 2026-11-04: the bench rig carries navigation.
   `odometry_adapter` prints no velocity, so §18's velocity frame cannot
   be checked yet.
 - **The simulated no-returns are random; real ones cluster** (runs of
-  5.2 samples on average, up to 70). A test that depends on clustering
+  4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).
 
 ## Inbox
@@ -131,40 +133,3 @@ Settled 2026-11-04: the bench rig carries navigation.
 Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
-
-### From LiDAR, 2026-11-08: the missed commands were the LiDAR's plug
-
-Checked from navigation's entry in the LiDAR's Inbox (navsim recording,
-`navigation-cpp-design.md` §3; `rig-profiles.md` §1 "Powering the Pi").
-Full write-up: `RESUME-lidar.md` §10 and `rplidar-a1m8-findings.md` trap
-12, on `feature/lidar-missed-requests` until merged.
-
-- **The 11 of 20 missed GET_INFO on the mains adapter, and the 7.10 Hz,
-  came from the LiDAR's micro-USB plug at its adapter board**, poorly
-  seated, not from the supply [ours]. With the plug as it was, the LiDAR
-  lost requests at almost every motor start and sometimes went silent for
-  seconds; a second A1M8 on the same cable and port lost nothing; re-seated
-  firmly, the bench rig's LiDAR lost nothing either (1556 of 1556 with the
-  motor running, 0 of 15 starts) and turned at **7.52 Hz**. Handled again
-  and left to the robot's vibration, it went bad again. `rig-profiles.md` §1
-  is corrected (a shared doc).
-- **So in §3: the rotation was the plug, not the supply.** Re-measured the
-  same day with the plug seated (same room, robot still, mains adapter):
-  7.52 Hz, period 131.9 to 134.1 ms, 519 to 521 samples a revolution
-  (mean 519.8, sd 0.54), sample rate 3908/s as before. `LidarConfig`'s
-  defaults and the simulator's comparison may want these figures.
-- **Your timestamp-jitter inference is confirmed** by the second recording
-  you asked for: count-implied period spread 0.14 ms, stamped 0.59 ms,
-  correlation 0.00 (yours: 0.19, 0.51, 0.40). In the findings now.
-- **The gap's bearing is not fixed:** 188° in the new recording, 220° in
-  yours, same room; one wide gap a revolution in both (mean 7.97°). The
-  sync node sat at 359.6° (yours 355.2°, with the plug poorly seated).
-- **No-returns 33 to 39%** in the new recording, matching yours; runs mean
-  4.4, longest 25 (yours 5.2, 70).
-- **Not re-tested:** the power block's 4 of 20 and the failed SDK start-up.
-  The plug may have contributed; the Pi was under-voltage too.
-- **For a robot that drives:** seat the plug fully and give the cable
-  strain relief near the board; the LiDAR's own spin shakes the robot.
-  And the LiDAR's motor turns whenever no program holds its port (findings,
-  trap 1): while driven with `heron_teleop` it spins all the time, a load on
-  the 5 V budget whether or not navigation uses it [ours, seen].
