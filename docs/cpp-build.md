@@ -237,6 +237,7 @@ include path. The boundary is enforced by the build. Rationale in
 | `motor_adapter` | `cpp/probes/` | `Motors` live on the board, as a 50 Hz robot loop sees it |
 | `geometry_test`, `nav_sim_test` | `cpp/tests/` | navigation's maths against worked examples and brute force; the simulator against the LiDAR's measured figures; run by `ctest` |
 | `limiter_test` | `cpp/tests/` | the safety limiter: each rule and blind condition against walls placed by hand, 2000 random scenes against its promise, and the time a call takes; run by `ctest` |
+| `nav_scenario_test` | `cpp/tests/` | the limiter in the loop with the simulator: 1000 runs at a wall, a slide along one, the LiDAR lost; run by `ctest` (40 s on the Mac, 95 s on the Pi) |
 | `pose_test`, `perception_test` | `cpp/tests/` | the pose history's lookups and epochs, the tracker on a fake OTOS; the obstacle grid's beams and rolling, and a turning robot's wall placed straight from the simulator; run by `ctest` |
 | `rig_profile_test` | `cpp/tests/` | reading and checking rig profiles, every rule, run by `ctest` |
 | `rig_profiles_check` | `profiles/*.conf` | not a program: a `ctest` running `rig_profile check` on every profile in the repository |

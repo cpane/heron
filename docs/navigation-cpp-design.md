@@ -651,9 +651,9 @@ the reaction time doubles (design §7.4).
 
 ### 6.1 The core as built (2026-11-08)
 
-`heron_limiter` is built and `limiter_test` passes on the Mac; the Pi
-build has no warnings. Not yet run on the Pi. Against the interface
-above:
+`heron_limiter` is built; `limiter_test` and `nav_scenario_test` pass on
+the Mac and the Pi, built with no warnings by both compilers. Against the
+interface above:
 
 - **The rule is exact, not searched.** Scaling a twist leaves the path
   the outline sweeps unchanged; only the speed changes. So if a motion
@@ -661,16 +661,9 @@ above:
   exactly T, and each axis's cut, and the cut of the whole, is one sweep.
   The slow zone is the distance travelled before contact against
   `slowMarginM`; for a turn, the angle times the outline's half-diagonal.
-- **Rule 4 needed more than "motion away".** With a wall inside the stop
-  margin ahead, its points just past the outline's sides come into the
-  margin as Heron slides along it, so the sweep alone would stop the
-  slide. So, with anything inside the margin: the sweep's margin shrinks
-  to 1 mm short of the closest point, and the points at that closest
-  distance stop only the axes that bring them closer (measured as
-  `grown()` grows the outline: the larger of the gaps along x and y; a
-  point at a corner comes closer only if both shrink). It follows that
-  while something is in the margin, the margin for everything else is
-  that distance too; it returns once the thing is left behind.
+- **Rule 4 needed more than "motion away"**, and is §6.2, below, in
+  full: what is built, what it guarantees, what it costs, and the more
+  complex alternative to weigh later.
 - **`Unobserved` per axis:** vx and vy look for an unobserved arc within
   45° of their direction; a turn needs none anywhere. With the default
   coverage threshold (10°, the same as the unobserved arcs'), a scan that
@@ -684,7 +677,7 @@ above:
   The first limiter took 4.8 ms a call on the Mac in the worst case (530
   points in reach, all three axes), most of it the sines and cosines of
   the steps, recomputed per point; with `Sweep` and skipping points a
-  motion cannot reach, 0.34 ms. The Pi's figure is to be measured.
+  motion cannot reach, 0.34 ms; on the Pi, 0.68 ms, 3% of the 20 ms cycle.
 
 **The promise, tested:** in 2000 random scenes with random commands, no
 limited command, held for T, brings a point within 4 cm of the body
@@ -692,6 +685,158 @@ limited command, held for T, brings a point within 4 cm of the body
 corner 9 mm, and contact is found at a step's start; checked with steps
 ten times finer). On the sweep's own steps, 19 scenes touched the 5 cm
 outline up to 8.6 ms before T, which is that resolution.
+
+**The scenarios** (`nav_scenario_test`, design §12.2 scenarios 2, 3 and
+5): the simulated Heron driven by a stick through the limiter, in a 20 ms
+loop in virtual time, the base braking at 0.6 m/s² and answering 60 ms
+late, the limiter told the same brake.
+
+| Scenario | Result (Mac; Pi) |
+|---|---|
+| 2: driven at a wall, 0.6 to 1.5 m away, at up to 60°, 0.2 to 0.6 m/s with a random sideways part, sensor noise on, 1000 runs | Never touched; nearest 23.5 mm (Mac), 35.6 mm (Pi); median stop 69 mm. With no range noise, nearest 49.2 mm (§6.2) |
+| 3: pushed along a wall and into it, 6 s | Closed to 63 mm, kept sliding at 0.30 m/s |
+| 5: the LiDAR stops after 2 s at 0.4 m/s | The command stops 302 ms after the last scan ended (Stale); the base is still 740 ms later (lag and braking) |
+
+Scenario 2 takes 40 s on the Mac (the host preset is a Debug build) and
+95 s on the Pi; worth making faster before more scenarios join it.
+
+### 6.2 Rule 4: something already inside the margin (accepted 2026-11-08)
+
+Design §7.3's rule 4 says: a point inside the stop outline now blocks only
+motion that brings it closer; motion away is allowed, so Heron can always
+back off. This section is how that is built, and why it took three tries.
+The user accepted it for the first robots (2026-11-08), and asked for the
+alternative's pros and cons to be weighed later (end of this section, and
+design §18).
+
+**Why the sweep alone cannot do it.** The sweep (§2.2, design §7.2) asks
+when the stop outline (the body grown by `stopMarginM`, 5 cm) first
+touches a point. A point already inside it touches at once, for every
+motion, so the sweep alone would freeze Heron as soon as anything came
+within 5 cm: it could not even back off. So points inside the margin need
+a rule of their own, and the points outside it need an outline that the
+first ones do not spoil.
+
+**How close is "close": one distance, as the outline grows.** A point's
+distance to the body is measured as `grown()` grows the outline: the
+larger of its gap along x (`|x| - halfLength`) and its gap along y
+(`|y| - halfWidth`). A point is inside the stop outline exactly when this
+is 5 cm or less. Off a corner, this is less than the straight-line
+distance; it is the distance the body's sides keep from the point when
+the body passes it.
+
+**What is built: three parts.**
+
+1. **Every point inside the margin is held.** For each axis alone, a
+   point in the margin stops the axis if the motion brings it closer than
+   `closest`, the nearest any point is now. A motion that shrinks only one
+   of the point's two gaps can bring it no nearer than the other gap,
+   which it leaves alone; so it counts only if that other gap is below
+   `closest`. A motion that shrinks both counts always. (`closesIn()`.)
+2. **Every point outside the margin is swept** against the body grown by
+   `closest` less 1 mm, not by the margin. A point coming in from beside,
+   as the rest of a wall does when Heron slides along it, may then enter
+   the margin as deep as what is already there, and once in, it is held
+   by part 1. The 1 mm is so that a point level with the closest is not
+   "touched" by the outline's edge (a contact on the edge counts).
+3. **The cut motion is checked once more, as a whole.** Part 1 is not
+   linear: two axes, each allowed alone, may together shrink both gaps of
+   a point at once. If the cut motion brings any held point closer, the
+   command is zero.
+
+What each motion does, with a wall 3 cm in front of the body (2 cm inside
+the margin), as `limiter_test` checks:
+
+| Motion | What happens | Why |
+|---|---|---|
+| Forward | Stopped | The wall's points in front shrink their gap along x; their gap along y is below zero, below `closest` |
+| Backward | Whole | It grows every gap |
+| Sideways, either way | Whole | The wall's points past the side shrink their gap along y, but their gap along x is the wall's own 3 cm: no nearer than `closest` |
+| Sideways and edging forward | The slide stays, the edging stops | Per axis: x is stopped, y is not |
+| Turning | Stopped | A front corner swings into the wall: a point on the turning side shrinks its gap along x, and its gap along y is below zero |
+| In a corner of two walls, backing out diagonally | Whole | It grows both walls' gaps |
+| In that corner, sliding into the side wall | Stopped | The side wall's points shrink their gap along y; their gap along x is below zero |
+
+**What it guarantees.** With exact ranges, the nearest anything is to the
+body never shrinks while something is in the margin: a held point cannot
+come below `closest` (part 1), a point from outside enters no deeper than
+1 mm under it and is held from then on (part 2), and the two together are
+checked (part 3). Measured in `nav_scenario_test`, scenario 2 (Heron
+driven at a wall at 0.2 to 0.6 m/s, at up to 60° to it, 1000 runs) with
+the simulator's range noise set to zero: the body came no nearer than
+49.2 mm to the wall, against the 50 mm margin.
+
+**How it got here: two versions that failed.**
+
+- *First:* only the closest points (within 1 mm of `closest`) were held,
+  and every other point was swept against the body grown by `closest`
+  less 1 mm. `limiter_test` passed. Scenario 2 did not: 8 of 1000 runs
+  touched the wall, the worst 24 mm into it, all at 51° to 60° and pushed
+  fast. The margin ratcheted. Driven at a slanting wall, the next wall
+  point along reached the shrunk margin, became the closest, and shrank
+  it again; at a slant the closest point sits off the body's corner, and
+  moving forward does not bring that one point closer, so nothing held
+  Heron back. It crept in at 1 to 9 cm/s.
+- *Second:* every point in the margin was held, and held strictly: no
+  point might come any closer at all. Scenario 2 then kept 50.7 mm, but
+  the slide along a wall in the margin stopped again: the wall's points
+  past the side come closer along y as Heron slides, though no closer than
+  the wall already is. Part 1's "no nearer than the other gap" is what
+  tells those apart.
+
+**What it costs.** For the first robots, accepted:
+
+1. **While anything is in the margin, the margin is that close for
+   everything.** An obstacle coming from outside the margin may come as
+   near as the thing already in it. Sliding along a wall at 3 cm, a box
+   ahead may be approached to 3 cm, not 5. The margin returns to 5 cm as
+   soon as nothing is in it.
+2. **Range noise erodes the margin.** `closest` is the least of many
+   noisy distances, so it reads low, and part 1's "no nearer than
+   `closest`" lets some approach through. With the simulator's 5 mm on
+   each range, scenario 2's closest was 23.5 mm on the Mac and 35.6 mm on
+   the Pi (whose random numbers differ), against 49.2 mm with no noise.
+   The 5 mm is a guess: the A1M8's range noise has not been measured
+   (design §18). Nothing touched in any run.
+3. **It is cautious at corners and when turning.** A motion that shrinks
+   both of a point's gaps is stopped however little it does so; turning
+   with anything in the margin near a front or back edge is usually
+   stopped. Backing off is never stopped.
+4. **It keeps nothing between calls,** so it cannot know that `closest`
+   was larger a moment ago; every cycle judges afresh. That is what makes
+   it testable call by call (P2), and also what lets noise move `closest`.
+
+**The alternative, for later: a margin per side.** Keep four margins, one
+for each side of the body (front, back, left, right), each shrunk only by
+what is in the margin on that side; the other sides keep the full 5 cm.
+
+- *What it would improve:*
+  - A wall in the margin on one side no longer lowers the margin on the
+    others: sliding along a wall at 3 cm, a box ahead is still kept 5 cm
+    away (cost 1 goes).
+  - The report can say which side is too close, for the `limiter`
+    channel and for the planner, which could steer away from that side.
+  - Noise on one side's points erodes only that side's margin.
+- *What it would cost:*
+  - More code in the one place where a bug drives Heron into something.
+  - The outline is no longer centred on the robot frame's origin. The
+    sweep handles that by moving to the outline's centre c and expressing
+    the twist there (`v + w × c`), but that is new geometry, to be tested
+    as `firstContact` was.
+  - A point off a corner is on two sides at once, and needs a rule for
+    which side's margin it shrinks: the same corner question part 1
+    answers, now per side.
+  - Noise still erodes the side that is shrunk (cost 2 stays there).
+  - In the common case, one wall, it behaves exactly as the built rule.
+- *Noise, whichever is chosen,* could be reduced by: measuring the A1M8's
+  range noise first (if it is 1 to 2 mm, the erosion shrinks with it);
+  taking `closest` as the k-th nearest point, or a percentile, rather than
+  the least; smoothing each range with its neighbours'; or letting the
+  limiter keep `closest` between cycles, lowered only by measured motion
+  (which gives up "keeps nothing", P2).
+- *When to weigh it:* once N1 has measured the range noise; when Heron
+  first drives near walls in Assisted; and before a larger, faster Heron,
+  where a margin taken by a wall on one side matters more.
 
 ## 7. `heron_robot`: what joins them (N4)
 
