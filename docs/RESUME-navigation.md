@@ -1,15 +1,17 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04. **Phase N2 done; N3 next.**
-`heron_geometry` and `heron_nav_sim` are built, pass their tests on the
-Mac and the Pi, and the simulated LiDAR is checked against a recording.
+Last updated 2026-11-08. Started 2026-11-04. **Phase N3 done; N4 next.**
+`heron_pose`, `heron_perception` and the simulated OTOS pass their tests
+on the Mac and the Pi, on `feature/navigation-n3`.
 
 ## Read this first when resuming
 
 **Phase N0 is done: the goal, D1 to D5 and the design (P1 to P12) are
 accepted. The C++ interfaces (`navigation-cpp-design.md`, I1 to I9) are
 accepted. Phase N2 is done: `heron_geometry` and `heron_nav_sim`, tested on
-the Mac and the Pi, the simulator checked against a recording.** Heron is to see obstacles, slide
+the Mac and the Pi, the simulator checked against a recording. Phase N3 is
+done: `heron_pose` and `heron_perception`, tested on the Mac and the Pi
+(`navigation-cpp-design.md` §5.3).** Heron is to see obstacles, slide
 around them and return to its course, in a new SwC mode, Navigate. Five
 layers, each its own library: sensors, pose, perception (a rolling
 obstacle map), a safety limiter on the raw LiDAR points, and a local
@@ -58,32 +60,22 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N3, on the Mac; nothing here needs the robot.** In this order:
-   - **`heron_pose`**, the core first: `PoseHistory`
-     (`navigation-cpp-design.md` §4.1), then the `PoseTracker` wrapper
-     (§4.2), which links `heron_odometry`.
-   - **The simulated OTOS**, `class Otos` in `cpp/src/nav_sim/`
-     (§3, `OtosConfig`), now that `Pose::PoseSample` exists: the true
-     pose plus noise and a heading drift.
-   - **`heron_perception`**: `ObstacleGrid` and `ObstacleMap` (§5.1),
-     then the `Perception` wrapper (§5.2).
-   - **Tests** (§9, the N3 rows): `pose_test` (interpolation the short
-     way round, extrapolation to 50 ms and not past it, a restart raises
-     the epoch) and `perception_test` (design §12.1's list; a skewed
-     scan of a straight wall from the simulator comes out straight).
-     `geometry_test` and `nav_sim_test` show the house style: no
-     framework, `check()`, figures printed beside the checks.
-   - **Build and run:** `cmake --preset host && cmake --build --preset
-     host`, `ctest --test-dir build-host`; then `scripts/build_cpp.sh`
-     (no warnings) and `scripts/deploy_cpp.sh <user>@<pi> pose_test`,
-     which needs only the Pi on, nothing moves. Add each library and
-     test to `docs/cpp-build.md`, as N2's were.
+1. **N4, on the Mac:** the limiter's core (`navigation-cpp-design.md`
+   §6), `limiter_test`, and `nav_scenario_test` with the simulator (§9's
+   N4 rows; design §12.2 scenarios 2, 3 and 5). `heron_robot` (§7) needs
+   N1's profile sections first.
 2. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
    seated, made it miss commands and turn at 7.10 Hz instead of 7.52
    (LiDAR workstream, findings trap 12). Seat it firmly before recording,
    and give the cable strain relief before the robot drives. Whether the
    power block's under-voltage also costs commands is not re-tested
    (`navigation-cpp-design.md` §3).
+
+N3's results (2026-11-08): `pose_test`, `perception_test` and
+`nav_sim_test` pass on the Mac and the Pi. A turning robot's wall, from
+the simulator, lands within one cell (25 mm) placed at each point's own
+time, 325 mm off (375 on the Pi's run) placed at the scan's end. With the accepted counts one hit blocks an unknown cell; design §6.1
+said two scans, and is corrected.
 
 N2's results (2026-11-08): both tests pass on the Mac and the Pi. A
 220-revolution `lidar_record` capture (`captures/navsim-sdk1_20261108T185202Z`,
@@ -101,8 +93,8 @@ other workstreams; check each one's resume file for where it stands:
 4. LiDAR restart, unplug and replug (`RESUME-lidar.md` §9).
 5. Telemetry steps 2 to 4, and an odometry channel (telemetry).
 
-Work this workstream can do before those: N3 and the limiter's core in
-N4, on the Mac with the simulator, which need no robot.
+Work this workstream can do before those: the limiter's core in N4, on
+the Mac with the simulator, which needs no robot.
 
 ## Still open
 
