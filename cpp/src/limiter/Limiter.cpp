@@ -29,9 +29,13 @@ using Geometry::Vec2;
 // depth changes slower than this is not being driven into.
 constexpr double kStill = 1e-6;
 
-// The closest points are those within this of the closest; the sweep's
-// outline stops this short of them, so they never touch it.
-constexpr double kTouchM = 0.001;
+// While something is in the stop margin, the sweep's outline stops this
+// short of the closest point (rule 4).
+constexpr double kSlackM = 0.001;
+
+// A gap this little below the closest still counts as level with it
+// (closesIn()), so float noise on a point beside a wall cannot decide it.
+constexpr double kSameGapM = 0.001;
 
 // How wide a sector must have been observed round a direction of travel:
 // the outline's front spans a wide angle close up.
@@ -65,13 +69,19 @@ double rectGap(const Outline &o, Vec2 p) noexcept {
 }
 
 /**
- * Does the motion bring p, one of the closest points, closer than
- * `closest`, the distance the closest point is now? Its distance is the
- * larger of its gaps along x and y, so only the gaps at that level count,
- * and it comes closer only if every one of them shrinks: a point off the
- * outline's corner, as near along x as along y, comes no closer while
- * Heron slides along x. The rates are linear in the twist, so if no axis
- * alone brings a point closer, their sum does not either.
+ * Does the motion bring p, a point in the stop margin, closer to the body
+ * than `closest`, the closest anything is now? A point's distance is
+ * rectGap(), the larger of its gaps along x and y. A motion that shrinks
+ * only one of them can bring the point no nearer than the other, which it
+ * leaves alone; so it counts only if that other gap is below `closest`.
+ * Driving into a wall shrinks the gap along x of the points in front of
+ * the body, whose gap along y is below zero: stopped. Sliding along it
+ * shrinks the gap along y of the wall's points past the side, whose gap
+ * along x is the wall's own distance: allowed. A motion that shrinks both
+ * counts always.
+ *
+ * Not linear in the twist: two axes each allowed alone can shrink both
+ * gaps together, so limit() tests the cut motion as a whole again.
  */
 bool closesIn(const Outline &o, Vec2 p, const Twist &t, double closest) noexcept {
   // The point's velocity in the robot frame, as the robot moves.
@@ -79,11 +89,16 @@ bool closesIn(const Outline &o, Vec2 p, const Twist &t, double closest) noexcept
   const double vy = -t.vy - t.wz * p.x;
   const double gx = std::abs(p.x) - o.halfLength;
   const double gy = std::abs(p.y) - o.halfWidth;
-  const double rateX = (p.x < 0.0 ? -1.0 : 1.0) * vx;
-  const double rateY = (p.y < 0.0 ? -1.0 : 1.0) * vy;
-  const bool atX = gx >= closest - kTouchM;
-  const bool atY = gy >= closest - kTouchM;
-  return (!atX || rateX < -kStill) && (!atY || rateY < -kStill) && (atX || atY);
+  const bool shrinksX = (p.x < 0.0 ? -1.0 : 1.0) * vx < -kStill;
+  const bool shrinksY = (p.y < 0.0 ? -1.0 : 1.0) * vy < -kStill;
+  if (shrinksX && shrinksY) {
+    return true;
+  }
+  if (!shrinksX && !shrinksY) {
+    return false;
+  }
+  const double floor = shrinksX ? gy : gx;
+  return floor < closest - kSameGapM;
 }
 
 /**
@@ -94,7 +109,7 @@ bool closesIn(const Outline &o, Vec2 p, const Twist &t, double closest) noexcept
 std::optional<double> earliest(const std::vector<Vec2> &points, const Outline &o,
                                const Twist &t, double horizonS,
                                const Geometry::SweepStep &step) {
-  const double reach = halfDiagonal(o) + std::hypot(t.vx, t.vy) * horizonS + kTouchM;
+  const double reach = halfDiagonal(o) + std::hypot(t.vx, t.vy) * horizonS + 0.001;
   const double reachSq = reach * reach;
   const Geometry::Sweep sweep(o, t, horizonS, step);
   std::optional<double> best;
@@ -120,8 +135,8 @@ struct AxisLimit {
 
 /** Where the scan's points are now, and what each is tested with. */
 struct Placed {
-  std::vector<Vec2> swept;     // tested by the sweep, against `sweep`
-  std::vector<Vec2> closest;   // inside the stop margin, the nearest: tested by closesIn()
+  std::vector<Vec2> swept;     // outside the stop margin: tested by the sweep, against `sweep`
+  std::vector<Vec2> held;      // inside the stop margin: tested by closesIn()
   Outline sweep{};
   std::optional<Vec2> nearest;
 };
@@ -196,12 +211,20 @@ LimitResult Limiter::limit(const LimitInput &input) const {
     points.push_back(p);
   }
 
-  // Something already inside the stop margin (rule 4). The margin shrinks
-  // to just short of it for the sweep, and the closest points are held by
-  // closesIn() instead: Heron may move along them or away, never closer.
-  // Without this, a wall in the margin ahead would stop a slide along it:
-  // its points just past the outline's side would be "hit" by any
-  // sideways motion, though they come no closer than the wall already is.
+  // Something already inside the stop margin (rule 4). Every point in the
+  // margin is held by closesIn(): Heron may move along it or away, never
+  // closer. The points outside it are swept against the body grown by the
+  // closest distance, not by the margin: a point coming in from beside,
+  // as the rest of a wall does when Heron slides along it, may then enter
+  // the margin as deep as what is already there, and once in, is held
+  // too. So the closest distance never shrinks (but by sensor noise), and
+  // a slide along a wall in the margin goes on.
+  //
+  // The first version held only the closest points and swept the rest
+  // against a margin 1 mm short of them. That margin ratcheted: driven at
+  // a wall at 55 deg, each wall point further along reached the shrunk
+  // margin, became the closest, and shrank it again, and Heron crept into
+  // the wall (nav_scenario_test, scenario 2).
   const Outline &body = m_config.outline;
   double closestGap = m_config.stopMarginM;
   for (const Vec2 &p : points) {
@@ -209,13 +232,13 @@ LimitResult Limiter::limit(const LimitInput &input) const {
   }
   const bool tooClose = closestGap < m_config.stopMarginM;
   Placed placed;
-  placed.sweep = stop;
-  if (tooClose) {
-    // Never shrunk past nothing: a point inside the body itself is a
-    // collision already, or a ghost, and is held by closesIn() alone.
-    const double floor = -0.9 * std::min(body.halfLength, body.halfWidth);
-    placed.sweep = Geometry::grown(body, std::max(closestGap - kTouchM, floor));
-  }
+  // kSlackM short of the closest, so a point beside it, level with it, is
+  // not touched by the edge: a contact on the edge counts. A point entering
+  // that slack is held from then on, so the slack cannot ratchet. Never
+  // shrunk past nothing: a point inside the body itself is a collision
+  // already, or a ghost, and is held by closesIn() alone.
+  const double floor = -0.9 * std::min(body.halfLength, body.halfWidth);
+  placed.sweep = tooClose ? Geometry::grown(body, std::max(closestGap - kSlackM, floor)) : stop;
   double nearestGap = 0.0;
   for (const Vec2 &p : points) {
     const double gap = gapTo(body, p);
@@ -223,8 +246,9 @@ LimitResult Limiter::limit(const LimitInput &input) const {
       placed.nearest = p;
       nearestGap = gap;
     }
-    if (tooClose && rectGap(body, p) < closestGap + kTouchM) {
-      placed.closest.push_back(p);
+    // In the margin, edge included, as contains() counts it.
+    if (rectGap(body, p) <= m_config.stopMarginM) {
+      placed.held.push_back(p);
     } else if (Geometry::norm(p) <= reach) {
       placed.swept.push_back(p);
     }
@@ -248,8 +272,8 @@ LimitResult Limiter::limit(const LimitInput &input) const {
       a.unobserved = true;
       return a;
     }
-    // Already too close: only motion that brings nothing closer.
-    for (const Vec2 &p : placed.closest) {
+    // Already too close: only motion that brings nothing in the margin closer.
+    for (const Vec2 &p : placed.held) {
       if (closesIn(body, p, alone, closestGap)) {
         a.scale = 0.0;
         a.cut = true;
@@ -289,6 +313,14 @@ LimitResult Limiter::limit(const LimitInput &input) const {
   double whole = 1.0;
   if (const auto t = earliest(placed.swept, placed.sweep, cut, horizonS, m_config.step)) {
     whole = std::clamp(*t / horizonS, 0.0, 1.0);
+  }
+  // Two axes each allowed alone may bring a point in the margin closer
+  // together, shrinking its gaps along x and y at once: then nothing.
+  for (const Vec2 &p : placed.held) {
+    if (closesIn(body, p, cut, closestGap)) {
+      whole = 0.0;
+      break;
+    }
   }
   result.command = Twist{cut.vx * whole, cut.vy * whole, cut.wz * whole};
   result.scale = Twist{axes[0].scale * whole, axes[1].scale * whole, axes[2].scale * whole};

@@ -33,13 +33,14 @@
 //          in proportion when something lies within slowMargin along it;
 //        - then the cut motion together, cut as a whole if it still
 //          touches;
-//        - something already inside the stop margin: the points closest to
-//          Heron stop only the axes that bring them closer, so backing off
-//          and sliding along stay allowed; and the margin the sweep uses
-//          shrinks to just short of them, or the rest of a wall in the
-//          margin would block the slide (its points past the outline's
-//          side come into the margin as Heron slides, though no closer
-//          than the wall already is).
+//        - something already inside the stop margin (rule 4): every point
+//          in the margin stops only the axes that would bring it nearer
+//          than the nearest anything is now, so backing off and sliding
+//          along a wall stay allowed; the points outside the margin are
+//          swept against the body grown by that nearest distance, not by
+//          the margin, so the rest of a wall may come in beside as Heron
+//          slides. How, why, what it costs, and the alternative:
+//          docs/navigation-cpp-design.md §6.2.
 //      Per axis is what lets Heron keep sliding along a wall while the
 //      part of the motion into it stops.
 //
