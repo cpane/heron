@@ -201,6 +201,19 @@ add_library(heron_geometry STATIC
 target_include_directories(heron_geometry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(heron_geometry PRIVATE heron_warnings)
 
+# Where Heron is, and was: PoseHistory, the pure core, keeps two seconds of
+# odometry readings and answers "where was Heron at t?"; PoseTracker is the
+# thread that feeds it from heron_odometry. PoseFeed.h, the tracker's
+# decisions without the thread, is private (src/pose/), for pose_test.
+# docs/navigation-cpp-design.md §4.
+add_library(heron_pose STATIC
+    src/pose/PoseHistory.cpp
+    src/pose/PoseTracker.cpp)
+target_include_directories(heron_pose PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_pose
+    PUBLIC heron_geometry heron_lidar_types heron_odometry
+    PRIVATE Threads::Threads heron_warnings)
+
 # The simulator: a world of segments, a mecanum base, and an A1M8 that turns
 # while the base moves. Host-side, for tests only, so its headers are
 # private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
@@ -301,6 +314,15 @@ add_test(NAME geometry_test COMMAND geometry_test)
 add_executable(nav_sim_test tests/NavSimTest.cpp)
 target_link_libraries(nav_sim_test PRIVATE heron_nav_sim heron_warnings)
 add_test(NAME nav_sim_test COMMAND nav_sim_test)
+
+# PoseFeed.h is private to heron_pose, so the test is given its path; the
+# fake OTOS bus drives a real Odometry under the tracker's thread.
+add_executable(pose_test tests/PoseTest.cpp)
+target_include_directories(pose_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/odometry")
+target_link_libraries(pose_test PRIVATE heron_pose Threads::Threads heron_warnings)
+add_test(NAME pose_test COMMAND pose_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.
