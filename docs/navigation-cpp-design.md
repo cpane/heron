@@ -545,6 +545,44 @@ Each new scan: copy the last map, `addScan()` with `copyHistory()` and
 the steady clock's now, publish the copy. The planner keeps reading the
 old one meanwhile (design §6.4).
 
+### 5.3 N3 as built (2026-11-08)
+
+`heron_pose`, `heron_perception` and the simulated OTOS are built; `pose_test`
+and `perception_test` pass on the Mac (and the Pi build has no warnings).
+Additions to the interfaces above, made while building; nothing accepted
+was changed:
+
+- **`PoseFeed`** (`src/pose/PoseFeed.h`, private): what `PoseTracker`
+  does with each reading (the epoch, the gap, freshness), without its
+  thread or clock, so `pose_test` checks a restart or a gap in one call.
+  The tracker is the thread round it, as P2 has every wrapper.
+- **`PoseHistory::oldest()`**, beside `newest()`. **`PoseTracker::start()`
+  polls once** before its thread starts, so `getLatest()` has an answer at
+  once. A reading the OTOS flags as a sensor error is not stored.
+- **`ObstacleGrid` gained** `centreOf()`, `centre()`, `count()` and
+  `config()`, for tests and the telemetry. Cells are found by multiplying
+  by 20 per metre, not dividing by 0.05: 0.05 is not exact in binary, and
+  2.0 / 0.05 floors to 39. Non-finite points are ignored.
+- **`addScan()`** takes the map's freshness limit as `kMaxScanAge` (300
+  ms), and `toString(ScanOutcome)` names an outcome for the health. A new
+  epoch resets the map even when the scan is then skipped.
+- **`Perception`** publishes a map only when a scan was added, or when a
+  new epoch reset it: a map in a frame that no longer exists is worse
+  than an empty one.
+- **The simulated OTOS** integrates its drift: each true step is applied
+  in the drifted heading, so the position error grows with the distance
+  driven, as a real one's does. It starts at the base's true pose.
+
+Measured in `perception_test`: a turning robot (1.5 rad/s, 0.2 m/s) sees
+a straight wall 1.2 m away; placed at each point's own time, every blocked
+cell is within 25 mm of the wall (one cell); placed at the scan's end, 325
+mm off.
+
+**One hit blocks.** With the accepted counts (+3, blocked at +3), a
+single hit blocks an unknown cell; a cell seen free (−2 or lower) takes
+two. Design §6.1's "a point seen in two scans is enough to block" holds
+only for the second case, and is corrected there.
+
 ## 6. `heron_limiter`: the safety limiter
 
 Headers in `include/heron/limiter/`. Pure, no thread: the control loop

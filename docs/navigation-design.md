@@ -509,7 +509,7 @@ its pose and velocity.
 |---|---|---|
 | Size | 80 × 80 cells of 5 cm: 4 × 4 m | About 2 m each way covers the planner's 1.5 s at walking pace, with room to see round a box |
 | Cell | `int8_t` count, starting at 0 | 6,400 bytes for the whole map |
-| Hit | +3, up to +12 | A point seen in two scans is enough to block |
+| Hit | +3, up to +12 | One hit blocks an unknown cell; a cell seen free takes two |
 | Pass | −1, down to −8 | A beam through it twice makes it free; a wall needs several misses to vanish |
 | Blocked | ≥ +3 | |
 | Free | ≤ −2 | |
