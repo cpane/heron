@@ -202,7 +202,8 @@ heron_profile             a rig's profile (profiles/<rig>.conf), read and
                           checked, and which rig a Pi is (rig-profiles.md)
 
 heron_geometry            navigation's shared maths: frames, poses, twists,
-                          the robot's outline and the sweep; pure
+                          the robot's outline and the sweep (Sweep for many
+                          points); pure
   ^                       (navigation-cpp-design.md §2)
 heron_pose                PoseHistory: 2.5 s of poses, interpolated at any
   ^                       time; PoseTracker: the thread feeding it from
@@ -210,6 +211,8 @@ heron_pose                PoseHistory: 2.5 s of poses, interpolated at any
 heron_perception          ObstacleGrid and addScan(): the rolling obstacle
                           map, each point placed at its own time; Perception:
                           its thread, from heron_lidar and heron_pose (§5)
+heron_limiter             the safety limiter's core: a command against the
+                          newest raw scan; pure, no thread (§6)
 heron_nav_sim             the simulator, for tests: a world, a mecanum base,
                           an A1M8 built through heron_scan_builder, an OTOS
                           with drift; host side, private headers
@@ -233,6 +236,8 @@ include path. The boundary is enforced by the build. Rationale in
 | `motors_test` | `cpp/tests/` | `Motors` against a fake Arduino on a pty that runs the firmware's own logic, run by `ctest` |
 | `motor_adapter` | `cpp/probes/` | `Motors` live on the board, as a 50 Hz robot loop sees it |
 | `geometry_test`, `nav_sim_test` | `cpp/tests/` | navigation's maths against worked examples and brute force; the simulator against the LiDAR's measured figures; run by `ctest` |
+| `limiter_test` | `cpp/tests/` | the safety limiter: each rule and blind condition against walls placed by hand, 2000 random scenes against its promise, and the time a call takes; run by `ctest` |
+| `nav_scenario_test` | `cpp/tests/` | the limiter in the loop with the simulator: 1000 runs at a wall, a slide along one, the LiDAR lost; run by `ctest`; its 1000 runs share the cores (9 s on the Mac, 23 s on the Pi) |
 | `pose_test`, `perception_test` | `cpp/tests/` | the pose history's lookups and epochs, the tracker on a fake OTOS; the obstacle grid's beams and rolling, and a turning robot's wall placed straight from the simulator; run by `ctest` |
 | `rig_profile_test` | `cpp/tests/` | reading and checking rig profiles, every rule, run by `ctest` |
 | `rig_profiles_check` | `profiles/*.conf` | not a program: a `ctest` running `rig_profile check` on every profile in the repository |

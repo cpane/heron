@@ -226,6 +226,14 @@ target_link_libraries(heron_perception
     PUBLIC heron_geometry heron_pose heron_lidar_types heron_lidar
     PRIVATE Threads::Threads heron_warnings)
 
+# The safety limiter: the last check between a command and the motors,
+# against the newest raw scan, never the map. Pure, no thread: the control
+# loop calls it every 20 ms. docs/navigation-cpp-design.md §6.
+add_library(heron_limiter STATIC src/limiter/Limiter.cpp)
+target_link_libraries(heron_limiter
+    PUBLIC heron_geometry heron_pose heron_lidar_types
+    PRIVATE heron_warnings)
+
 # The simulator: a world of segments, a mecanum base, an A1M8 that turns
 # while the base moves, and an OTOS whose heading drifts. Host-side, for
 # tests only, so its headers are private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
@@ -341,6 +349,15 @@ add_executable(perception_test tests/PerceptionTest.cpp)
 target_link_libraries(perception_test
     PRIVATE heron_perception heron_nav_sim Threads::Threads heron_warnings)
 add_test(NAME perception_test COMMAND perception_test)
+
+add_executable(limiter_test tests/LimiterTest.cpp)
+target_link_libraries(limiter_test PRIVATE heron_limiter heron_warnings)
+add_test(NAME limiter_test COMMAND limiter_test)
+
+add_executable(nav_scenario_test tests/NavScenarioTest.cpp)
+target_link_libraries(nav_scenario_test
+    PRIVATE heron_limiter heron_nav_sim Threads::Threads heron_warnings)
+add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.

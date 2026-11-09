@@ -1,8 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04. **Phase N3 done; N4 next.**
-`heron_pose`, `heron_perception` and the simulated OTOS pass their tests
-on the Mac and the Pi, on `feature/navigation-n3`.
+Last updated 2026-11-08. Started 2026-11-04. **Phase N4: the limiter's
+core and the scenarios are built** (`feature/navigation-limiter`) and pass
+on the Mac and the Pi. `heron_robot`, the rest of N4, waits on N1's
+profile sections. N3 (pose and perception) is done and merged.
 
 ## Read this first when resuming
 
@@ -60,16 +61,34 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N4, on the Mac:** the limiter's core (`navigation-cpp-design.md`
-   §6), `limiter_test`, and `nav_scenario_test` with the simulator (§9's
-   N4 rows; design §12.2 scenarios 2, 3 and 5). `heron_robot` (§7) needs
-   N1's profile sections first.
-2. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
+1. **`heron_robot`** (`navigation-cpp-design.md` §7, the rest of N4)
+   needs N1's profile sections: `[lidar]` and `[geometry]` in the
+   profile, which the reader refuses today, and the `[geometry]` name
+   clash ("Still open"). Until then, the work that needs no robot is
+   the planner's interfaces (N5, §8).
+2. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
+   weighed later, with the user, once N1 has measured the A1M8's range
+   noise (design §18, 6 and 7). Do not change rule 4 before then.
+3. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
    seated, made it miss commands and turn at 7.10 Hz instead of 7.52
    (LiDAR workstream, findings trap 12). Seat it firmly before recording,
    and give the cable strain relief before the robot drives. Whether the
    power block's under-voltage also costs commands is not re-tested
    (`navigation-cpp-design.md` §3).
+
+N4's scenarios (2026-11-08): `nav_scenario_test` passes on the Mac and
+the Pi (§6.1's table). Scenario 2 found that the first rule 4 ratcheted
+the margin down and let Heron creep into a slanting wall (8 of 1000 runs);
+the rule now holds every point in the margin (§6.2). Range noise still
+erodes the margin, 23.5 to 35.6 mm kept of 50; the A1M8's noise is not
+measured.
+
+N4's limiter (2026-11-08): `limiter_test` passes on the Mac, each rule
+and blind row by hand, and 2000 random scenes in which no limited command
+brings a point within 4 cm of the body within T (scenes with nothing in
+the margin). Rule 4 needed its own design, or a wall in the margin
+stopped a slide along it (§6.2). Worst-case call on the Pi: 0.68 ms. A worst-case call: 4.8 ms first, 0.34 ms with
+`Sweep`.
 
 N3's results (2026-11-08): `pose_test`, `perception_test` and
 `nav_sim_test` pass on the Mac and the Pi. A turning robot's wall, from

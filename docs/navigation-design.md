@@ -599,7 +599,10 @@ one scan period (about 0.3 s), and `brake` from `[geometry]`.
    from full speed at the last moment.
 4. **Already too close:** a point inside the stop outline now blocks only
    motion that brings it closer; motion away is allowed, so Heron can
-   always back off.
+   always back off, and so is sliding along it. While anything is inside
+   the margin, the margin for the rest is the distance of the closest
+   thing. How this is built, its costs, and a margin per side as the
+   alternative to weigh later: `navigation-cpp-design.md` §6.2.
 
 ### 7.4 When it cannot see
 
@@ -898,3 +901,11 @@ mapping is from general knowledge of ROS 2, not tried here.
 5. **The frame of the OTOS's velocity:** its own (the robot's) or the
    odom frame. `PoseTracker` stores it in the robot frame either way
    (`navigation-cpp-design.md` §4.2); checked with the axes in N1.
+6. **The A1M8's range noise** is not measured; the simulator's 5 mm is a
+   guess. Noise erodes the limiter's margin while something is inside it
+   (23.5 to 35.6 mm kept of 50 in the simulator, 49 with none:
+   `navigation-cpp-design.md` §6.2). To measure in N1: the spread of
+   repeated ranges to a still wall.
+7. **Rule 4's alternative, a margin per side** (`navigation-cpp-design.md`
+   §6.2, end): accepted to weigh later, after the range noise is known
+   and Heron has driven near walls in Assisted.

@@ -48,6 +48,11 @@ Vec2 rotate(Vec2 v, double angleRad) noexcept {
 }
 
 double wrapAngle(double rad) noexcept {
+  // Most angles are in range already, and fmod is slow next to a compare:
+  // it was the largest single cost of a limiter call.
+  if (rad >= -kPi && rad < kPi) {
+    return rad;
+  }
   // As wrapBearing(): std::remainder would return +pi for +pi, so fold by
   // hand and send the top end to the bottom.
   double r = std::fmod(rad + kPi, kTwoPi);
