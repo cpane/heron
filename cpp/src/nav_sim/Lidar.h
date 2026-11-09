@@ -12,12 +12,16 @@
 // A LiDAR that behaves like ours, as measured (docs/rplidar-a1m8-findings.md):
 //
 //   - It turns clockwise at 7.3 rev/s, each revolution's period varying by
-//     0.8 ms (one standard deviation), and samples at a steady rate, so a
+//     0.2 ms (one standard deviation), and samples at a steady rate, so a
 //     revolution holds about 531 samples, more or fewer as the period varies.
+//     The real rate is whatever its motor free-runs at: 7.35 and 7.52 rev/s
+//     measured, 7.10 with its micro-USB plug poorly seated.
 //   - Each revolution starts at 358.6 degrees in the sensor frame, where the
 //     real sync flag fires on average.
 //   - Every revolution has one gap with no samples, at a fixed sensor angle,
-//     as every real one does (cause not understood). The samples are about
+//     as every real one does (cause not understood). A real gap holds its
+//     bearing through a capture but moves between captures (40, 106, 188 and
+//     220 degrees seen). The samples are about
 //     0.66 degrees apart, so a gap is a whole number of spacings: 7.3
 //     degrees leaves out 11 samples, and the widest gap reads about 7.95
 //     (12 spacings), against 8.0 to 8.1 measured in express mode. The 531
@@ -74,7 +78,7 @@ namespace Heron::NavSim {
 struct LidarConfig {
   Geometry::Vec2 offset{0.06, 0.0};  // spin axis in the robot frame, m
   double yawRad{0.0};                // the housing's front, robot frame (mountingOffsetRad)
-  double revolutionsHz{7.3};
+  double revolutionsHz{7.3};         // measured 7.35 to 7.52; tests read it, never assume it
   // The revolution time's true spread. The findings' 0.8 ms comes from SDK
   // timestamps, which jitter; the sample count, at a steady 254 us a
   // sample, varies by 0.75 samples, so the period by about 0.2 ms.

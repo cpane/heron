@@ -276,24 +276,34 @@ the bench rig, the Pi on its mains adapter (`lidar_record --mode 1
   0.2 ms. The findings' 0.8 ms is measured from SDK timestamps, which
   jitter (the count and the stamped period correlate only 0.40). The
   simulator used 0.8 ms at first, so its count spread to 521 to 538; it
-  now uses 0.2 ms.
-- **The rotation rate depends on the supply** (the findings say the motor
-  free-runs). 7.10 Hz here, 7.35 Hz in October. Why it differs on the
-  same adapter is not known [unverified]. Tests take the rate from
-  `LidarConfig`, never assume 7.3 Hz.
-- **No-returns depend on the room:** 36 to 40% here, 61 to 84% in the
-  findings. They cluster: runs of 5.2 samples on average, up to 70, where
-  the simulator's random ones at 70% would average 3.3.
+  now uses 0.2 ms. A second recording, made for this by the LiDAR
+  workstream, confirmed it: count-implied spread 0.14 ms, stamped 0.59
+  ms, correlation 0.00 (findings, "Rate and timing").
+- **The rotation rate was the plug, not the supply.** 7.10 Hz here, 7.35
+  Hz in October. The LiDAR workstream found the LiDAR's micro-USB plug
+  poorly seated at its adapter board; re-seated, on the same mains
+  adapter, it turned at 7.52 Hz, period 131.9 to 134.1 ms, 519 to 521
+  samples a revolution (findings, trap 12) [ours]. Tests take the rate
+  from `LidarConfig`, never assume 7.3 Hz.
+- **No-returns depend on the room:** 36 to 40% here, 33 to 39% in the
+  re-recording, 61 to 84% in the findings. They cluster: runs of 5.2
+  samples on average, up to 70 (re-recording: 4.4, up to 25), where the
+  simulator's random ones at 70% would average 3.3.
 - **The gap sits at one bearing a capture,** 210 to 221° in 204 of 219
-  revolutions here (the findings saw 40° and 106°), and the second-widest
-  gap is 4.7°, so there is one gap each revolution, as simulated.
+  revolutions here, 188° in the re-recording in the same room (the
+  findings saw 40° and 106°), and the second-widest gap is 4.7°, so there
+  is one gap each revolution, as simulated. Nothing may rely on where it
+  is. The sync node sat at 355.2° here, 359.6° with the plug seated.
 - **On the power block, the LiDAR misses commands.** Before this
   recording the Pi ran from the robot's power block, reported
   under-voltage every few seconds (`get_throttled` 0x50005), and the
   LiDAR answered only 4 of 20 GET_INFO requests; the SDK's start-up then
   failed. On the mains adapter it answered 20 of 20 with the motor
   stopped, and recorded cleanly, though only 11 of 20 with the motor
-  running and requests 50 ms apart [cause unverified].
+  running and requests 50 ms apart. The 11 of 20 was the poorly seated
+  plug: re-seated, it lost none of 1556 (findings, trap 12) [ours]. The
+  power block's 4 of 20 has not been re-tested; the plug may have added
+  to the under-voltage [unverified].
 
 One known difference remains: the simulated no-returns are scattered at
 random, so a test that depends on clustering needs a recording.
