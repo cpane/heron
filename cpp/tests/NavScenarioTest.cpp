@@ -8,12 +8,15 @@
 // SPDX-License-Identifier: MIT
 // Licensed under the MIT License; see LICENSE in the repository root.
 
-// The N4 scenarios of docs/navigation-cpp-design.md §9, from design §12.2:
+// The scenarios of docs/navigation-cpp-design.md §9, from design §12.2:
 //
+//   1. Navigate at a box: pass it with at least 15 cm to spare and be back
+//      within 10 cm of the course line within 2 m.
 //   2. Assisted, driven at a wall at full speed: stop with the outline
 //      outside it, every time, over 1000 runs with random starts, speeds,
 //      angles and sensor noise.
 //   3. Assisted, sliding along a wall: keep sliding.
+//   4. Navigate into a dead end: Blocked, stopped.
 //   5. The LiDAR stops mid-run: stop within 300 ms.
 //
 // Each run is the control loop of design §4 in virtual time: every 10 ms
@@ -21,7 +24,11 @@
 // turns; every 20 ms the stick's command goes through the limiter with
 // the newest scan, and the base is given what comes out. The base brakes
 // at 0.6 m/s^2 and answers 60 ms late (BaseConfig); the limiter is told
-// the brake, as the profile will tell it the measured one. No threads, so
+// the brake, as the profile will tell it the measured one. In Navigate (1
+// and 4) the map is built from each scan as Perception builds it, the
+// planner runs every 100 ms (and at once for a new course) as
+// LocalPlanner runs it, and the control loop drives its plan through the
+// limiter as heron_robot will (navigation-cpp-design.md §8.7). No threads, so
 // a run of seconds takes milliseconds and every run repeats. Same style
 // as the other tests: no framework.
 //
@@ -45,6 +52,9 @@
 #include <vector>
 
 #include "heron/limiter/Limiter.h"
+#include "heron/perception/ObstacleMap.h"
+#include "heron/planner/CourseKeeper.h"
+#include "heron/planner/Planner.h"
 #include "heron/pose/PoseHistory.h"
 #include "nav_sim/Base.h"
 #include "nav_sim/Lidar.h"
@@ -211,9 +221,199 @@ void driveAtWall(WallRun &w, bool trace) {
   w.final = run.clearanceTo(w.wallX);
 }
 
+/** The least gap between the body, at its true pose, and any point. */
+double gapTo(const Pose2 &body, const std::vector<Vec2> &points) {
+  double least = 1e9;
+  for (const Vec2 &q : points) {
+    const Vec2 local = Heron::Geometry::toChild(body, q);
+    least = std::min(least, std::max(std::abs(local.x) - kBody.halfLength,
+                                      std::abs(local.y) - kBody.halfWidth));
+  }
+  return least;
+}
+
+/** Points every centimetre along a world's segments, to measure gaps to. */
+std::vector<Vec2> pointsOf(const std::vector<Heron::NavSim::Segment> &segments) {
+  std::vector<Vec2> points;
+  for (const Heron::NavSim::Segment &seg : segments) {
+    const double length = Heron::Geometry::norm(seg.b - seg.a);
+    const auto n = static_cast<std::int32_t>(std::ceil(length / 0.01));
+    for (std::int32_t i = 0; i <= n; ++i) {
+      points.push_back(seg.a + (static_cast<double>(i) / n) * (seg.b - seg.a));
+    }
+  }
+  return points;
+}
+
+/** Navigate: Run, plus the map, the course and the planner. */
+struct NavRun {
+  NavRun(Heron::NavSim::World w, Pose2 start, std::uint32_t seed)
+      : run(std::move(w), start, seed), planner(plannerConfig()) {
+    map.grid.reset(Vec2{start.x, start.y});
+  }
+
+  static Heron::Planner::PlannerConfig plannerConfig() {
+    Heron::Planner::PlannerConfig config;
+    config.outline = kBody;
+    config.maxSpeedMps = 0.35;
+    config.accelMps2 = Heron::NavSim::BaseConfig{}.accel;
+    return config;
+  }
+
+  /** One 20 ms cycle of Navigate, the stick held as given. */
+  LimitResult cycle(const Twist &stick) {
+    for (std::int32_t i = 0; i < kTicksPerCycle; ++i) {
+      run.now += kTick;
+      run.base.advance(run.now);
+      run.history.add(run.otos.read(run.now, run.base));
+      if (auto s = run.lidar.advance(run.now, run.base)) {
+        run.scan = std::move(s);
+        (void)Heron::Perception::addScan(map, *run.scan, run.history, 1,
+                                         Heron::Perception::LidarMount{Vec2{0.06, 0.0}}, run.now);
+      }
+    }
+    const Pose2 pose = run.history.at(run.now).pose;
+    const std::optional<Heron::Planner::Course> course = keeper.update(stick, pose, 1);
+    if (course && (!plan || plan->courseSeq != course->seq || run.now - plan->time >= 100ms)) {
+      Heron::Planner::PlanInput input;
+      input.map = &map;
+      input.pose = pose;
+      input.epoch = 1;
+      input.poseFresh = true;
+      input.measured = run.history.newest()->velocity;
+      input.course = course;
+      input.now = run.now;
+      plan = planner.plan(input);
+      if (trace) {
+        const Pose2 t = run.base.truePose();
+        std::printf("          %6.2f s  at (%.3f, %.3f)  plan (%.3f, %.3f) %s  clearance %.3f\n",
+                    seconds(run.now.time_since_epoch()) - 100.0, t.x, t.y, plan->twist.vx,
+                    plan->twist.vy, Heron::Planner::toString(plan->state), plan->clearanceM);
+      }
+      blocked += plan->state == Heron::Planner::State::Blocked ? 1 : 0;
+      avoiding += plan->state == Heron::Planner::State::Avoiding ? 1 : 0;
+    }
+    Twist want{};
+    if (course && plan && plan->courseSeq == course->seq && run.now - plan->time <= 300ms) {
+      want = Twist{plan->twist.vx, plan->twist.vy, course->turnRateRadps};
+    }
+    const Twist measured = run.history.newest()->velocity;
+    const LimitResult r = run.limiter.limit(
+        LimitInput{want, run.scan ? &*run.scan : nullptr, &run.history, true, measured, run.now});
+    const bool moving = want.vx != 0.0 || want.vy != 0.0;
+    driven += moving ? 1 : 0;
+    cut += moving && (r.reason == Reason::Cut || r.reason == Reason::BackingOff) ? 1 : 0;
+    slowed += moving && r.reason == Reason::Slowed ? 1 : 0;
+    run.base.command(r.command, run.now);
+    return r;
+  }
+
+  Run run;
+  Heron::Perception::ObstacleMap map{Heron::Perception::ObstacleGrid{}, 1};
+  Heron::Planner::CourseKeeper keeper;
+  Heron::Planner::Planner planner;
+  std::optional<Heron::Planner::Plan> plan;
+  std::int32_t blocked{0};   // plans
+  std::int32_t avoiding{0};  // plans
+  std::int32_t driven{0};    // cycles with a non-zero plan driven
+  std::int32_t cut{0};       // ...of which the limiter cut (Cut, BackingOff)
+  std::int32_t slowed{0};    // ...or only slowed, in its slow zone
+  bool trace{false};         // print every plan
+};
+
 }  // namespace
 
 int main() {
+  std::printf("Scenario 1: Navigate at a box\n");
+  {
+    // A room 9 x 4 m and a 0.3 m box on the course, at two distances and
+    // five offsets from the line, dead centre included; each run with its
+    // own sensor noise. The stick held forward at 0.3 m/s until Heron is
+    // 4.5 m along. HERON_SCENARIO_TRACE1=<run> prints that run's plans.
+    struct BoxRun {
+      Vec2 box{};
+      std::uint32_t seed{0};
+      bool reached{false};
+      double closest{1e9};
+      double widest{0.0};
+      std::optional<double> yAfter;  // off the line 2 m past the box
+      double seconds{0.0};
+      std::int32_t driven{0};
+      std::int32_t cut{0};
+      std::int32_t slowed{0};
+    };
+    std::vector<BoxRun> runs;
+    std::uint32_t seed = 100;
+    for (const double x : {1.35, 1.95}) {
+      for (const double y : {-0.10, -0.05, 0.0, 0.05, 0.10}) {
+        BoxRun b;
+        b.box = Vec2{x, y};
+        b.seed = ++seed;
+        runs.push_back(b);
+      }
+    }
+    // Independent runs, shared across the cores as scenario 2's are.
+    const char *traceRun = std::getenv("HERON_SCENARIO_TRACE1");
+    const auto drive = [traceRun](BoxRun &b, std::size_t r) {
+      Heron::NavSim::World world;
+      world.addBox(Vec2{2.5, 0.0}, 9.0, 4.0);
+      Heron::NavSim::World boxOnly;
+      boxOnly.addBox(b.box, 0.3, 0.3);
+      world.segments.insert(world.segments.end(), boxOnly.segments.begin(), boxOnly.segments.end());
+      const std::vector<Vec2> box = pointsOf(boxOnly.segments);
+      NavRun nav(std::move(world), Pose2{}, b.seed);
+      nav.trace = traceRun != nullptr && static_cast<std::size_t>(std::atoi(traceRun)) == r;
+      const Twist stick{0.3, 0.0, 0.0};
+      std::int32_t c = 0;
+      for (; c < 1500 && nav.run.base.truePose().x < 4.5; ++c) {
+        (void)nav.cycle(stick);
+        const Pose2 p = nav.run.base.truePose();
+        b.closest = std::min(b.closest, gapTo(p, box));
+        b.widest = std::max(b.widest, std::abs(p.y));
+        if (!b.yAfter && p.x >= b.box.x + 0.15 + 2.0) {
+          b.yAfter = p.y;
+        }
+      }
+      b.reached = nav.run.base.truePose().x >= 4.5;
+      b.seconds = 0.02 * c;
+      b.driven = nav.driven;
+      b.cut = nav.cut;
+      b.slowed = nav.slowed;
+    };
+    const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
+    std::vector<std::thread> threads;
+    for (std::size_t w = 0; w < workers; ++w) {
+      threads.emplace_back([&runs, &drive, w, workers]() {
+        for (std::size_t r = w; r < runs.size(); r += workers) {
+          drive(runs[r], r);
+        }
+      });
+    }
+    for (std::thread &t : threads) {
+      t.join();
+    }
+    for (const BoxRun &b : runs) {
+      std::printf("        box at (%.2f, %+.2f): %.1f s; closest %.0f mm; widest %.0f mm off the "
+                  "line, %.0f mm 2 m past; limiter cut %d, slowed %d of %d\n",
+                  b.box.x, b.box.y, b.seconds, 1000.0 * b.closest, 1000.0 * b.widest,
+                  b.yAfter ? 1000.0 * *b.yAfter : -1.0, b.cut, b.slowed, b.driven);
+    }
+    bool reached = true;
+    bool spare = true;
+    bool back = true;
+    bool uncut = true;
+    for (const BoxRun &b : runs) {
+      reached = reached && b.reached;
+      spare = spare && b.closest >= 0.15;
+      back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
+      uncut = uncut && b.cut == 0;
+    }
+    check("every run reached 4.5 m along", reached);
+    check("passed the box with at least 15 cm to spare, every run", spare);
+    check("back within 10 cm of the line 2 m past it, every run", back);
+    check("the limiter cut none of the planner's choices (I11)", uncut);
+  }
+
   std::printf("Scenario 2: driven at a wall, 1000 random runs\n");
   {
     // The wall across the way at 0.6 to 1.5 m; Heron facing it within 60
@@ -326,6 +526,37 @@ int main() {
     check("never touched the wall", worst > 0.0);
     check("closed in on it: within the 25 cm slow zone", gap < 0.25);
     check("kept sliding: over 0.25 m/s along it over the last 2 s", (xAt6 - xAt4) / 2.0 > 0.25);
+  }
+
+  std::printf("Scenario 4: Navigate into a dead end\n");
+  {
+    // A corridor 0.8 m wide, closed 1.5 m ahead, in a room; the stick held
+    // forward at 0.3 m/s for 12 s.
+    Heron::NavSim::World world;
+    world.addBox(Vec2{0.5, 0.0}, 6.0, 4.0);
+    std::vector<Heron::NavSim::Segment> end{
+        {Vec2{-1.0, 0.4}, Vec2{1.5, 0.4}},
+        {Vec2{-1.0, -0.4}, Vec2{1.5, -0.4}},
+        {Vec2{1.5, -0.4}, Vec2{1.5, 0.4}}};
+    world.segments.insert(world.segments.end(), end.begin(), end.end());
+    const std::vector<Vec2> walls = pointsOf(end);
+    NavRun nav(std::move(world), Pose2{}, 4);
+    const Twist stick{0.3, 0.0, 0.0};
+    double closest = 1e9;
+    for (std::int32_t c = 0; c < 600; ++c) {
+      (void)nav.cycle(stick);
+      closest = std::min(closest, gapTo(nav.run.base.truePose(), walls));
+    }
+    const double gap = gapTo(nav.run.base.truePose(), walls);
+    const Heron::Planner::State last = nav.plan ? nav.plan->state : Heron::Planner::State::Stopped;
+    std::printf("        after 12 s: %s, %.0f mm from the end, %.3f m/s; closest %.1f mm; "
+                "%d plans blocked\n",
+                Heron::Planner::toString(last), 1000.0 * gap, nav.run.speed(), 1000.0 * closest,
+                nav.blocked);
+    check("Blocked", last == Heron::Planner::State::Blocked);
+    check("stopped", nav.run.speed() < 0.005);
+    check("never within the 5 cm margin of a wall", closest >= 0.05);
+    check("came within 30 cm of the end before stopping", gap <= 0.30);
   }
 
   std::printf("Scenario 5: the LiDAR stops mid-run\n");
