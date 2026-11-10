@@ -1,9 +1,11 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04. **Phase N4: the limiter's
-core and the scenarios are built** (`feature/navigation-limiter`) and pass
-on the Mac and the Pi. `heron_robot`, the rest of N4, waits on N1's
-profile sections. N3 (pose and perception) is done and merged.
+Last updated 2026-11-09. Started 2026-11-04. **Phase N4: the limiter's
+core and the scenarios are built** and pass on the Mac and the Pi.
+`heron_robot`, the rest of N4, waits on N1's profile sections. **N5's
+planner is built** (`navigation-cpp-design.md` §8, I10 to I16, accepted
+2026-11-09; as built §8.9): `planner_test` and scenarios 1 and 4 pass
+on the Mac and the Pi; `plan()` takes 15.8 ms on the Pi.
 
 ## Read this first when resuming
 
@@ -65,11 +67,15 @@ navigation, so SwC to Manual always takes over.
    needs N1's profile sections: `[lidar]` and `[geometry]` in the
    profile, which the reader refuses today, and the `[geometry]` name
    clash ("Still open"). Until then, the work that needs no robot is
-   the planner's interfaces (N5, §8).
-2. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
+   the planner (N5).
+2. **The planner's weights** are tuned to scenario 1's ten runs with
+   little to spare (154 mm against 150, 85 mm against 100; §8.9): the
+   floor settles them, once `heron_robot` drives Navigate. `plan()`
+   takes 15.8 ms of its 20 ms budget on the Pi.
+3. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.
-3. **Power for the LiDAR.** On the robot's power block the LiDAR goes
+4. **Power for the LiDAR.** On the robot's power block the LiDAR goes
    silent for seconds while its motor runs, and the Pi's under-voltage
    flag does not catch it; on AC it answers every request (2026-11-08,
    `rig-profiles.md` §1). Driving with the LiDAR waits on a 5 V supply
