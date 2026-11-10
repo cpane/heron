@@ -59,7 +59,7 @@ that mode. The safety limiter is its "safety arbiter, Phase 2".
 | P4 | **The LiDAR's yaw stays in `Lidar`** (`mountingOffsetRad`, as now); **its position is applied in perception and the limiter** | The bearing flip and yaw happen exactly once, in the adapter (`lidar-cpp-design.md` §2.1). The adapter knows nothing of the robot's size | 3 |
 | P5 | **The obstacle map: an 80 × 80 grid of 5 cm cells, one signed count per cell,** rolling with Heron, in the odom frame | Small (6.4 KB), cheap to update per scan, and keeps unknown apart from free | 6 |
 | P6 | **Unknown cells count as blocked within 0.6 m of Heron, free beyond** | Heron never drives into space it has not seen, yet still plans past the edge of what it has | 6, 8 |
-| P7 | **The limiter sweeps the robot's outline along the commanded motion, point by point, and cuts only the axes that would hit** | Exact for a rectangle, cheap on 530 points, and lets Heron slide along a wall while the motion into it stops. The same sweep the planner uses | 7 |
+| P7 | **The limiter sweeps the robot's outline along the commanded motion, point by point, and cuts only the axes that would hit** | Exact for a rectangle, cheap on 530 points, and lets Heron slide along a wall while the motion into it stops. The planner checks its candidates against a distance field over the map instead, far cheaper while turning (`navigation-cpp-design.md` I10, 2026-11-09) | 7 |
 | P8 | **The limiter fails closed:** no fresh, covered scan in Assisted or Navigate means stop | A LiDAR that stops answering must not read as "nothing there" | 7 |
 | P9 | **The planner samples sideways and forward speeds** in a window around the current speed, keeps the stick's turn rate, and scores clearance, progress, distance off the course line and smoothness | The dynamic window approach, reduced to what D3 needs: heading is kept, so turning is not searched | 8 |
 | P10 | **A new program, `heron_robot`;** `heron_teleop` stays as it is until Assisted works | The boot service and the builder's wheel check keep a known-good program while this is built | 9 |
@@ -645,8 +645,9 @@ Navigate only, 10 times a second, on its own thread (P9).
 2. **Candidates:** 11 × 11 values of vx and vy in the window reachable
    from the measured velocity in 0.3 s at `[geometry] accel`, within
    `max_speed`.
-3. **Simulate** each for 1.5 s in 0.1 s steps, sweeping the outline
-   grown by `stop_margin` over the map. A blocked cell, or an unknown one
+3. **Simulate** each for 1.5 s in 0.05 s steps, checking the outline
+   grown by `stop_margin` against the map, through a distance field
+   (`navigation-cpp-design.md` §8.4). A blocked cell, or an unknown one
    within 0.6 m of Heron (P6), rejects the candidate.
 4. **Score** the rest: clearance (nearest blocked cell, capped at 0.5 m),
    progress along the course heading, distance from the course line at

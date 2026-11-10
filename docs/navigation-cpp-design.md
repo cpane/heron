@@ -10,8 +10,7 @@ the libraries already built. The design they implement is
 **Accepted 2026-11-08** (I1 to I9, as proposed). It covers what phases N2 to N4
 build: `heron_geometry`, `heron_nav_sim`, `heron_pose`,
 `heron_perception`, `heron_limiter`, and the parts of `heron_robot` that
-glue them. The planner (N5), §8, is proposed (2026-11-09), not yet
-accepted.
+glue them. The planner (N5), §8, was accepted 2026-11-09 (I10 to I16).
 
 Every header follows `CPP_CODING_STANDARD.md` and starts with the MIT file
 header; the sketches below leave the headers and most comments out.
@@ -931,7 +930,7 @@ frames and compares the wheel values.
 
 ## 8. `heron_planner`: the local planner (N5)
 
-**Proposed 2026-11-09, for review** (I10 to I16 below). Design §8 and P9
+**Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9
 are what it implements; where it changes them, it says so. Headers in
 `include/heron/planner/`. The core links `heron_geometry` and
 `heron_perception` (for `ObstacleMap`); `LocalPlanner` also links
@@ -943,7 +942,7 @@ about 121 sideways and forward speeds, imagine Heron holding each for
 hand on the best. It never chooses the turn rate (D3), and whatever it
 chooses still goes through the limiter (P7, P8).
 
-### 8.1 Decisions proposed
+### 8.1 Decisions
 
 | # | Proposal | Why |
 |---|---|---|
@@ -1264,12 +1263,11 @@ case Mode::Navigate: {
 | `nav_scenario_test` | Design §12.2 scenarios 1 and 4, with the planner, the limiter and the simulator together. Also counts how often the limiter changes the planner's choice in scenario 1: I11 expects almost never |
 | On the Pi | `plan()`'s time, from `PlannerHealth`, against the 20 ms budget |
 
-### 8.9 For review
+### 8.9 Still to settle
 
-- **I10 to I16,** above. I10 changes P7's "the same sweep the planner
-  uses"; if accepted, design §7 and P7's wording follow.
 - **I13, I14:** the speed cap, no backing, and 1 m off the line are
-  choices about how Navigate should feel, not measurements.
+  choices about how Navigate should feel, accepted as starting points;
+  driving on the floor may change them.
 - **The weights** stay starting values until scenario 1 settles them.
 
 ## 9. Tests, by phase
