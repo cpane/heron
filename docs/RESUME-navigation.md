@@ -125,19 +125,12 @@ budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
-- **The N1 measurement checklist is not written down.** Given in a
-  session on 2026-11-08 and not yet in `rig-calibration.md` §8 (a shared
-  doc, its own `chore/` branch): LiDAR yaw with `lidar_nearest --arc 360
-  --stop 0.1` and a box ahead (yaw = minus the bearing shown); OTOS axes
-  with `odometry_adapter 120`, pushed by hand (forward +x means 0°, +y
-  means -90°, -y +90°, -x 180°); OTOS scalars with `otos_spin` and
-  `heron_teleop`, then `otos_move`; `max_speed` by stopwatch over 2 m;
-  `max_turn_rate` by turns in 10 s; `brake` from v²/(2d) after
-  disarming at a mark. Two blockers: the profile reader rejects unknown
-  sections, so the numbers wait on paper until N1 adds them, and the
-  planned `[geometry]` section clashes with the mixing's `[geometry]`.
-  `odometry_adapter` prints no velocity, so §18's velocity frame cannot
-  be checked yet.
+- **N1's numbers wait on the profile reader.** The measurement
+  checklist is `rig-calibration.md` §8 (2026-11-09), not yet run. The
+  reader rejects unknown sections, so the numbers wait on paper until N1
+  adds them, and the planned `[geometry]` section clashes with the
+  mixing's `[geometry]`. `odometry_adapter` prints no velocity, so
+  §18's velocity frame cannot be checked yet.
 - **The simulated no-returns are random; real ones cluster** (runs of
   4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).
