@@ -849,4 +849,28 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-No entries.
+- **2026-11-08, from navigation: unit A's adapter board is faulty, and the
+  power block silences the LiDAR while its motor runs** [ours]. On the
+  bench rig, with `python/probes/lidar_07_requests.py` (50 requests
+  stopped, 50 running, 50 stopped). Unit A's head throughout; only the
+  adapter board swapped.
+  - Unit A's board, on AC: 13/27/49 and 49/28/18 answered (3 garbled);
+    plug re-seated and taped: 50/42/50 and 48/35/15. Losses with the
+    motor stopped too. Unit B's board, same head, cable and port, on
+    AC: 150 of 150, twice. So trap 12's "poorly seated plug" may be the
+    board (its micro-USB socket or something else on it); not
+    established which.
+  - On the power block (Anker, 72 Wh, 87 W), unit B's board: 49 (+1
+    garbled)/33/50, 50/46/50, 50/30/50. The run-3 misses came in two
+    blocks of 10, each about 5 s of silence, motor running. The Pi's
+    under-voltage bit was clear in the probe's samples during every
+    phase; `0x50005` once after run 2; 4 kernel dips that boot, 3 in
+    the first 30 s. That the LiDAR's own 5 V sags further than the
+    Pi's input is an inference, not measured.
+  - No USB errors in the kernel log in any run.
+  - Captures on the Pi, `~/heron/captures`: `battery_*`,
+    `ac-after-battery_*`, `ac-settled_*`, `ac-reseated-1_*` and `-2_*`
+    (unit A's board), `unitB-ac-1_*` and `-2_*` (unit B's board on AC,
+    misnamed: the head is unit A's), `boardB-battery-1_*` to `-3_*`.
+  - Bears on: findings trap 12 and the rotation rate row, and the
+    7.10 Hz prediction in §10. The tables are in `rig-profiles.md` §1.
