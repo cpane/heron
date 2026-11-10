@@ -1,9 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-08. Started 2026-11-04. **Phase N4: the limiter's
-core and the scenarios are built** (`feature/navigation-limiter`) and pass
-on the Mac and the Pi. `heron_robot`, the rest of N4, waits on N1's
-profile sections. N3 (pose and perception) is done and merged.
+Last updated 2026-11-09. Started 2026-11-04. **Phase N4: the limiter's
+core and the scenarios are built** and pass on the Mac and the Pi.
+`heron_robot`, the rest of N4, waits on N1's profile sections. **N5's
+interfaces are proposed** (`navigation-cpp-design.md` §8, I10 to I16),
+waiting on the user's review.
 
 ## Read this first when resuming
 
@@ -65,7 +66,14 @@ navigation, so SwC to Manual always takes over.
    needs N1's profile sections: `[lidar]` and `[geometry]` in the
    profile, which the reader refuses today, and the `[geometry]` name
    clash ("Still open"). Until then, the work that needs no robot is
-   the planner's interfaces (N5, §8).
+   the planner (N5).
+1a. **The planner's interfaces, for review** (§8, proposed 2026-11-09).
+   Do not build before I10 to I16 are accepted. I10 changes P7's
+   "the same sweep the planner uses": the planner reads a distance
+   field instead, measured on the Mac at about 0.2 ms a cycle against
+   27 ms for the sweep at full turn (throwaway prototypes). Once
+   accepted: `planner_test`, then scenarios 1 and 4, then `plan()`'s
+   time on the Pi.
 2. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.

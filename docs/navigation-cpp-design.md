@@ -10,8 +10,8 @@ the libraries already built. The design they implement is
 **Accepted 2026-11-08** (I1 to I9, as proposed). It covers what phases N2 to N4
 build: `heron_geometry`, `heron_nav_sim`, `heron_pose`,
 `heron_perception`, `heron_limiter`, and the parts of `heron_robot` that
-glue them. The planner (N5) is sketched in §8 and written out when N5
-starts.
+glue them. The planner (N5), §8, is proposed (2026-11-09), not yet
+accepted.
 
 Every header follows `CPP_CODING_STANDARD.md` and starts with the MIT file
 header; the sketches below leave the headers and most comments out.
@@ -28,7 +28,7 @@ header; the sketches below leave the headers and most comments out.
 | I6 | **The libraries take their own config structs;** they never read the profile | As `Motors` does (motor D4): `heron_robot` loads the profile and fills each config, and tests fill them by hand with no files |
 | I7 | **The pose history is copied out, not locked per point** | Perception places up to ~200 points a scan (16 to 39% of ~531 samples return indoors [ours]) and the limiter as many every 20 ms, each needing a pose. Copying the 14 KB history once is cheaper than 200 locked lookups, and the core then works on a plain value |
 | I8 | **Each odom frame has a number, `epoch`,** raised whenever odometry restarts | A restart makes every stored pose meaningless (design §5). Comparing two integers is how perception knows to clear its map, without guessing from jumps |
-| I9 | **Namespaces follow the libraries:** `Heron::Geometry`, `Heron::Pose`, `Heron::Perception`, `Heron::Limiter`, `Heron::NavSim`, as `Heron::Odometry` and `Heron::Lidar` | One library, one namespace, as now |
+| I9 | **Namespaces follow the libraries:** `Heron::Geometry`, `Heron::Pose`, `Heron::Perception`, `Heron::Limiter`, `Heron::Planner`, `Heron::NavSim`, as `Heron::Odometry` and `Heron::Lidar` | One library, one namespace, as now |
 
 ## 2. `heron_geometry`: the shared maths
 
@@ -929,23 +929,348 @@ Manual touches nothing new: no scan, no pose, no limiter, as D5 requires.
 A test drives Manual and `heron_teleop` with the same recorded remote
 frames and compares the wheel values.
 
-## 8. The planner, in outline (N5)
+## 8. `heron_planner`: the local planner (N5)
 
-Written out when N5 starts. Its shape, so N2 to N4 leave room for it:
+**Proposed 2026-11-09, for review** (I10 to I16 below). Design §8 and P9
+are what it implements; where it changes them, it says so. Headers in
+`include/heron/planner/`. The core links `heron_geometry` and
+`heron_perception` (for `ObstacleMap`); `LocalPlanner` also links
+`heron_pose` and `Perception`'s wrapper.
+
+What it does, every 100 ms in Navigate: take the newest map and pose, try
+about 121 sideways and forward speeds, imagine Heron holding each for
+1.5 s, throw out any that come too near something, score the rest, and
+hand on the best. It never chooses the turn rate (D3), and whatever it
+chooses still goes through the limiter (P7, P8).
+
+### 8.1 Decisions proposed
+
+| # | Proposal | Why |
+|---|---|---|
+| I10 | **Collision and clearance come from a distance field,** built once a cycle from the map, not from the limiter's sweep. P7 says the planner uses the same sweep as the limiter; this changes that | Measured on the Mac with throwaway prototypes, release build, 121 candidates against 600 cells: the sweep takes 0.5 ms going straight but **27 ms at full turn** (each candidate is stepped every 2°); the field takes **0.05 ms to build and 0.15 ms** for the same candidates, turning or not. The limiter ran about 30 times slower on the Pi than in the Mac's optimised build (20 µs against 0.62 ms, §6.1), so the sweep would take about 800 ms of the 100 ms cycle while turning, the field about 5 ms [estimate]. The limiter keeps the exact sweep, on raw points |
+| I11 | **The planner keeps 8.3 cm more than the limiter's margin** (the cell slack, §8.4) | The map is cells, not points: a blocked cell's hit can be anywhere in its 5 cm square, and the field is read at cell centres. So the planner's choices normally pass the limiter untouched, and the limiter cuts only what the map got wrong |
+| I12 | **Already close: a candidate may not bring Heron nearer than it is now.** While the nearest cell is inside the planner's margin, a candidate passes if its path's clearance never drops below today's | The planner's own rule 4. It cannot ratchet the way the first limiter rule 4 did (§6.2): the floor is "now", with no slack, and the limiter's rule 4 stays the safety |
+| I13 | **Speed is capped at what the stick asks** (its size × throttle × `max_speed`), not at `max_speed` | Otherwise progress, which scores distance gained, always picks full speed, and a half stick means nothing |
+| I14 | **Candidates never move backwards along the course, nor end more than 1 m off its line;** none left is Blocked | A dead end then stops Heron (scenario 4) instead of backing it out and in again, and a long wall cannot draw it off sideways for ever. Backing away is Manual's or Assisted's job. Both numbers are starting values |
+| I15 | **The course is kept by `CourseKeeper`,** a pure class in this library, which the control loop updates every 20 ms | Design §8.1's rules (engage, re-anchor past 10°, let go to stop) are tested in one call each, and the 10 Hz thread only reads the course |
+| I16 | **The turn rate is the stick's, passed in with the course;** the planner simulates it but never searches it | D3 and design §8.1: heading is yours. Turning still moves the outline, so each candidate is imagined with it |
+
+### 8.2 The course: `CourseKeeper`
 
 ```cpp
 namespace Heron::Planner {
-struct Course { Geometry::Vec2 anchor; double heading; double speed; };
-struct Plan { Geometry::Twist twist; std::vector<Geometry::Pose2> path;
-              State state; std::string reason; TimePoint time; };
-class Planner { Plan plan(const Perception::ObstacleMap &map, const Pose::PoseSnapshot &pose,
-                          const Course &course, TimePoint now); };  // keeps the last choice
-class LocalPlanner { /* the 10 Hz thread, getLatest() -> shared_ptr<const Plan> */ };
+
+/** What the stick asks for, design §8.1, in the odom frame. */
+struct Course {
+  std::uint64_t seq{0};        // raised on every engage and re-anchor
+  std::uint64_t epoch{0};      // the odom frame it is in (I8)
+  Geometry::Vec2 anchor{};     // the line runs through here...
+  double headingRad{0.0};      // ...in this direction
+  double speedMps{0.0};        // the stick's size x throttle x max_speed (I13)
+  double turnRateRadps{0.0};   // the left stick's, as in Manual (I16)
+};
+
+struct CourseConfig {
+  double reanchorRad{10.0 * Geometry::kDegToRad};
+};
+
+/**
+ * Turns the stick into a course and keeps it while the stick is held.
+ * Pure: the control loop calls update() every 20 ms in Navigate.
+ */
+class CourseKeeper {
+  public:
+    explicit CourseKeeper(CourseConfig config = {});
+
+    /**
+     * @param stick  The sticks as a twist, m/s and rad/s (toTwist(), §7.2)
+     * @param pose   Heron now, odom frame
+     * @param epoch  The pose's epoch
+     * @return The course, or no value when the right stick is centred
+     */
+    std::optional<Course> update(const Geometry::Twist &stick, const Geometry::Pose2 &pose,
+                                 std::uint64_t epoch);
+
+    void reset() noexcept;  // leaving Navigate
+};
+
+}  // namespace Heron::Planner
+```
+
+Each call:
+
+- **Right stick centred** (vx and vy both zero after the stick's dead
+  band): no course; Heron stops (D1). The next push engages afresh.
+- **Engage:** the stick's direction turned into the odom frame by Heron's
+  heading is the heading; the line runs through Heron's position; `seq`
+  rises.
+- **Held:** the speed and turn rate follow the stick every call. If its
+  odom-frame direction drifts more than 10° from the heading (the stick
+  moved, or Heron turned under it), re-anchor at the current position.
+- **A new epoch** (odometry restarted): re-anchor, since the old anchor
+  is in a frame that no longer exists.
+
+### 8.3 The core: `Planner`
+
+```cpp
+namespace Heron::Planner {
+
+/** Design §8.2's starting values; tuned in the simulator (design §18, 3). */
+struct ScoreWeights {
+  double clearance{1.0};
+  double progress{2.0};
+  double offLine{1.0};
+  double change{0.5};
+};
+
+struct PlannerConfig {
+  Geometry::Outline outline{};          // [geometry] length and width, halved
+  double stopMarginM{0.05};             // [navigation] stop_margin
+  double maxSpeedMps{0.35};             // [geometry] max_speed
+  double accelMps2{0.6};                // [geometry] accel
+  double windowS{0.3};                  // speeds reachable in this long
+  int samples{11};                      // per axis: 11 x 11 candidates
+  double horizonS{1.5};                 // each candidate held this long
+  double stepS{0.05};                   // checked this often (§8.4)
+  double pathStepS{0.1};                // the published path's spacing
+  double unknownRadiusM{0.6};           // unknown is blocked this near (P6)
+  double clearanceCapM{0.5};            // more clearance scores no higher
+  double maxOffLineM{1.0};              // I14
+  Duration maxMapAge{std::chrono::milliseconds(500)};
+  ScoreWeights weights{};
+};
+
+enum class State : std::uint8_t {
+  Following,  // on the course
+  Avoiding,   // off it, to get round something
+  Blocked,    // no candidate passes: stopped (I14)
+  Stopped     // cannot plan: see Reason
+};
+
+enum class Reason : std::uint8_t {
+  None,          // Following or Avoiding
+  NothingSafe,   // Blocked: every candidate came too near or broke I14
+  NoCourse,      // the stick is centred
+  NoMap,         // no map yet
+  StaleMap,      // the map is older than maxMapAge
+  PoseNotFresh,
+  OtherFrame     // the map, pose and course are not all in one epoch
+};
+
+/** One cycle's answer; never changed once published. */
+struct Plan {
+  Geometry::Twist twist{};                 // vx, vy chosen; wz the course's
+  std::vector<Geometry::Pose2> path;       // odom frame, every pathStepS, for telemetry
+  State state{State::Stopped};
+  Reason reason{Reason::NoCourse};
+  std::uint64_t courseSeq{0};              // the course it was made for
+  double clearanceM{0.0};                  // the chosen path's, after the cell slack
+  int candidatesPassed{0};                 // of those tried
+  TimePoint time{};                        // when it was made
+};
+
+/** What one cycle reads. Borrowed for the call only. */
+struct PlanInput {
+  const Perception::ObstacleMap *map{nullptr};
+  Geometry::Pose2 pose{};                  // Heron now (PoseHistory::at(now))
+  std::uint64_t epoch{0};
+  bool poseFresh{false};
+  Geometry::Twist measured{};              // newest odometry velocity
+  std::optional<Course> course;
+  TimePoint now{};
+};
+
+/**
+ * Thread Safety: a plain value. plan() changes the remembered last
+ * choice, so one Planner belongs to one thread.
+ */
+class Planner {
+  public:
+    explicit Planner(const PlannerConfig &config);
+
+    /** Design §8.2, with I10 to I14. */
+    [[nodiscard]] Plan plan(const PlanInput &input);
+
+    void reset() noexcept;  // forget the last choice
+
+  private:
+    PlannerConfig m_config;
+    std::optional<Geometry::Twist> m_last;  // for the change score
+};
+
+[[nodiscard]] const char *toString(State state) noexcept;
+[[nodiscard]] const char *toString(Reason reason) noexcept;
+
+}  // namespace Heron::Planner
+```
+
+Each call:
+
+1. **Can it plan?** No course, no map, a map older than `maxMapAge`, a
+   pose not fresh, or the map, pose and course in different epochs:
+   Stopped, with the reason. A zero twist; the last choice is forgotten.
+2. **The field** (§8.4), from the map and Heron's pose now.
+3. **Candidates** (design §8.2): `samples` × `samples` values of vx and
+   vy, robot frame, evenly over the measured velocity ± `accelMps2` ×
+   `windowS`, keeping only those no faster than the course's speed
+   (I13); plus the straight candidate, the course's direction at its
+   speed, if it is reachable. The turn rate is the course's in all.
+4. **Imagine each** for `horizonS`, every `stepS`, with `integrate()`
+   from Heron's pose. Reject it if its clearance at any step is below the
+   planner's margin (unless I12 lets it through), if it moves Heron
+   backwards along the course heading, or if it ends more than
+   `maxOffLineM` from the line (I14).
+5. **Score the rest** (§8.5) and **choose** the best: Following if it is
+   the straight candidate and Heron is within 5 cm of the line, otherwise
+   Avoiding. None left: Blocked, zero.
+
+### 8.4 The distance field
+
+Every cell's distance to the nearest cell Heron must keep clear of, in
+metres, built fresh each cycle (80 × 80, from the map). The cells to keep
+clear of:
+
+- every **Blocked** cell;
+- every **Unknown** cell within `unknownRadiusM` of Heron's centre (P6),
+  **except** those under Heron and its margin now: the outline grown by
+  `stopMarginM` and the cell slack, at the current pose. They are the
+  LiDAR's blind circle and the robot's own body; nothing can be seen
+  there, and `checkBlindSpot()` has already put the blind circle inside
+  the margin.
+
+The distance is the exact Euclidean distance between cell centres, by the
+two-pass distance transform of Felzenszwalb and Huttenlocher (a 1-D pass
+along each row, then each column). Measured on the Mac: 0.05 ms for the
+grid.
+
+**A candidate's clearance at one step** is the least field value at
+points 2.5 cm apart round the outline's edge (34 points for 0.24 × 0.20
+m), each read from the cell it falls in. Its clearance is the least over
+its steps. Reading the edge alone is enough because nothing to keep clear
+of starts inside the outline (the exception above), and between steps the
+edge moves less than the margin, so nothing can cross it unseen: at 0.35
+m/s a 0.05 s step moves it 1.75 cm, and at 2 rad/s a corner 15.6 cm out
+moves 1.6 cm. The step is what keeps this true, which is why it is 0.05 s
+and not design §8.2's 0.1 s.
+
+**The cell slack, 8.3 cm**, is the most that true clearance can fall short
+of the field's: half a cell's diagonal for where the hit lies in its cell
+(3.54 cm), the same for reading the field at a cell's centre (3.54 cm),
+and half the 2.5 cm spacing round the edge (1.25 cm). A candidate passes
+if its clearance less the slack is at least `stopMarginM`; so the planner
+keeps 5 cm or more in truth, and usually about 9 to 13 [estimate]. The
+narrowest gap it will drive through is about 0.20 + 2 × 0.133 = 0.47 m on
+the bench rig, at worst [estimate]; a finer grid would lower it, later.
+
+**Cost.** 121 candidates × 30 steps × 34 points: about 120,000 field reads
+a cycle, and 4,000 `integrate()` calls. Measured on the Mac, release:
+about 0.2 ms a cycle, the field included (a prototype). On the Pi, about 5 ms by §6.1's ratio [estimate]: to be measured in
+N5's first step; budget 20 ms of the 100.
+
+### 8.5 The score
+
+For each candidate that passes, with H = `horizonS` and s the course's
+speed, each term scaled to 0..1:
+
+| Term | Value | Weight (start) |
+|---|---|---|
+| Clearance | min(clearance less the slack, `clearanceCapM`) / `clearanceCapM` | + 1.0 |
+| Progress | distance along the course heading in H / (s × H) | + 2.0 |
+| Off the line | distance from the course line at the end / `maxOffLineM` | − 1.0 |
+| Change | distance in (vx, vy) from the last choice / (2 × `maxSpeedMps`) | − 0.5 |
+
+The best total wins. Progress outweighs the rest at the start, so on an
+empty map the straight candidate wins; clearance and the line pull it
+round a box and back. All four weights are design §18's item 3, settled
+by scenario 1.
+
+### 8.6 The wrapper: `LocalPlanner`
+
+```cpp
+namespace Heron::Planner {
+
+struct LocalPlannerConfig {
+  PlannerConfig planner{};
+  Duration period{std::chrono::milliseconds(100)};
+};
+
+struct PlannerHealth {
+  std::uint64_t plans{0};
+  std::uint64_t blocked{0};
+  std::uint64_t stopped{0};
+  Reason lastReason{Reason::NoCourse};
+  Duration lastCycle{};        // how long plan() took: design §18, item 2
+  Duration longestCycle{};
+};
+
+class LocalPlanner {
+  public:
+    LocalPlanner(const Perception::Perception &perception, const Pose::PoseTracker &pose,
+                 LocalPlannerConfig config);
+    ~LocalPlanner();
+    bool start();
+    void stop();
+
+    /** From the control loop, every 20 ms; no value stops Heron. */
+    void setCourse(const std::optional<Course> &course);
+
+    /** The newest plan, or nullptr before the first. */
+    [[nodiscard]] std::shared_ptr<const Plan> getLatest() const;
+    [[nodiscard]] PlannerHealth getHealth() const;
+};
+
+}  // namespace Heron::Planner
+```
+
+Every 100 ms: read the course (under its lock), `perception.getLatest()`,
+`pose.copyHistory()` and `getLatest()`, the pose at the steady clock's
+now, call `plan()`, publish. It plans only while a course is set, so in
+Manual and Assisted it sleeps.
+
+### 8.7 In the control loop
+
+The Navigate case of §7.3:
+
+```cpp
+case Mode::Navigate: {
+  const std::optional<Planner::Course> course =
+      courseKeeper.update(toTwist(stick, geometry), p.newest.pose, p.epoch);
+  localPlanner.setCourse(course);
+  const std::shared_ptr<const Planner::Plan> plan = localPlanner.getLatest();
+  Geometry::Twist want{};                          // stop, unless...
+  if (course && plan && plan->courseSeq == course->seq && now - plan->time <= 300ms) {
+    want = {plan->twist.vx, plan->twist.vy, course->turnRateRadps};
+  }
+  const Limiter::LimitResult limited = limiter.limit(
+      {want, scan.get(), &history, p.fresh, p.newest.velocity, now});
+  out = toBodyVelocity(limited.command, geometry);
+  break;
 }
 ```
 
-`Planner` keeps one piece of state, the last choice, for the smoothness
-score; it is a member, still with no clock or thread inside.
+- **Letting go stops at once,** in the loop, not 100 ms later in the
+  planner (D1).
+- **A plan made for an older course is not driven** (`courseSeq`), so a
+  re-anchored stick never gets 100 ms of the old direction.
+- **The turn rate is the stick's now,** not the one the plan was made
+  with.
+- **Older than 0.3 s is stop,** design §8.2.
+
+### 8.8 Tests
+
+| Test | Checks |
+|---|---|
+| `planner_test` | `CourseKeeper`: engage, held at 9°, re-anchored at 11°, let go, a new epoch. The field against brute force on random grids. `Planner`: straight on an empty map (Following, the straight candidate); a box ahead (Avoiding, never below the margin); a dead end (Blocked); unknown within 0.6 m avoided, beyond it ignored, under Heron ignored; already close, moving away allowed and nearer refused (I12); each Stopped reason; the window and the speed cap; nothing backwards, nothing past 1 m off the line |
+| `nav_scenario_test` | Design §12.2 scenarios 1 and 4, with the planner, the limiter and the simulator together. Also counts how often the limiter changes the planner's choice in scenario 1: I11 expects almost never |
+| On the Pi | `plan()`'s time, from `PlannerHealth`, against the 20 ms budget |
+
+### 8.9 For review
+
+- **I10 to I16,** above. I10 changes P7's "the same sweep the planner
+  uses"; if accepted, design §7 and P7's wording follow.
+- **I13, I14:** the speed cap, no backing, and 1 m off the line are
+  choices about how Navigate should feel, not measurements.
+- **The weights** stay starting values until scenario 1 settles them.
 
 ## 9. Tests, by phase
 
