@@ -1268,9 +1268,8 @@ case Mode::Navigate: {
 
 `heron_planner` is built: `CourseKeeper.h`, `Planner.h`, `LocalPlanner.h`,
 and the private `src/planner/DistanceField.h`. `planner_test` and
-scenarios 1 and 4 pass on the Mac, built with no warnings by both
-compilers (the Pi's build, in the container, also clean); not yet run on
-the Pi, which was off. Against the interfaces above:
+scenarios 1 and 4 pass on the Mac and the Pi, built with no warnings by
+both compilers. Against the interfaces above:
 
 - **The score has five terms, and progress is scored toward a point
   ahead.** Scenario 1 showed the four of §8.5 cannot pass a box and
@@ -1316,19 +1315,20 @@ the Pi, which was off. Against the interfaces above:
   this version; switch to Assisted or Manual.
 
 Measured, scenario 1 over ten box positions (two distances, five offsets
-from the line, dead centre included), Mac: every run passes the box with
-157 to 175 mm to spare and is back within 42 to 84 mm of the line 2 m
-past it; the limiter cut none of the planner's choices, and only slowed
-it in its 25 cm slow zone (7 to 117 cycles of about 830). Thin against
-the targets (15 cm, 10 cm): the weights are tuned to these ten runs.
-Scenario 4: Blocked and still 209 mm from the dead end, never within the
-margin.
+from the line, dead centre included): every run passes the box with 157
+to 175 mm to spare on the Mac, 154 to 178 on the Pi, and is back within
+42 to 84 mm of the line 2 m past it (45 to 85 on the Pi); the limiter cut
+none of the planner's choices, and only slowed it in its 25 cm slow zone
+(0 to 118 cycles of about 830). Thin against the targets (15 cm, 10 cm):
+the weights are tuned to these ten runs. Scenario 4: Blocked and still
+207 to 209 mm from the dead end, never within the margin.
 
 `plan()` with a box ahead, turning at 2 rad/s: 6.1 ms on the Mac's Debug
-build, 0.45 ms optimised. On the Pi about 14 ms by the limiter's ratio
-[estimate], inside the 20 ms budget but not the 5 ms §8.1 estimated: the
-free way's look ahead and the interpolation are the difference. To be
-measured.
+build, 0.45 ms optimised, **15.8 ms on the Pi** (RelWithDebInfo, measured
+2026-11-09): inside the 20 ms budget of the 100 ms cycle, but three
+times the 5 ms §8.1 estimated. The free way's look ahead and the
+interpolation are the difference. Little room for more candidates on a
+Pi 3.
 
 **Found on the way, perception's:** a cell the true line of a ray crosses
 can be skipped, since `addRay()` steps from cell to cell (Bresenham). Rays
@@ -1343,7 +1343,8 @@ noted here for when perception is revisited.
   driving on the floor may change them.
 - **The weights** are tuned to scenario 1's ten runs (§8.9), with little
   to spare; the floor will settle them.
-- **`plan()`'s time on the Pi,** against the 20 ms budget.
+- **`plan()`'s time with every thread running** on the Pi (design §18,
+  item 2): 15.8 ms alone; `PlannerHealth` reports it in `heron_robot`.
 
 ## 9. Tests, by phase
 

@@ -5,7 +5,7 @@ core and the scenarios are built** and pass on the Mac and the Pi.
 `heron_robot`, the rest of N4, waits on N1's profile sections. **N5's
 planner is built** (`navigation-cpp-design.md` §8, I10 to I16, accepted
 2026-11-09; as built §8.9): `planner_test` and scenarios 1 and 4 pass
-on the Mac, not yet run on the Pi.
+on the Mac and the Pi; `plan()` takes 15.8 ms on the Pi.
 
 ## Read this first when resuming
 
@@ -68,11 +68,10 @@ navigation, so SwC to Manual always takes over.
    profile, which the reader refuses today, and the `[geometry]` name
    clash ("Still open"). Until then, the work that needs no robot is
    the planner (N5).
-2. **Run the planner on the Pi** (`scripts/deploy_cpp.sh <user>@<pi>
-   planner_test`, then `nav_scenario_test`): every test, and `plan()`'s
-   time against the 20 ms budget (about 14 ms estimated, §8.9). The
-   weights are tuned to scenario 1's ten runs with little to spare
-   (157 mm against 150, 84 mm against 100): the floor settles them.
+2. **The planner's weights** are tuned to scenario 1's ten runs with
+   little to spare (154 mm against 150, 85 mm against 100; §8.9): the
+   floor settles them, once `heron_robot` drives Navigate. `plan()`
+   takes 15.8 ms of its 20 ms budget on the Pi.
 3. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.
