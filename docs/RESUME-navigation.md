@@ -69,12 +69,15 @@ navigation, so SwC to Manual always takes over.
 2. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.
-3. **The LiDAR's plug.** Its micro-USB plug at the adapter board, poorly
-   seated, made it miss commands and turn at 7.10 Hz instead of 7.52
-   (LiDAR workstream, findings trap 12). Seat it firmly before recording,
-   and give the cable strain relief before the robot drives. Whether the
-   power block's under-voltage also costs commands is not re-tested
-   (`navigation-cpp-design.md` §3).
+3. **Power for the LiDAR.** On the robot's power block the LiDAR goes
+   silent for seconds while its motor runs, and the Pi's under-voltage
+   flag does not catch it; on AC it answers every request (2026-11-08,
+   `rig-profiles.md` §1). Driving with the LiDAR waits on a 5 V supply
+   that holds under its motor, checked with
+   `python/probes/lidar_07_requests.py`, motor running, before driving
+   on battery. Unit A's own adapter board is faulty: the bench rig uses
+   unit B's. Give the LiDAR's cable strain relief before the robot
+   drives.
 
 N4's scenarios (2026-11-08): `nav_scenario_test` passes on the Mac and
 the Pi (§6.1's table). Scenario 2 found that the first rule 4 ratcheted

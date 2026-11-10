@@ -36,21 +36,58 @@ The Pi feeds the LiDAR (its motor too) and the Arduino from its own USB
 under-voltage now, bit 16 (`0x10000`) that it happened since boot; the
 kernel logs each dip (`journalctl -k | grep -i voltage`).
 
-Measured on the bench rig, 2026-11-08 [ours]:
+Measured on the bench rig, 2026-11-08 [ours]. The power block is an
+Anker power bank, 72 Wh, 87 W (the user's description; its 5 V current
+rating has not been checked) [unverified]. The AC supply is the Pi's own
+AC adapter.
+
+First, with `GET_INFO` sent from a script:
 
 | Pi supply | `get_throttled` | Under-voltage | LiDAR, GET_INFO answered |
 |---|---|---|---|
-| The robot's power block | `0x50005` | every few seconds, 19 in the first minutes | 4 of 20 (motor running), 0 of 20 (stopped); the SDK's start-up failed |
-| The Pi's mains adapter | `0x50000` | once, at boot | 20 of 20 (stopped), 11 of 20 (running, requests 50 ms apart); the SDK started every time and recorded cleanly |
+| The power block | `0x50005` | every few seconds, 19 in the first minutes | 4 of 20 (motor running), 0 of 20 (stopped); the SDK's start-up failed |
+| AC | `0x50000` | once, at boot | 20 of 20 (stopped), 11 of 20 (running, requests 50 ms apart); the SDK started every time and recorded cleanly |
+
+Then with `python/probes/lidar_07_requests.py`, which sends 50 requests
+with the motor stopped, 50 with it running, and 50 stopped again, and
+classifies every reply. Answered, of 50 each:
+
+| Pi supply | LiDAR adapter board | Stopped / running / stopped | `get_throttled` |
+|---|---|---|---|
+| AC | unit A's | 13 / 27 / 49, then 49 / 28 / 18 (3 garbled) | `0x0` |
+| AC, plug re-seated and taped | unit A's | 50 / 42 / 50, then 48 / 35 / 15 | `0x0` |
+| The power block | unit A's | 0 / 5 / 2 | 4 dips in the first 3 minutes |
+| AC | unit B's | 50 / 50 / 50, twice | `0x0` |
+| The power block | unit B's | 49 (1 garbled) / 33 / 50, 50 / 46 / 50, 50 / 30 / 50 | see below |
+
+The head (motor, laser) was unit A's throughout; only the small adapter
+board between its cable and the USB lead was swapped. The kernel's USB
+log showed no errors in any run, only the disconnect when the plug was
+re-seated.
+
+What this shows:
+
+- **Unit A's adapter board is faulty.** With it, the LiDAR lost requests
+  on AC too, even with the motor stopped and the plug taped home; with
+  unit B's, nothing on AC. Whether it is the board's micro-USB socket or
+  something else on it is not established.
+- **On the power block, the LiDAR goes silent while its motor runs,**
+  even with a good board. In the third run the misses came in two blocks
+  of 10, each about 5 s of silence. With the motor stopped it answered.
+- **The Pi's under-voltage flag does not catch it.** In the probe's own
+  samples, taken during each phase, bit 0 was never set; `0x50005` showed
+  once, just after the second run, and the kernel logged 4 dips that
+  boot, 3 of them in the first 30 s. That the LiDAR's 5 V, through the
+  Pi's USB port, sags further than the Pi's own input is an inference,
+  not measured.
 
 So the power block does not run the Pi and the LiDAR. A rig that drives
-untethered with the LiDAR needs a 5 V supply that keeps bit 0 of
-`get_throttled` clear; which supply that is has not been chosen. What the power block is
-rated for is not known [unverified]. The misses on the mains adapter, and
-that day's slow rotation (7.10 Hz), were the LiDAR's micro-USB plug, not
-the supply: seated firmly, it lost nothing and turned at 7.52 Hz
-(`rplidar-a1m8-findings.md`, trap 12) [ours]. Whether the plug also played
-a part in the power block's 4 of 20 was not tested.
+untethered with the LiDAR needs a 5 V supply that holds under the LiDAR's
+motor: one that keeps bit 0 of `get_throttled` clear is not enough, so
+check a new supply with the probe, motor running, against the AC rows
+above. Which supply that is has not been chosen. The captures are on the
+Pi under `~/heron/captures` (`battery_*`, `ac-*`, `unitB-ac-*`, which was
+unit B's board on AC, and `boardB-battery-*`).
 
 ## 2. The profile file
 

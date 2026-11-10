@@ -279,12 +279,14 @@ the bench rig, the Pi on its mains adapter (`lidar_record --mode 1
   now uses 0.2 ms. A second recording, made for this by the LiDAR
   workstream, confirmed it: count-implied spread 0.14 ms, stamped 0.59
   ms, correlation 0.00 (findings, "Rate and timing").
-- **The rotation rate was the plug, not the supply.** 7.10 Hz here, 7.35
-  Hz in October. The LiDAR workstream found the LiDAR's micro-USB plug
-  poorly seated at its adapter board; re-seated, on the same mains
-  adapter, it turned at 7.52 Hz, period 131.9 to 134.1 ms, 519 to 521
-  samples a revolution (findings, trap 12) [ours]. Tests take the rate
-  from `LidarConfig`, never assume 7.3 Hz.
+- **The rotation rate was the LiDAR's connection, not the supply.** 7.10
+  Hz here, 7.35 Hz in October. The LiDAR workstream found the LiDAR's
+  micro-USB plug poorly seated at its adapter board; re-seated, on the
+  same AC adapter, it turned at 7.52 Hz, period 131.9 to 134.1 ms, 519 to
+  521 samples a revolution (findings, trap 12) [ours]. Later that day
+  unit A's adapter board itself proved faulty, and unit B's replaced it
+  (`rig-profiles.md` §1). Tests take the rate from `LidarConfig`, never
+  assume 7.3 Hz.
 - **No-returns depend on the room:** 36 to 40% here, 33 to 39% in the
   re-recording, 61 to 84% in the findings. They cluster: runs of 5.2
   samples on average, up to 70 (re-recording: 4.4, up to 25), where the
@@ -298,12 +300,12 @@ the bench rig, the Pi on its mains adapter (`lidar_record --mode 1
   recording the Pi ran from the robot's power block, reported
   under-voltage every few seconds (`get_throttled` 0x50005), and the
   LiDAR answered only 4 of 20 GET_INFO requests; the SDK's start-up then
-  failed. On the mains adapter it answered 20 of 20 with the motor
-  stopped, and recorded cleanly, though only 11 of 20 with the motor
-  running and requests 50 ms apart. The 11 of 20 was the poorly seated
-  plug: re-seated, it lost none of 1556 (findings, trap 12) [ours]. The
-  power block's 4 of 20 has not been re-tested; the plug may have added
-  to the under-voltage [unverified].
+  failed. Re-tested the same evening with unit B's adapter board: on AC
+  it answered every request, motor stopped or running; on the power
+  block it answered with the motor stopped, but went silent for about
+  5 s at a time with it running, 30 to 46 of 50 answered, while the Pi's
+  under-voltage flag stayed mostly clear (`rig-profiles.md` §1) [ours].
+  So recordings are made on AC until a supply is chosen.
 
 One known difference remains: the simulated no-returns are scattered at
 random, so a test that depends on clustering needs a recording.
