@@ -234,6 +234,21 @@ target_link_libraries(heron_limiter
     PUBLIC heron_geometry heron_pose heron_lidar_types
     PRIVATE heron_warnings)
 
+# The local planner: Planner, the pure core, chooses the sideways and
+# forward speed from the obstacle map and the course, through a distance
+# field (private, src/planner/); CourseKeeper turns the stick into the
+# course; LocalPlanner is the thread that runs it ten times a second.
+# docs/navigation-cpp-design.md §8.
+add_library(heron_planner STATIC
+    src/planner/CourseKeeper.cpp
+    src/planner/DistanceField.cpp
+    src/planner/Planner.cpp
+    src/planner/LocalPlanner.cpp)
+target_include_directories(heron_planner PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_planner
+    PUBLIC heron_geometry heron_perception heron_pose
+    PRIVATE Threads::Threads heron_warnings)
+
 # The simulator: a world of segments, a mecanum base, an A1M8 that turns
 # while the base moves, and an OTOS whose heading drifts. Host-side, for
 # tests only, so its headers are private (src/nav_sim/). Its LiDAR makes raw sensor samples and builds each
@@ -354,9 +369,15 @@ add_executable(limiter_test tests/LimiterTest.cpp)
 target_link_libraries(limiter_test PRIVATE heron_limiter heron_warnings)
 add_test(NAME limiter_test COMMAND limiter_test)
 
+add_executable(planner_test tests/PlannerTest.cpp)
+target_include_directories(planner_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(planner_test PRIVATE heron_planner heron_warnings)
+add_test(NAME planner_test COMMAND planner_test)
+
 add_executable(nav_scenario_test tests/NavScenarioTest.cpp)
 target_link_libraries(nav_scenario_test
-    PRIVATE heron_limiter heron_nav_sim Threads::Threads heron_warnings)
+    PRIVATE heron_limiter heron_planner heron_perception heron_nav_sim Threads::Threads
+            heron_warnings)
 add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
 
 # Not a ctest: needs recordings, which are git-ignored. Driven by
