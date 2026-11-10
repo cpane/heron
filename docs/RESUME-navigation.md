@@ -1,11 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-09. Started 2026-11-04. **Phase N4: the limiter's
-core and the scenarios are built** and pass on the Mac and the Pi.
-`heron_robot`, the rest of N4, waits on N1's profile sections. **N5's
-planner is built** (`navigation-cpp-design.md` §8, I10 to I16, accepted
-2026-11-09; as built §8.9): `planner_test` and scenarios 1 and 4 pass
-on the Mac and the Pi; `plan()` takes 15.8 ms on the Pi.
+Last updated 2026-11-09. Started 2026-11-04. **Every navigation library
+is built and passes in simulation on the Mac and the Pi, the limiter
+(N4) and the planner (N5) included; what is left is `heron_robot`,
+which waits on N1's profile sections.**
 
 ## Read this first when resuming
 
@@ -14,7 +12,10 @@ accepted. The C++ interfaces (`navigation-cpp-design.md`, I1 to I9) are
 accepted. Phase N2 is done: `heron_geometry` and `heron_nav_sim`, tested on
 the Mac and the Pi, the simulator checked against a recording. Phase N3 is
 done: `heron_pose` and `heron_perception`, tested on the Mac and the Pi
-(`navigation-cpp-design.md` §5.3).** Heron is to see obstacles, slide
+(`navigation-cpp-design.md` §5.3). Phase N4's limiter is built
+(`heron_limiter`, §6.1), and N5's planner (`heron_planner`, I10 to I16,
+as built §8.9); scenarios 1 to 5 pass. Left: `heron_robot`, the program
+that joins them, and everything on the floor.** Heron is to see obstacles, slide
 around them and return to its course, in a new SwC mode, Navigate. Five
 layers, each its own library: sensors, pose, perception (a rolling
 obstacle map), a safety limiter on the raw LiDAR points, and a local
@@ -61,21 +62,54 @@ navigation, so SwC to Manual always takes over.
 - **The simulated period spread is 0.2 ms**, from the recording, not
   the findings' 0.8 ms (§3, "The recording").
 
+## Decided (2026-11-09)
+
+- **Rule 4 as built is accepted for the first robot** (user,
+  2026-11-08): every point in the margin is held by the gap-floor rule
+  (`navigation-cpp-design.md` §6.2). A margin per side is the
+  alternative, to weigh later with its pros and cons (design §18, 7).
+- **I10 to I16 accepted** as proposed (user, on the review page): the
+  planner checks a distance field, not the limiter's sweep (I10 changes
+  P7's wording), keeps 8.3 cm more than the limiter (I11), and so on
+  (§8.1).
+- **The planner as built, merged** (user, PR #55): five score terms,
+  progress toward a point on the line 1 m ahead, at least 1 cm of
+  progress, the field interpolated (§8.9). The user accepted the design
+  page's as-built update.
+
 ## Picking up
 
-1. **`heron_robot`** (`navigation-cpp-design.md` §7, the rest of N4)
-   needs N1's profile sections: `[lidar]` and `[geometry]` in the
-   profile, which the reader refuses today, and the `[geometry]` name
-   clash ("Still open"). Until then, the work that needs no robot is
-   the planner (N5).
-2. **The planner's weights** are tuned to scenario 1's ten runs with
+1. **N1's profile sections, with the user.** `heron_robot` needs
+   `[lidar]`, `[odometry]`, `[navigation]` and navigation's `[geometry]`
+   in `profiles/<rig>.conf`; `heron_profile` refuses unknown sections
+   today (`rig-profiles.md` §2). First decide, with the user, the two
+   `[geometry]`s: the mixing's planned one (wheel radius, track,
+   wheelbase, max speed) and navigation's (length, width, max_speed,
+   max_turn_rate, accel, brake; design §10): one section or two names.
+   Then the reader change is shared work on its own branch
+   (`navigation-cpp-design.md` §7.1 has the structs).
+2. **The N1 measurements on the bench rig** (`rig-calibration.md` §8,
+   not yet run): needs the user at the bench. §8.3 (the LiDAR's yaw) on
+   AC; §8.4 to §8.6 on the floor, the speeds and brake driven with
+   `heron_teleop` on the power block, nothing reading the LiDAR. Numbers
+   recorded on paper with how they were found until the reader takes
+   them. Also the A1M8's range noise (design §18, 6): the spread of
+   repeated ranges to a still wall.
+3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
+   Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
+   values for the same frames), then Navigate with `CourseKeeper` and
+   `LocalPlanner`. Checks: on the block a box stops the wheels; on the
+   floor it stops short of a box at walking pace; then round a box and
+   back (design §15). Which end of SwC is up is checked with
+   `ibus_reader monitor` then.
+4. **The planner's weights** are tuned to scenario 1's ten runs with
    little to spare (154 mm against 150, 85 mm against 100; §8.9): the
-   floor settles them, once `heron_robot` drives Navigate. `plan()`
-   takes 15.8 ms of its 20 ms budget on the Pi.
-3. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
+   floor settles them. `plan()` takes 15.8 ms of its 20 ms budget on
+   the Pi, alone.
+5. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.
-4. **Power for the LiDAR.** On the robot's power block the LiDAR goes
+6. **Power for the LiDAR.** On the robot's power block the LiDAR goes
    silent for seconds while its motor runs, and the Pi's under-voltage
    flag does not catch it; on AC it answers every request (2026-11-08,
    `rig-profiles.md` §1). Driving with the LiDAR waits on a 5 V supply
@@ -84,6 +118,15 @@ navigation, so SwC to Manual always takes over.
    on battery. Unit A's own adapter board is faulty: the bench rig uses
    unit B's. Give the LiDAR's cable strain relief before the robot
    drives.
+
+N5's planner (2026-11-09): `planner_test` and `nav_scenario_test` pass
+on the Mac and the Pi. Scenario 1 over ten box positions: 154 to 178 mm
+to spare on the Pi, back within 85 mm of the line 2 m past, the limiter
+cut none of the planner's choices; scenario 4 Blocked 207 mm short. The
+accepted four-term score could not pass a box and return to the line
+together; the five-term score and three smaller changes are §8.9.
+`plan()`: 15.8 ms on the Pi, 0.45 ms on the Mac optimised. Reviewed on a
+page (as proposed, then updated as built).
 
 N4's scenarios (2026-11-08): `nav_scenario_test` passes on the Mac and
 the Pi (§6.1's table). Scenario 2 found that the first rule 4 ratcheted
@@ -121,8 +164,8 @@ other workstreams; check each one's resume file for where it stands:
 4. LiDAR restart, unplug and replug (`RESUME-lidar.md` §9).
 5. Telemetry steps 2 to 4, and an odometry channel (telemetry).
 
-Work this workstream can do before those: the limiter's core in N4, on
-the Mac with the simulator, which needs no robot.
+Nothing more can be built without them: every library that needs no
+robot is done.
 
 ## Still open
 
@@ -137,6 +180,15 @@ Settled 2026-11-04: the bench rig carries navigation.
   adds them, and the planned `[geometry]` section clashes with the
   mixing's `[geometry]`. `odometry_adapter` prints no velocity, so
   §18's velocity frame cannot be checked yet.
+- **`plan()` with every thread running** on the Pi [unverified]: 15.8
+  ms alone against a 20 ms budget; `PlannerHealth` reports it once
+  `heron_robot` runs (design §18, 2).
+- **Navigate cannot turn on the spot:** with the right stick centred
+  there is no course, and Heron stops, turning included (§8.9). Fine for
+  the first version; the user has not been asked whether to change it.
+- **Perception can skip a cell a ray crosses** (Bresenham from cell to
+  cell, §8.9): seen only with rays started 0.2 m out, in a test; rays
+  from one point covered every cell [unverified on recordings].
 - **The simulated no-returns are random; real ones cluster** (runs of
   4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).
