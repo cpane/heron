@@ -74,8 +74,8 @@ navigation, so SwC to Manual always takes over.
   (§8.1).
 - **The planner as built, merged** (user, PR #55): five score terms,
   progress toward a point on the line 1 m ahead, at least 1 cm of
-  progress, the field interpolated (§8.9). The user accepted the design
-  page's as-built update.
+  progress, the field interpolated (§8.9). The review page was updated
+  to match, at the user's request.
 
 ## Picking up
 
