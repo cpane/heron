@@ -12,7 +12,8 @@ streaming live data to other computers, started 2026-10-28. The builder
 workstream, scripts and a guide for people who build and drive a Heron
 without changing code, started 2026-11-02. The navigation workstream,
 obstacle avoidance from the LiDAR and the OTOS, started 2026-11-04 with
-its design; its first libraries, the maths and a simulator, are built.
+its design; its libraries up to the local planner are built and tested
+in simulation, and wait on the robot program (`heron_robot`).
 
 ## Workstreams
 

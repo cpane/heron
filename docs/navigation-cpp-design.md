@@ -1168,7 +1168,8 @@ N5's first step; budget 20 ms of the 100.
 
 ### 8.5 The score
 
-For each candidate that passes, with H = `horizonS` and s the course's
+As accepted; built with five terms and progress toward a point ahead,
+§8.9. For each candidate that passes, with H = `horizonS` and s the course's
 speed, each term scaled to 0..1:
 
 | Term | Value | Weight (start) |
@@ -1263,12 +1264,86 @@ case Mode::Navigate: {
 | `nav_scenario_test` | Design §12.2 scenarios 1 and 4, with the planner, the limiter and the simulator together. Also counts how often the limiter changes the planner's choice in scenario 1: I11 expects almost never |
 | On the Pi | `plan()`'s time, from `PlannerHealth`, against the 20 ms budget |
 
-### 8.9 Still to settle
+### 8.9 As built (2026-11-09)
+
+`heron_planner` is built: `CourseKeeper.h`, `Planner.h`, `LocalPlanner.h`,
+and the private `src/planner/DistanceField.h`. `planner_test` and
+scenarios 1 and 4 pass on the Mac, built with no warnings by both
+compilers (the Pi's build, in the container, also clean); not yet run on
+the Pi, which was off. Against the interfaces above:
+
+- **The score has five terms, and progress is scored toward a point
+  ahead.** Scenario 1 showed the four of §8.5 cannot pass a box and
+  return to the line together: with progress along the course heading,
+  angling back gains too little in 1.5 s to beat going straight on, so
+  Heron stayed 43 cm off the line; weighting the line more (2.0) made it
+  slow head-on into the box instead (111 plans Blocked). As built:
+  - **Progress is measured toward the point on the line `lookAheadM`
+    (1 m) ahead of Heron's place along it,** as a driver steers for a
+    point ahead: on the line, straight on; off it, back at an angle that
+    eases as it nears. Weight 2.0.
+  - **A fifth term, the free way** (weight 1.0): how far the candidate
+    runs, out to 1 m whatever its speed, before it comes nearer anything
+    than `preferredClearanceM` (0.15 m), or, already that near, nearer than
+    Heron is now. It is the distance term of the dynamic window approach.
+    Without it a slow candidate that stops short of a box within the 1.5 s
+    outscored going round it, and two ways that both met the box scored
+    alike. Measured to 15 cm, not the margin, so Heron keeps 15 cm where
+    there is room and uses the margin only where there is not; the "now"
+    floor is what stops the pull back to the line cutting a box's corner.
+  - Clearance (over the horizon, capped at 0.5 m), the line (at the
+    horizon's end) and change keep §8.5's form and weights, 1.0, 1.0 and
+    0.5. Clearance at 2.0 and 3.0, and a preferred clearance of 0.20 m,
+    were tried and were worse.
+- **I14, as built: a candidate must make at least 1 cm of progress along
+  the course** (`minProgressM`), not just none backwards. Otherwise the
+  zero candidate passes in a dead end and Heron "avoids" standing still.
+- **The field is read interpolated** between the four nearest cell
+  centres, not at the cell a point falls in. Read by cell, a 4 cm creep
+  toward a wall inside one cell reads as no nearer, and I12 let it
+  through: the ratchet I12 exists to stop. The distance is 1-Lipschitz,
+  so interpolation is out by no more than half a cell's diagonal, as the
+  nearest-cell read was; the cell slack is unchanged.
+- **The straight candidate is tried first** and wins a tie, so on the
+  line it is Following, not Avoiding with the same twist.
+- **Added to the config:** `preferredClearanceM` (0.15), `lookAheadM`
+  (1.0), `minProgressM` (0.01), `onLineM` (0.05); to `Plan`,
+  `candidatesTried`. **`LocalPlanner` plans at once for a new course
+  seq**, not at its next tick, since the loop drives no plan for an older
+  one.
+- **Navigate with the right stick centred is stopped, turning included:**
+  no course, no plan. Turning on the spot in Navigate is not possible in
+  this version; switch to Assisted or Manual.
+
+Measured, scenario 1 over ten box positions (two distances, five offsets
+from the line, dead centre included), Mac: every run passes the box with
+157 to 175 mm to spare and is back within 42 to 84 mm of the line 2 m
+past it; the limiter cut none of the planner's choices, and only slowed
+it in its 25 cm slow zone (7 to 117 cycles of about 830). Thin against
+the targets (15 cm, 10 cm): the weights are tuned to these ten runs.
+Scenario 4: Blocked and still 209 mm from the dead end, never within the
+margin.
+
+`plan()` with a box ahead, turning at 2 rad/s: 6.1 ms on the Mac's Debug
+build, 0.45 ms optimised. On the Pi about 14 ms by the limiter's ratio
+[estimate], inside the 20 ms budget but not the 5 ms §8.1 estimated: the
+free way's look ahead and the interpolation are the difference. To be
+measured.
+
+**Found on the way, perception's:** a cell the true line of a ray crosses
+can be skipped, since `addRay()` steps from cell to cell (Bresenham). Rays
+from one point, as the LiDAR's are, covered every cell in the test; rays
+started 0.2 m out left five cells near 0.55 m never passed. Not changed;
+noted here for when perception is revisited.
+
+### 8.10 Still to settle
 
 - **I13, I14:** the speed cap, no backing, and 1 m off the line are
   choices about how Navigate should feel, accepted as starting points;
   driving on the floor may change them.
-- **The weights** stay starting values until scenario 1 settles them.
+- **The weights** are tuned to scenario 1's ten runs (§8.9), with little
+  to spare; the floor will settle them.
+- **`plan()`'s time on the Pi,** against the 20 ms budget.
 
 ## 9. Tests, by phase
 
@@ -1280,6 +1355,8 @@ case Mode::Navigate: {
 | N3 | `perception_test` | Design §12.1's list; a skewed scan of a straight wall, from the simulator, comes out straight |
 | N4 | `limiter_test` | Each rule of design §7.3 and row of §7.4; the blind-spot check |
 | N4 | `nav_scenario_test` | Design §12.2 scenarios 2, 3 and 5, with the simulator and the cores |
+| N5 | `planner_test` | §8.8: `CourseKeeper`'s rules; the field against brute force; `Planner` on hand-built maps |
+| N5 | `nav_scenario_test` | Design §12.2 scenarios 1 (ten box positions) and 4, with perception, the planner and the limiter |
 | N4 | `robot_test` | Manual gives `heron_teleop`'s wheel values for the same frames; the mode switch; the unit conversions |
 
 All run on the Mac and on the Pi, as the existing tests do.
