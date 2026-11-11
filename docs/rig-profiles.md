@@ -89,6 +89,55 @@ above. Which supply that is has not been chosen. The captures are on the
 Pi under `~/heron/captures` (`battery_*`, `ac-*`, `unitB-ac-*`, which was
 unit B's board on AC, and `boardB-battery-*`).
 
+#### The power block through a buck (2026-11-10)
+
+Why the power block failed: **its own 5 V output measured 4.89 V at
+near-zero load** (the user, with a Rigol DHO814) [ours, scope], below the
+5 V the Pi's USB ports pass on. The bench rig now takes 12 V from the same
+bank and steps it down itself:
+
+```
+Anker bank, USB-C -> PD trigger (303PDSink01, SW1 + SW2 on: 12 V;
+SW2 alone falls back to 5 V) -> XY-3606 buck, fixed 5.2 V -> USB-A to
+micro-USB -> the Pi.  The LiDAR from a Pi USB port, as before.
+The drive motors on their own supply.
+```
+
+With the LiDAR's motor spinning, under load [ours, scope]:
+
+| Point | Average | Minimum |
+|---|---|---|
+| Buck output | 5.15 V | |
+| The Pi's 5 V rail (GPIO pin 2) | 5.00 V | 4.91 V |
+| The LiDAR's 5 V (red wire at its adapter board) | 4.89 V | 4.85 V |
+
+The 0.11 V from the Pi's rail to the LiDAR is the Pi's USB port and the
+cable. Requests with `lidar_07_requests.py` (unit B's adapter board, unit
+A's head; 50 each, 10 ms apart, 100 ms timeout), answered:
+
+| Runs | Stopped / running / stopped | Scope on the LiDAR's 5 V |
+|---|---|---|
+| 1, 2 (22:25–22:26) | 46 / 31 / 46, 18 / 50 / 50 | Fell below 3.5 V for 20–30 ms at a time, the Pi's rail flat |
+| 3, 4 (22:28–22:29) | 50 / 50 / 50, twice | |
+| Soak: 10 runs back to back (22:37:14–22:38:33), the robot driving for the second half | 1499 of 1500: one miss, the first request at a motor start | Never below 4.70 V (a falling-edge trigger), the miss included |
+
+`get_throttled` read `0x0` in every sample, and the kernel logged no USB
+errors. Runs 1 and 2 are most likely the hand-held probe shorting the
+adjacent 5 V and GND joints at the adapter board: clean once the probe
+was secured [the user's inference, not established]. `heron_teleop`'s
+log puts the driving at 22:37:49–22:38:14 and 22:38:22 to past the end,
+wheels +0.19 to +0.66, `motors OK, resets 0` throughout.
+
+So **through the buck the power block runs the Pi and the LiDAR**,
+driving included. The LiDAR's 4.85 to 4.89 V is thin: below the 4.9 V
+minimum the user reads in SLAMTEC's A1M8 datasheet [unverified: the
+datasheet is not in `docs/lidar-references.md`]. The plan is a dedicated
+5 V feed to the LiDAR from the buck's spare output terminal, then the
+soak again. If the LiDAR's USB lead stays on the Pi, its VBUS must not
+also be tied to the buck's output, or the two supplies are joined; how
+unit B's adapter board takes separate power is not checked. Captures:
+`buck-pd-1_*` to `-4_*` and `soak-1_*` to `-10_*`.
+
 ## 2. The profile file
 
 One per rig, in the repository, so every calibration has a history in git.
