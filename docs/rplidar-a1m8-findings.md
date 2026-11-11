@@ -377,13 +377,39 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
     sees a request go unanswered at start-up, or the rotation below ~7.4 Hz
     on a good supply, should suspect this plug first.
 
+    **Later the same day, the board itself** (navigation's measurements,
+    folded in 2026-11-10) [ours]: with unit A's head, cable and port
+    throughout and only the small adapter board swapped, unit A's board
+    lost requests on the Pi's mains adapter with the motor stopped too,
+    plug re-seated and taped (answered 50 / 42 / 50 and 48 / 35 / 15 of
+    50, stopped / running / stopped); unit B's board answered 150 of 150,
+    twice. So unit A's adapter board is faulty, its socket or something
+    else on it, not established which, and the "poorly seated plug" above
+    may have been the board all along. The bench rig now uses unit B's
+    board ([`rig-profiles.md`](rig-profiles.md) §1 has the tables).
+13. **The LiDAR goes silent when its 5 V sags, and the Pi does not see
+    it.** On a supply whose 5 V sagged (a power bank straight into the
+    Pi), the LiDAR went silent for about 5 s at a time while its motor ran,
+    while the Pi's under-voltage bit stayed clear [ours, 2026-11-08]. With a
+    scope on the LiDAR's own 5 V (2026-11-10) [ours]: through a buck at
+    5.2 V into the Pi, the LiDAR's wire read 4.89 V average, 4.85 V
+    minimum, with the Pi's rail at 5.00 V, and 1499 of 1500 requests were
+    answered with the robot driving. In two runs where the LiDAR's 5 V fell
+    below 3.5 V for 20–30 ms (most likely the hand-held probe shorting it),
+    it lost up to 32 of 50, with the Pi's rail flat. `get_throttled` was
+    `0x0` throughout. **Check a supply with `lidar_07_requests.py`, motor
+    running, not with `get_throttled`** ([`rig-profiles.md`](rig-profiles.md)
+    §1).
+
 ## Still open
 
 - Invalid fraction against controlled surfaces and distances.
 - Startup transient: how many revolutions to discard after motor-on.
-- Whether a request at motor start is ever lost with the plug firmly
-  seated: 0 of 15 starts for unit A re-seated and for unit B, so a rate
-  below a few percent is not excluded.
+- How often a request at motor start is lost with a good board: 0 of 15
+  starts for unit A re-seated and for unit B on AC (2026-11-08); 1 of 10
+  on unit B's board through the buck, the robot driving, the LiDAR's 5 V
+  at about 4.89 V (2026-11-10, trap 13). Not yet measured with the LiDAR
+  on its own 5 V feed.
 - Keeping the motor stopped while nothing is using the LiDAR (trap 1): a
   program must hold the port, or the motor turns.
 - Behaviour on USB re-enumeration, and the reconnect state machine it implies.

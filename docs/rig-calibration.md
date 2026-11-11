@@ -257,7 +257,7 @@ As §1, and also:
 |---|---|
 | The LiDAR fixed rigidly, so it cannot twist | In USB port 1-1.4: only that port is named `/dev/rplidar` |
 | The OTOS flat and level to within 3°, 10 to 27 mm above the floor, its yellow tape removed | On **3.3 V**, never 5 V ([`odometry-otos-reference.md`](odometry-otos-reference.md) §6) |
-| A supply that holds 5 V under the LiDAR's motor | AC, or a supply checked with `python/probes/lidar_07_requests.py`, motor running ([`rig-profiles.md`](rig-profiles.md) §1). On the robot's power block the LiDAR goes silent for seconds while `get_throttled` stays clear |
+| A supply that holds 5 V under the LiDAR's motor | AC, or a supply checked with `python/probes/lidar_07_requests.py`, motor running ([`rig-profiles.md`](rig-profiles.md) §1). The power block straight into the Pi fails: the LiDAR goes silent for seconds while `get_throttled` stays clear. Through a PD trigger and a 5.2 V buck it passes (2026-11-10) |
 
 Directions throughout: x forward, y left, angles positive turning left
 (anticlockwise seen from above). Measure from the **wheelbase centre**,
