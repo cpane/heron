@@ -1,7 +1,7 @@
 # LiDAR workstream — resume point
 
-Last updated 2026-11-08: navigation's Inbox entry checked and closed, the
-park work next. Branch **`develop`**, everything merged (#43). The Pi
+Last updated 2026-11-10: the LiDAR's power checked with a scope (section
+11), navigation's second Inbox entry folded in; the park work next. The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
 re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
 live (section 6, "Re-verified").
@@ -18,6 +18,13 @@ its missed requests and slow rotation were unit A's poorly seated micro-USB
 findings, except the no-returns, which wait for a description of the room.
 On the way it found that the motor turns whenever no program holds the port
 (findings, trap 1), so it spins all the time the robot is driven.
+
+**One session on 2026-11-10** (section 11): the user powers the Pi from
+the power block through a PD trigger and a 5.2 V buck; with a scope on the
+LiDAR's 5 V, 1499 of 1500 requests were answered, the robot driving. The
+LiDAR's own wire reads 4.85 to 4.89 V; a dedicated feed from the buck is
+the user's plan. Navigation's Inbox entry (unit A's adapter board faulty)
+is in findings trap 12, the supply in a new trap 13.
 
 **Decided 2026-11-08 (user): stopping the motor while the LiDAR is unused
 ("park") is the next LiDAR work, done later at the user's request.** The
@@ -52,7 +59,7 @@ check its ultra decode.
 History, in order: the 0-degree question (1), the live viewer (2), the C++
 build chain (3), the `Scan` type (4), SDK record and replay (4b),
 starved-reader recordings (4c), the adapter (6), the test program (7), the
-GUI backend (8), the missed requests (10).
+GUI backend (8), the missed requests (10), the power path (11).
 
 ---
 
@@ -738,14 +745,16 @@ Open:
   a miss is not recorded. Its 11 of 20 fits unit A's plug as it was then
   [inference].
 - **Navigation's power-block result** (4 of 20 GET_INFO answered, the SDK's
-  start-up failing, the Pi under-voltage) was not re-tested with the plug
-  seated. Both may have played a part.
+  start-up failing, the Pi under-voltage): explained 2026-11-10, the
+  bank's 5 V reads 4.89 V at near-zero load (section 11).
 - **Whether a firmly seated plug ever loses a request at start-up:** 0 of 15
   starts for each unit, so a low rate is not excluded. The supply
   experiments planned before the cause was found (a powered hub; a
   multimeter on the board's 5 V) are no longer needed for this.
 - **The socket:** whether unit A's micro-USB socket is weak (solder) as
-  well as the plug having been unseated. Not inspected.
+  well as the plug having been unseated. Not inspected. Navigation then
+  found unit A's whole adapter board faulty (findings, trap 12, folded in
+  2026-11-10); the bench rig uses unit B's.
 - **The motor stopping:** one request was lost 0.44 s after opening the
   port stopped a free-running motor (`dur-check`), with the plug possibly
   marginal then. Once only.
@@ -754,6 +763,50 @@ Open:
 - **`lidar_07_requests.py`** stays as a probe: it is how to check a unit's
   plug (`--phases` of 15 `stopped,running` pairs, `--gap-ms 10 --count 40
   --timeout-ms 100`; a healthy unit loses nothing).
+
+## 11. DONE — the power path, with a scope (2026-11-10)
+
+The user moved the Pi off the power block's own 5 V, which reads 4.89 V at
+near-zero load, onto 12 V from the same bank through a PD trigger and an
+XY-3606 buck at 5.2 V; the LiDAR stays on a Pi USB port, the drive motors
+on their own supply. The user watched the LiDAR's 5 V on a Rigol DHO814
+while Claude ran `lidar_07_requests.py` (`--phases stopped,running,stopped
+--count 50 --gap-ms 10 --timeout-ms 100`). Unit B's adapter board, unit A's
+head. The tables are in `rig-profiles.md` §1, "The power block through a
+buck"; the supply fact is findings trap 13.
+
+| Runs | Answered, stopped / running / stopped | Scope |
+|---|---|---|
+| `buck-pd-1`, `-2` | 46 / 31 / 46, 18 / 50 / 50 | LiDAR 5 V below 3.5 V for 20–30 ms, Pi rail flat |
+| `buck-pd-3`, `-4` | 50 / 50 / 50, twice | |
+| `soak-1` to `-10`, the robot driving from 22:37:49 | 1499 of 1500 | never below 4.70 V |
+
+- **Through the buck, the Pi and the LiDAR hold up, driving included**
+  [ours]. `get_throttled` `0x0` and no kernel USB errors in every run.
+- **Runs 1 and 2's misses fit the scope's collapses**, most likely the
+  hand-held probe shorting the 5 V and GND joints at the adapter board
+  [the user's inference; clean once the probe was secured]. Run 1's
+  running phase missed every other request for 2 s; run 2 went silent
+  for 3.2 s with the motor stopped.
+- **The soak's one miss** was pass 6's first request, sent as the motor
+  started (22:37:57.192), the scope's 4.70 V trigger silent: the
+  motor-start miss of trap 12, 1 in 10 starts on a good board.
+- Measured under load: buck 5.15 V; the Pi's rail 5.00 V average, 4.91 V
+  minimum; the LiDAR's red wire 4.89 V average, 4.85 V minimum.
+- Clocks: the Pi's and the Mac's agree to a second; the user's own clock
+  read about 6–7 minutes behind (driving "at 22:31" was 22:37:47 in
+  `heron_teleop`'s log).
+
+Open:
+
+- **The LiDAR's 5 V is thin**, at or below the 4.9 V minimum the user
+  reads in SLAMTEC's A1M8 datasheet [unverified: the datasheet is not in
+  `docs/lidar-references.md`; add it]. The user's plan: a dedicated feed
+  from the buck's spare output, then the soak again. Do not join the
+  buck's output to the Pi's USB VBUS through the LiDAR's lead; how unit
+  B's adapter board takes separate power is not checked.
+- **Motor-start misses with a good board:** 1 of 10 here, 0 of 15 on AC
+  before (findings, "Still open"). Re-count on the dedicated feed.
 
 ---
 
@@ -764,11 +817,13 @@ Open:
 - LiDAR at `/dev/rplidar` (udev rule `99-heron-rplidar.rules`, installed by
   provisioning). Firmware 1.29, HW 7, health 0. Deployed code and binaries
   live under `~/heron` on the Pi.
-- **Power issue resolved.** New supply, `throttled=0x0` idle, while scanning,
-  and under CPU load. The old `0x50000` readings are historical.
+- **Power:** on AC, the Pi's own adapter. Untethered, the power block
+  through a PD trigger (12 V) and a 5.2 V buck (2026-11-10, section 11);
+  the power block's own 5 V fails. The LiDAR on a Pi USB port reads 4.85
+  to 4.89 V; a dedicated feed is planned.
 - **The LiDAR's micro-USB at its adapter board must be seated firmly**
-  (findings, trap 12). Unit A was re-seated on 2026-11-08; a second unit, B,
-  exists and behaved cleanly in the same place.
+  (findings, trap 12). Unit A's adapter board is faulty: the bench rig
+  uses unit B's board with unit A's head (2026-11-08).
 - On the bench rig (since 2026-11-03 a complete small robot), the LiDAR
   shares the Pi with the Arduino; `heron_teleop` runs at boot and does not
   use the LiDAR, so its motor turns while the robot is driven (trap 1).
@@ -849,28 +904,4 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-- **2026-11-08, from navigation: unit A's adapter board is faulty, and the
-  power block silences the LiDAR while its motor runs** [ours]. On the
-  bench rig, with `python/probes/lidar_07_requests.py` (50 requests
-  stopped, 50 running, 50 stopped). Unit A's head throughout; only the
-  adapter board swapped.
-  - Unit A's board, on AC: 13/27/49 and 49/28/18 answered (3 garbled);
-    plug re-seated and taped: 50/42/50 and 48/35/15. Losses with the
-    motor stopped too. Unit B's board, same head, cable and port, on
-    AC: 150 of 150, twice. So trap 12's "poorly seated plug" may be the
-    board (its micro-USB socket or something else on it); not
-    established which.
-  - On the power block (Anker, 72 Wh, 87 W), unit B's board: 49 (+1
-    garbled)/33/50, 50/46/50, 50/30/50. The run-3 misses came in two
-    blocks of 10, each about 5 s of silence, motor running. The Pi's
-    under-voltage bit was clear in the probe's samples during every
-    phase; `0x50005` once after run 2; 4 kernel dips that boot, 3 in
-    the first 30 s. That the LiDAR's own 5 V sags further than the
-    Pi's input is an inference, not measured.
-  - No USB errors in the kernel log in any run.
-  - Captures on the Pi, `~/heron/captures`: `battery_*`,
-    `ac-after-battery_*`, `ac-settled_*`, `ac-reseated-1_*` and `-2_*`
-    (unit A's board), `unitB-ac-1_*` and `-2_*` (unit B's board on AC,
-    misnamed: the head is unit A's), `boardB-battery-1_*` to `-3_*`.
-  - Bears on: findings trap 12 and the rotation rate row, and the
-    7.10 Hz prediction in §10. The tables are in `rig-profiles.md` §1.
+Nothing waiting.
