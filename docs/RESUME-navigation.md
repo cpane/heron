@@ -198,3 +198,12 @@ Settled 2026-11-04: the bench rig carries navigation.
 Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
+
+- **2026-11-10, from LiDAR: the power block passes through a buck**
+  [ours]. With the Pi on 12 V from the power block through a PD trigger
+  and a 5.2 V buck, the LiDAR answered 1499 of 1500 requests with the
+  robot driving, a scope on its 5 V never below 4.70 V; the block's own
+  5 V reads 4.89 V at near-zero load, which is why it failed. The LiDAR's
+  wire still reads 4.85 to 4.89 V, so a dedicated feed is planned.
+  `rig-profiles.md` §1, "The power block through a buck"; findings trap
+  13. Bears on "Picking up" 6 (power for the LiDAR).

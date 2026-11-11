@@ -409,4 +409,9 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+- **2026-11-10, from LiDAR: the robot's 5 V path changed** [ours]. The
+  bench rig's Pi now runs from the power block through a PD trigger (12 V)
+  and a 5.2 V buck; the drive motors stay on their own supply. Driving
+  with `heron_teleop` through a 10-run LiDAR soak: `motors OK, resets 0`
+  throughout. `rig-profiles.md` §1, "The power block through a buck".
+  Bears on open item 7 (the LiDAR's motor on the 5 V budget).
