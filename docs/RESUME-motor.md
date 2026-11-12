@@ -189,6 +189,10 @@ measure it on the hardware before building motor logic on top.
 
 0. **The bench rig's dead band: done 2026-11-11** ("The bench rig on the
    floor", left open 1, has the results). Still open there: under load.
+   Bench work with `motor_link` needs `heron_teleop` off first:
+   `scripts/teleop_autostart.sh <user>@<pi> off`, and `on` after. It asks
+   for `sudo`, so Chris runs it in a separate terminal window: run with `!`
+   from Claude Code it has no terminal, and `sudo` fails (2026-11-11).
 
 The mini has the same parts as the bench (Uno, HW-130, yellow motors) and
 its own Pi; mecanum wheels and its weight are what is new. The bench
