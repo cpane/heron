@@ -1,7 +1,8 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-11: the profile reader takes N1's sections, one
-shared `[geometry]`; the N1 measurements next. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-11: N1's tape measurements and the LiDAR's yaw
+(180: its housing faces back) done, `[lidar]` in the bench profile; §8.4
+to §8.6 next. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 which waits on N1's profile sections.**
@@ -103,6 +104,23 @@ navigation, so SwC to Manual always takes over.
    found in its `[<section>.calibration]`; `accel` and the margins start
    from design §10's values. Also the A1M8's range noise (design §18, 6): the spread of
    repeated ranges to a still wall.
+   **Started 2026-11-11** [ours, Chris with a tape; sheet
+   https://claude.ai/artifact/Sbkk3VF5oHFHqoavtKAJp6]. §8.2: length and
+   width 190.5 mm, the outline centred on the wheelbase centre; LiDAR x
+   −8 mm, y 0, scan plane 270 mm above the floor; OTOS x 0, y 0. §8.3:
+   the LiDAR's housing faces the robot's **back**, `yaw_deg` 180 (box
+   ahead +177 and −177, box left −91), though it looked forward. `[lidar]`
+   is in `profiles/bench.conf`. Waiting: `[geometry]` needs §8.6's
+   speeds and brake (`length = 0.1905`, `width = 0.1905` until then);
+   `[odometry]` needs §8.4's yaw and §8.5's scalars (x 0, y 0). Found:
+   - **The blind circle fits with 10.45 mm to spare** [computed by hand,
+     not by `checkBlindSpot()`]: 126.8 mm round the LiDAR at x −8 mm
+     reaches 134.8 mm behind the centre, against a stop outline of
+     95.25 + 50 = 145.25 mm. A `stop_margin` under about 40 mm fails it.
+   - **The scan plane is at 270 mm**, higher than the robot is long:
+     anything lower is invisible to it (design §6.2 assumes every
+     obstacle reaches the plane). Floor checks need boxes taller than
+     27 cm. Whether to mount the LiDAR lower is open, for Chris.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
    values for the same frames), then Navigate with `CourseKeeper` and

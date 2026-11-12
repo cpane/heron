@@ -287,17 +287,28 @@ and right ([`navigation-cpp-design.md`](navigation-cpp-design.md) §2.2).
 
 ### 8.3 The LiDAR's yaw
 
-1. A box about 1 m straight ahead, nearer than anything else around.
-2. On the Pi:
+1. A box about 1 m straight ahead of the robot (the end with wheels 1
+   and 2), taller than the LiDAR's scan plane, or the LiDAR does not see
+   it.
+2. On the Pi, a narrow sector at a time, so the answer is the box and
+   not the nearest thing in the room (with `--arc 360` it is often the
+   person at the laptop):
    ```
-   ssh -t <user>@<pi> '~/heron/bin/lidar_nearest --arc 360 --stop 0.1'
+   ssh -t <user>@<pi> '~/heron/bin/lidar_nearest --arc 60 --center 0 --stop 0.1'
    ```
-   It shows the nearest point's bearing in the LiDAR's own frame,
-   positive to the left, with no mounting applied.
-3. **`yaw_deg` = minus the bearing shown.** A housing facing left shows
-   the box near -90, so `yaw_deg` = +90.
-4. Check: move the box to the robot's left; the bearing shown plus
-   `yaw_deg` comes to about +90.
+   then `--center 180`, `90` and `-90` until one shows the box's
+   distance. Bearings are in the LiDAR's own frame, positive to the
+   left, with no mounting applied.
+3. **`yaw_deg` = minus the bearing of the box.** A housing facing left
+   shows the box near -90, so `yaw_deg` = +90; one facing back shows it
+   near ±180, so 180.
+4. Check: move the box directly to the robot's left; the bearing shown
+   plus `yaw_deg` comes to about +90. A rotation passes both; a mirror
+   (a head mounted upside down) passes only one.
+
+On the bench rig (2026-11-11) the housing faces the robot's back,
+`yaw_deg` = 180, although it looked forward: the A1M8's front is the
+symmetry axis SLAMTEC defines, not obvious from outside.
 
 ### 8.4 The OTOS's axes and yaw
 
