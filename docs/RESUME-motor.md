@@ -1,10 +1,10 @@
 # Motor controller workstream — resume point
 
-Last updated 2026-11-08: `heron_teleop` now recovers by itself when the
-Arduino's USB drops (Still open, 6), checked on the bench rig, idle and
-while driving. **The bench rig, with mecanum wheels, drives every move on
-the floor** ("The bench rig on the floor", below). Next: the bench rig's
-dead band re-measured ("Picking up next", step 0), then the mini robot.
+Last updated 2026-11-11: the bench rig's dead band re-measured with its
+wheels on ("The bench rig on the floor", left open 1). **The bench rig,
+with mecanum wheels, drives every move on the floor**, and `heron_teleop`
+recovers by itself when the Arduino's USB drops (Still open, 6). Next: the
+mini robot ("Picking up next").
 
 Up to 2026-10-25, everything the bench rig can prove lifted was done:
 steps 1 to 6 below, each checked on the bench rig. The remote drives the
@@ -72,9 +72,12 @@ checked on the Pi).
 
 ## Still open
 
-1. **The dead band under load:** the bench was measured with no wheels;
-   how to measure with the robot's weight on the wheels is not worked out
-   (`rig-calibration.md` §4). Settled on the mini.
+1. **The dead band under load:** the bench was measured with its wheels
+   lifted (2026-11-11); how to measure with the robot's weight on the
+   wheels is not worked out (`rig-calibration.md` §4). Settled on the
+   mini. A sweep, one motor at a time, rising a step a second, read low
+   for a start from rest with all four (motor 3 backward, "The bench rig
+   on the floor", left open 1).
 2. **Turn gain** (`StickConfig::turnGain`, 1.0) and the **ramp** on the
    floor: tuned on the mini, then the turn gain moves into its profile.
 3. **The full-size robot's motor driver**, not chosen.
@@ -184,25 +187,8 @@ measure it on the hardware before building motor logic on top.
 
 ## Picking up next: the mini robot on the floor
 
-0. **First, the bench rig's dead band** ("The bench rig on the floor",
-   left open 1): `min_duty_forward`/`min_duty_backward` in
-   `profiles/bench.conf` predate the rewiring, and motors 3 and 4 likely
-   have forward and backward swapped. Needs Chris at the bench to watch
-   the wheels; wheels off the ground, PWR jumper off, motor battery on
-   EXT_PWR.
-   - `scripts/teleop_autostart.sh <user>@<pi> off` (sudo: Chris runs it
-     with `!`), so `motor_link` can have `/dev/arduino`.
-   - `rig-calibration.md` §4: `ssh -t <user>@<pi> '~/heron/bin/motor_link
-     sweep 1 --step 20 --min-duty 0'`, then motors 2, 3, 4; the first
-     value turning steadily from rest, forward and backward.
-   - Duties plus 10 into `profiles/bench.conf`, the measured values in its
-     comment beside the 2026-10-25 ones; `scripts/deploy_cpp.sh <user>@<pi>`,
-     then `motor_link drive 1 1 1 1 --seconds 3` and `-1 -1 -1 -1`: all
-     four turn slowly both ways.
-   - Under load (open item 1) is still not worked out: a wheels-off sweep
-     reads low for the floor. Decide then whether to try a way of
-     measuring on the floor, and write it into `rig-calibration.md` §4.
-   - `scripts/teleop_autostart.sh <user>@<pi> on` afterwards.
+0. **The bench rig's dead band: done 2026-11-11** ("The bench rig on the
+   floor", left open 1, has the results). Still open there: under load.
 
 The mini has the same parts as the bench (Uno, HW-130, yellow motors) and
 its own Pi; mecanum wheels and its weight are what is new. The bench
@@ -260,12 +246,26 @@ What was found **[ours]**:
 
 Left open:
 
-1. **The dead band is stale:** `min_duty_forward`/`min_duty_backward` in
-   `profiles/bench.conf` were measured 2026-10-25, before the rewiring.
-   The back leads were swapped since, so motors 3 and 4 likely have their
-   forward and backward values the wrong way round. Only creeping speeds
-   are affected. Re-measure (`rig-calibration.md` §4), now on the floor
-   under load if possible (open item 1).
+1. **The dead band: re-measured 2026-11-11** [ours], wheels on, lifted,
+   the motor battery (AA cells) on EXT_PWR, PWR jumper off; `motor_link
+   sweep N --step 20 --min-duty 0`, Chris watching. First steady turn,
+   as a duty, forward / backward: motor 1 61 / 71, motor 2 71 / 92,
+   motor 3 97 / 87, motor 4 97 / 92 (2026-10-25, no wheels: 66 / 61,
+   71 / 66, 77 / 66, 82 / 92). **Not a swap:** motors 3 and 4 rose both
+   ways; most values rose, by up to 26, likely the wheels' weight and
+   rollers [inference]. Profile: +10 each, except motor 3 backward +20.
+   - **Motor 3 backward sticks from rest.** `drive -1 -1 -1 -1` did not
+     turn it at 97, nor at 107, each from cold, though the sweep had it
+     turning at 87 (each sweep step follows the last a second apart).
+     Then, after Chris turned it by hand: alone from rest at duty 102
+     (`drive 0 0 -400 0 --min-duty 0`), alone at 107 (`drive 0 0 -1 0`),
+     all four 5 s later, and all four again after 5 minutes at rest,
+     cold: it turned every time. Whether four motors starting together
+     weaken it (supply sag through the L293D) or it only sticks some
+     starts is not separated [unverified]. Check: `drive 1 1 1 1` and
+     `-1 -1 -1 -1`, all four turned at 107.
+   - Profile checksum `40A9`. Under load (open item 1) is still not
+     worked out: these are lifted numbers, low for the floor.
 2. **Turn gain and ramp** tuning on the floor (open item 2).
 
 ## Step 2 bench checklist
