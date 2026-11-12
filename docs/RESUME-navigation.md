@@ -1,7 +1,7 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-11: LiDAR's power entries folded in, one shared
-`[geometry]` decided; the profile reader next. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-11: the profile reader takes N1's sections, one
+shared `[geometry]`; the N1 measurements next. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 which waits on N1's profile sections.**
@@ -88,19 +88,20 @@ navigation, so SwC to Manual always takes over.
 
 ## Picking up
 
-1. **N1's profile sections.** `heron_robot` needs `[lidar]`,
-   `[odometry]`, `[navigation]` and `[geometry]` in
-   `profiles/<rig>.conf`; `heron_profile` refuses unknown sections today
-   (`rig-profiles.md` §2). One shared `[geometry]` (decided 2026-11-11).
-   The reader change is shared work on its own branch
-   (`navigation-cpp-design.md` §7.1 has the structs).
+1. **N1's profile sections: built 2026-11-11** (`navigation-cpp-design.md`
+   §7.1, "As built"). `heron_profile` reads `[geometry]` (one shared
+   section), `[lidar]`, `[odometry]` and `[navigation]`, each optional,
+   all-or-nothing, each with a `[<section>.calibration]` record;
+   `rig_profile show` prints them; `rig_profile_test` passes on the Mac
+   and the Pi (67 checks), and every host test still passes.
 2. **The N1 measurements on the bench rig** (`rig-calibration.md` §8,
    not yet run): needs the user at the bench. §8.3 (the LiDAR's yaw) on
    AC; §8.4 to §8.6 on the floor, the speeds and brake driven with
    `heron_teleop` on the power block through its buck (item 6), which
-   holds the LiDAR up while driving. Numbers
-   recorded on paper with how they were found until the reader takes
-   them. Also the A1M8's range noise (design §18, 6): the spread of
+   holds the LiDAR up while driving. Each section goes into
+   `profiles/bench.conf` once all its numbers are measured, how they were
+   found in its `[<section>.calibration]`; `accel` and the margins start
+   from design §10's values. Also the A1M8's range noise (design §18, 6): the spread of
    repeated ranges to a still wall.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
@@ -186,11 +187,10 @@ budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
-- **N1's numbers wait on the profile reader.** The measurement
-  checklist is `rig-calibration.md` §8 (2026-11-09), not yet run. The
-  reader rejects unknown sections, so the numbers wait on paper until N1
-  adds them (one shared `[geometry]`, decided 2026-11-11). `odometry_adapter` prints no velocity, so
-  §18's velocity frame cannot be checked yet.
+- **N1's numbers are not measured.** The checklist is
+  `rig-calibration.md` §8, not yet run; the reader takes them since
+  2026-11-11. `odometry_adapter` prints no velocity, so §18's velocity
+  frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once
   `heron_robot` runs (design §18, 2).
