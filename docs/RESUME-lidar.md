@@ -1,7 +1,8 @@
 # LiDAR workstream — resume point
 
-Last updated 2026-11-10: the LiDAR's power checked with a scope (section
-11), navigation's second Inbox entry folded in; the park work next. The Pi
+Last updated 2026-11-11: unit A's board passed on the new supply, after
+the LiDAR's power was checked with a scope on 2026-11-10 (section 11);
+the park work next. The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
 re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
 live (section 6, "Re-verified").
@@ -25,6 +26,10 @@ LiDAR's 5 V, 1499 of 1500 requests were answered, the robot driving. The
 LiDAR's own wire reads 4.85 to 4.89 V; a dedicated feed from the buck is
 the user's plan. Navigation's Inbox entry (unit A's adapter board faulty)
 is in findings trap 12, the supply in a new trap 13.
+
+**On 2026-11-11** (section 11, end): unit A's board refitted on the same
+supply passed the same soak, 1500 of 1500 with the robot driving, so
+"faulty" is no longer established. The bench rig keeps unit A's board.
 
 **Decided 2026-11-08 (user): stopping the motor while the LiDAR is unused
 ("park") is the next LiDAR work, done later at the user's request.** The
@@ -754,7 +759,8 @@ Open:
 - **The socket:** whether unit A's micro-USB socket is weak (solder) as
   well as the plug having been unseated. Not inspected. Navigation then
   found unit A's whole adapter board faulty (findings, trap 12, folded in
-  2026-11-10); the bench rig uses unit B's.
+  2026-11-10); on the buck's supply on 2026-11-11 it passed (section 11),
+  so that is not established either.
 - **The motor stopping:** one request was lost 0.44 s after opening the
   port stopped a free-running motor (`dur-check`), with the plug possibly
   marginal then. Once only.
@@ -808,6 +814,16 @@ Open:
 - **Motor-start misses with a good board:** 1 of 10 here, 0 of 15 on AC
   before (findings, "Still open"). Re-count on the dedicated feed.
 
+**Unit A's board again, 2026-11-11** [ours]: refitted, the same supply,
+the same soak (`rig-profiles.md` §1, "Unit A's board again"). Disarmed:
+1498 of 1500, the two misses at motor starts (one no reply, one garbled,
+the first garbled reply since 2026-11-08). Driving the whole soak, wheels
++0.62 to +0.97: 1500 of 1500. No scope. So unit A's board does as well as
+unit B's here; its losses on AC on 2026-11-08 are unexplained (the plug
+was re-seated by the refit; the LiDAR's 5 V on AC never measured). The
+bench rig keeps unit A's board. A soak that started 7 minutes late: launch
+it when the user says they are driving, and in the foreground.
+
 ---
 
 ## State of the hardware
@@ -822,8 +838,8 @@ Open:
   the power block's own 5 V fails. The LiDAR on a Pi USB port reads 4.85
   to 4.89 V; a dedicated feed is planned.
 - **The LiDAR's micro-USB at its adapter board must be seated firmly**
-  (findings, trap 12). Unit A's adapter board is faulty: the bench rig
-  uses unit B's board with unit A's head (2026-11-08).
+  (findings, trap 12). Unit A's board, swapped out on 2026-11-08, is back
+  on the bench rig since 2026-11-11: it passed on the buck's supply.
 - On the bench rig (since 2026-11-03 a complete small robot), the LiDAR
   shares the Pi with the Arduino; `heron_teleop` runs at boot and does not
   use the LiDAR, so its motor turns while the robot is driven (trap 1).
