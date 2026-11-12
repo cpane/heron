@@ -1,8 +1,8 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-11: N1's tape measurements and the LiDAR's yaw
-(180: its housing faces back) done, `[lidar]` in the bench profile; §8.4
-to §8.6 next. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-11: N1 on the bench rig under way. `[lidar]` in
+the profile (yaw 180); the OTOS's axes checked, its linear scale measured
+(0.908 on hardwood, −27% on carpet); next, the angular scalar (§8.5). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 which waits on N1's profile sections.**
@@ -121,6 +121,39 @@ navigation, so SwC to Manual always takes over.
      anything lower is invisible to it (design §6.2 assumes every
      obstacle reaches the plane). Floor checks need boxes taller than
      27 cm. Whether to mount the LiDAR lower is open, for Chris.
+
+   **§8.4 done 2026-11-11** [ours, `odometry_adapter`, pushed by hand]:
+   forward reads +x, left +y, turning left raises the heading. So
+   `[odometry] yaw_deg` = 0, the axes are not mirrored, the heading's
+   sign is right (design §18 item 1 settled for the bench rig).
+   - **On carpet the OTOS under-reads about 27%, silently** [ours, one
+     run each way]: about 405 mm pushed read 297 mm forward and 275 mm
+     left, status 0x00, no warnings. On a board on the same carpet:
+     517 mm and 496 mm for 500 mm. Sensor 14–15 mm above the floor, tape
+     off. Heron's pose, map and course would be off by as much on that
+     carpet: hard floors only, until the odometry workstream says
+     otherwise (its Inbox).
+
+   **§8.5 linear done 2026-11-11** [ours, `otos_move`, hardwood floor,
+   five pushes of 1000 mm along a straight edge, forward each time]:
+   reported 1087.4, 1108.1, 1104.6, 1108.6, 1100.2 mm; mean 1101.8, +10.2%,
+   sd 8.7 mm; correcting scalar 0.902 to 0.920, mean **0.908**; heading
+   change within ±1.31°, direction −88.3 to −89.6, status 0x00. Proposed:
+   `linear_scalar = 0.908`, for this floor and height only, with a
+   caveat: the reference calls more than 5% a sign of poor tracking
+   [community], and the odometry workstream's sled read +0.2% on its wood
+   floor [ours]. Not yet agreed with Chris.
+
+   **Next: §8.5 angular** (`otos_spin`), on the hardwood: Chris spins
+   the robot with the remote (`heron_teleop` is the boot service; left
+   stick), 5 turns one way and 5 back per trial, 5 trials; Enter at the
+   start mark resets, Enter at the end, true turns 5 per leg; `q` for
+   the table. Run it in Chris's own terminal:
+   `ssh -t <user>@<pi> '~/heron/bin/otos_spin'`. Then `[odometry]` goes
+   into the profile (x 0, y 0, yaw_deg 0, the two scalars), with an
+   `[odometry.calibration]` record saying hardwood and 14–15 mm. Then
+   §8.6 on the floor. The Pi was reached over Wi-Fi this session; its
+   wired address did not answer.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
    values for the same frames), then Navigate with `CourseKeeper` and
