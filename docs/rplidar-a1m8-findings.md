@@ -383,10 +383,14 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
     lost requests on the Pi's mains adapter with the motor stopped too,
     plug re-seated and taped (answered 50 / 42 / 50 and 48 / 35 / 15 of
     50, stopped / running / stopped); unit B's board answered 150 of 150,
-    twice. So unit A's adapter board is faulty, its socket or something
-    else on it, not established which, and the "poorly seated plug" above
-    may have been the board all along. The bench rig now uses unit B's
-    board ([`rig-profiles.md`](rig-profiles.md) §1 has the tables).
+    twice. That made unit A's board look faulty. **But on 2026-11-11,
+    refitted, on a supply through a buck** (trap 13), it lost nothing in
+    2600 requests with the motor stopped or running steadily, the robot
+    driving for half of them, and 2 of 20 motor starts, one reply garbled
+    [ours]. So whether the board is faulty is not established: its
+    2026-11-08 losses on AC are unexplained, and refitting it re-seated its
+    plug. The bench rig uses unit A's board again
+    ([`rig-profiles.md`](rig-profiles.md) §1 has the tables).
 13. **The LiDAR goes silent when its 5 V sags, and the Pi does not see
     it.** On a supply whose 5 V sagged (a power bank straight into the
     Pi), the LiDAR went silent for about 5 s at a time while its motor ran,
@@ -408,8 +412,9 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
 - How often a request at motor start is lost with a good board: 0 of 15
   starts for unit A re-seated and for unit B on AC (2026-11-08); 1 of 10
   on unit B's board through the buck, the robot driving, the LiDAR's 5 V
-  at about 4.89 V (2026-11-10, trap 13). Not yet measured with the LiDAR
-  on its own 5 V feed.
+  at about 4.89 V (2026-11-10, trap 13); 2 of 20 on unit A's board, the
+  same supply (2026-11-11). Not yet measured with the LiDAR on its own
+  5 V feed.
 - Keeping the motor stopped while nothing is using the LiDAR (trap 1): a
   program must hold the port, or the motor turns.
 - Behaviour on USB re-enumeration, and the reconnect state machine it implies.
