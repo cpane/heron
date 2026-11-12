@@ -198,11 +198,15 @@ supply = AA cells on EXT_PWR
   silently leave a default in place. Unknown sections are errors too, so a
   section added by a newer version is not ignored by an older one; `format`
   changes only when an old reader would misread a file.
-- **Grows by section.** The motor section comes first. Others are added by
-  their own workstreams when they need them: `[odometry]` (the OTOS's linear
-  and angular scalars, its mounting offset), `[lidar]` (mounting offset),
-  and `[geometry]` (wheel radius, track, wheelbase, maximum speed) when the
-  mixing needs it. The bench, now on mecanum wheels, gets one too.
+- **Grows by section.** The motor section came first. Since 2026-11-11 the
+  reader also takes the robot's own sections, optional, for navigation:
+  `[geometry]` (outline, speeds, brake), `[lidar]` and `[odometry]` (their
+  mountings; the OTOS's scalars), and `[navigation]` (margins); each may
+  have a `[<section>.calibration]` record. **`[geometry]` is one shared
+  section** (decided 2026-11-11): the mixing's wheel keys (wheel radius,
+  track, wheelbase) join it when the mixing needs them, so `max_speed` is
+  held once. Keys and ranges: the reader's header, and
+  [`rig-calibration.md`](rig-calibration.md) §8 for how each is measured.
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own

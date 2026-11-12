@@ -232,23 +232,23 @@ change: the profile is the rig's calibration record.
 
 ## 8. Later sections
 
-Each section's procedure is final when its workstream adds the matching
-profile section; until then the profile reader refuses a section it does
-not know ([`rig-profiles.md`](rig-profiles.md) §2), so write each number
-down with how it was found, as in `[motor.calibration]`, and move it into
-the profile once the reader takes it.
+The profile reader takes these sections since 2026-11-11
+([`rig-profiles.md`](rig-profiles.md) §2). Put each number straight into
+the profile, and how it was found into the section's own record:
+`[geometry.calibration]`, `[lidar.calibration]` and so on, free text as
+`[motor.calibration]` is. A section is all or nothing: one that is
+present needs every key, so leave a section out until all its numbers
+are measured. Check the file with `build-host/bin/rig_profile check`.
 
 | Section | Holds | Wanted by |
 |---|---|---|
-| `[geometry]`, for the mixing | Wheel radius, track, wheelbase, maximum speed. Rigs with wheels only | Motor |
-| `[geometry]`, for navigation | `length`, `width`, `max_speed`, `max_turn_rate`, `accel`, `brake` | Navigation |
+| `[geometry]` | `length`, `width`, `max_speed`, `max_turn_rate`, `accel`, `brake`. The mixing's wheel radius, track and wheelbase join it when the mixing needs them | Navigation; motor later |
 | `[lidar]` | `x`, `y`, `yaw_deg`, `height`: the LiDAR's mounting | Navigation |
 | `[odometry]` | `x`, `y`, `yaw_deg`, the OTOS's mounting; `linear_scalar`, `angular_scalar` ([`odometry-otos-reference.md`](odometry-otos-reference.md) §5, §6) | Navigation |
 | `[navigation]` | `stop_margin`, `slow_margin` | Navigation |
 
-**Open: the two `[geometry]`s.** The mixing and navigation each plan a
-`[geometry]` section. They are to become one section, or two names, when
-the profile reader takes them; not decided yet.
+**One shared `[geometry]`** (decided 2026-11-11): the mixing's wheel
+keys are added to the same section, so `max_speed` is held once.
 
 The rest of this section is navigation's checklist for phase N1
 ([`navigation-design.md`](navigation-design.md) §10, §15). Written
