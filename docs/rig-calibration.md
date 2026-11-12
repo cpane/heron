@@ -326,6 +326,12 @@ Keep the robot still until the first line prints, then:
 | Left 0.5 m (strafe, or slide it) | The direction moved turns 90° anticlockwise from forward's | Clockwise: the axes are mirrored. Stop and record it; no `yaw_deg` fixes that |
 | Turned left by hand, about 90° | The heading rises by about 90 | Falls: the heading's sign is wrong. Stop and record it |
 
+Carry the same point to the line: a mark 0.5 m ahead of the centre
+reached by the front edge is 0.4 m. **Do this on the floor Heron will
+drive on, and a hard one:** on the bench rig's carpet the OTOS read about
+27% short with no warning, and right on a board laid over it
+(2026-11-11).
+
 This settles [`navigation-design.md`](navigation-design.md) §18 item 1.
 Which frame the OTOS reports its velocity in (§18 item 5) cannot be
 checked yet: `odometry_adapter` prints no velocity.
@@ -335,11 +341,14 @@ checked yet: `odometry_adapter` prints no velocity.
 The method of [`odometry-otos-reference.md`](odometry-otos-reference.md)
 §5, now on the robot. Both stay 1.0 unless the results say otherwise.
 
-- **Angular first.** `otos_spin` on the Pi, and in a second terminal
-  `heron_teleop` to spin in place, 5 turns out and 5 back, about 5 trials.
-  Under its own motors is where the reference says to re-measure it.
+- **Angular first.** `otos_spin` on the Pi, spinning in place with the
+  remote (`heron_teleop`, the boot service, or started in a second
+  terminal), 5 turns out and 5 back, about 5 trials. Under its own motors
+  is where the reference says to re-measure it.
 - **Linear.** `otos_move`, the robot pushed or driven 1 m along a
-  straight edge, 5 trials.
+  straight edge, 5 trials, forward every time (turn it round to come
+  back). The scalar is for that floor: the bench rig's hardwood needed
+  0.908 (2026-11-11).
 
 `otos_spin`, `otos_move` and `odometry_adapter` all use the I2C bus: run
 one at a time.
