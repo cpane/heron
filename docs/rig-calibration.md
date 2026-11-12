@@ -166,6 +166,11 @@ motor_link drive -1 -1 -1 -1 --seconds 3
 
 All four wheels must turn, slowly, both ways. A wheel that does not needs a
 higher value; one that jumps off fast has more margin than it needs.
+Run this check from rest, after the wheels have stood a few minutes, and
+do not turn a wheel by hand first: the sweep raises the duty a step a
+second, so a motor is already loosened when it starts, and reads lower
+than a start from rest. On the bench rig (2026-11-11) motor 3 backward
+started at 87 in the sweep but needed 107 here.
 
 **On a rig with wheels on the floor** the robot's weight raises the duty a
 motor needs to start, so the bench's numbers do not carry over, and a
