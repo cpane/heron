@@ -67,10 +67,12 @@ re-seated.
 
 What this shows:
 
-- **Unit A's adapter board is faulty.** With it, the LiDAR lost requests
-  on AC too, even with the motor stopped and the plug taped home; with
-  unit B's, nothing on AC. Whether it is the board's micro-USB socket or
-  something else on it is not established.
+- **Unit A's adapter board looked faulty.** With it, the LiDAR lost
+  requests on AC too, even with the motor stopped and the plug taped home;
+  with unit B's, nothing on AC. On 2026-11-11, refitted, on the supply
+  through a buck below, it lost nothing in 2600 requests with the motor
+  stopped or running steadily, so this is not established: see "Unit A's
+  board again".
 - **On the power block, the LiDAR goes silent while its motor runs,**
   even with a good board. In the third run the misses came in two blocks
   of 10, each about 5 s of silence. With the motor stopped it answered.
@@ -135,8 +137,25 @@ datasheet is not in `docs/lidar-references.md`]. The plan is a dedicated
 5 V feed to the LiDAR from the buck's spare output terminal, then the
 soak again. If the LiDAR's USB lead stays on the Pi, its VBUS must not
 also be tied to the buck's output, or the two supplies are joined; how
-unit B's adapter board takes separate power is not checked. Captures:
+an adapter board takes separate power is not checked. Captures:
 `buck-pd-1_*` to `-4_*` and `soak-1_*` to `-10_*`.
+
+#### Unit A's board again (2026-11-11)
+
+Unit A's adapter board refitted (unit A's head throughout), the same
+supply through the buck, the same 10-run soak [ours]:
+
+| Soak | Robot | Stopped or running steadily | At a motor start |
+|---|---|---|---|
+| 19:05:07–19:06:26 | Disarmed throughout | 0 lost of 1300 | 2 of 10: one no reply (40 ms after motor-on), one garbled (21 ms) |
+| 19:13:33–19:14:52 | Driving the whole soak, wheels +0.62, then +0.97 from 19:14:47 | 0 lost of 1300 | 0 of 10 |
+
+`get_throttled` `0x0`, no kernel USB errors, `heron_teleop` `motors OK,
+resets 0`. No scope this time. On this supply unit A's board did as well as
+unit B's (1 of 10 starts), so "faulty" is not established. Its failures on
+the Pi's AC adapter on 2026-11-08 are not explained: refitting it also
+re-seated its plug, and the LiDAR's 5 V on AC was never measured. The bench
+rig keeps unit A's board. Captures: `boardA-soak-*` and `boardA-drive-*`.
 
 ## 2. The profile file
 
