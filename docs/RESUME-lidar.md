@@ -55,7 +55,31 @@ The viewer needs a `.venv` built on a Python that has Tkinter; the README's
 host setup says how, and why plain `python3` can pick one without it.
 Recordings are git-ignored and live in `captures/` on this host and the Pi.
 
-**Picking up: park the motor** (section 9a), then **lifecycle hardening**
+**Decided 2026-11-11 (user):** the bench rig keeps unit A's adapter board
+(it passed on the buck's supply, section 11); the LiDAR is to get its own
+5 V feed from the buck's spare output terminal, wired by the user.
+
+**Picking up, first: the soak on the LiDAR's own 5 V feed,** once the user
+has wired it (section 11, open). Needs the Pi on, the user at the bench,
+ideally the scope on the LiDAR's red wire at its adapter board.
+
+1. Ask how the feed is wired: the LiDAR's USB lead must not also join the
+   Pi's VBUS to the buck's output. Check `ls -l /dev/rplidar` and
+   `vcgencmd get_throttled` on the Pi.
+2. Ask the user to arm and drive (`heron_teleop` runs at boot), then run
+   the soak **in the foreground** (a background one started 7 minutes
+   late on 2026-11-11):
+   `for i in 1 2 3 4 5 6 7 8 9 10; do scripts/deploy_pi.sh <user>@<pi>
+   probes/lidar_07_requests.py --phases stopped,running,stopped --count 50
+   --gap-ms 10 --timeout-ms 100 --tag feed-soak-${i}; done`
+3. Confirm the driving from `journalctl -u heron-teleop@<user>` (wheel
+   values, `motors OK, resets 0`), and list each miss's time and
+   `since_motor_s` from the `.jsonl` (`t0_wall` + `t_sent`).
+4. Compare with section 11's soaks (1499, 1498 and 1500 of 1500; motor-start
+   misses 3 of 30) and the scope's 4.85 to 4.89 V on the old path. Record
+   in `rig-profiles.md` §1 and findings trap 13 and "Still open".
+
+**Then: park the motor** (section 9a), then **lifecycle hardening**
 (section 9b): restart the same `Lidar` repeatedly; unplug and replug with
 reconnection (needs someone at the Pi to pull the cable); measure and
 shorten the ~1 s `stop()`. Then mode 3, once something independent can
