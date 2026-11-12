@@ -208,3 +208,12 @@ driving, a scope on its 5 V never below 4.70 V; the block's own 5 V reads
 reads 4.85 to 4.89 V, so a dedicated feed is planned. `rig-profiles.md`
 §1, "The power block through a buck"; findings trap 13. Bears on
 "Picking up" 6 (power for the LiDAR).
+
+### From LiDAR, 2026-11-11: unit A's adapter board is back, and passed
+
+[ours] "Picking up" 6 says unit A's adapter board is faulty and the bench
+rig uses unit B's. On 2026-11-11 unit A's board was refitted and, on the
+supply through the buck, answered 1500 of 1500 requests with the robot
+driving (1498 of 1500 disarmed, both misses at motor starts). Whether it
+is faulty is no longer established; the bench rig keeps it.
+`rig-profiles.md` §1, "Unit A's board again"; findings trap 12.
