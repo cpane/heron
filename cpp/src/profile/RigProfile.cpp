@@ -11,7 +11,9 @@
 // comment, a header or an entry. The second walks the entries against the
 // table of known sections and keys, converting and range-checking each
 // value, then checks nothing required is missing. Every error names the
-// file and the line.
+// file and the line. The four sections that hold only numbers
+// ([geometry], [lidar], [odometry], [navigation]) share one reader,
+// readReals(), driven by a table of key, range and destination each.
 
 #include "heron/profile/RigProfile.h"
 
@@ -31,8 +33,16 @@ namespace {
 constexpr std::string_view kTopLevel = "";
 constexpr std::string_view kRig = "rig";
 constexpr std::string_view kMotor = "motor";
-constexpr std::string_view kMotorCalibration = "motor.calibration";
+constexpr std::string_view kGeometry = "geometry";
+constexpr std::string_view kLidar = "lidar";
+constexpr std::string_view kOdometry = "odometry";
+constexpr std::string_view kNavigation = "navigation";
+constexpr std::string_view kCalibrationSuffix = ".calibration";
 constexpr std::size_t kMaxRigNameLength = 32;
+
+// The OTOS's scalar register holds 0.872..1.127 (Odometry::OtosConfig).
+constexpr double kMinOtosScalar = 0.872;
+constexpr double kMaxOtosScalar = 1.127;
 
 struct Entry {
   std::string key;
@@ -275,6 +285,101 @@ void readMotor(const Section &section, MotorProfile &motor, const std::string &s
   }
 }
 
+// A number with a fraction: an optional sign, digits, at most one '.', with
+// a digit before it. Checked by hand so strtod's extras (1e3, inf, hex, .5)
+// are refused, as a whole number's junk is.
+double toReal(const Entry &entry, double min, double max, const std::string &source) {
+  const std::string_view text = entry.value;
+  std::size_t i = (!text.empty() && (text[0] == '-' || text[0] == '+')) ? 1 : 0;
+  const std::size_t firstDigit = i;
+  bool dot = false;
+  bool ok = i < text.size();
+  for (; ok && i < text.size(); ++i) {
+    if (text[i] == '.') {
+      ok = !dot && i > firstDigit;
+      dot = true;
+    } else {
+      ok = std::isdigit(static_cast<unsigned char>(text[i])) != 0;
+    }
+  }
+  if (!ok) {
+    fail(source, entry.line, "'" + entry.key + "': '" + entry.value + "' is not a number");
+  }
+  const double value = std::strtod(entry.value.c_str(), nullptr);
+  if (value < min || value > max) {
+    std::ostringstream range;
+    range << min << ".." << max;
+    fail(source, entry.line,
+         "'" + entry.key + "': " + entry.value + " is outside " + range.str());
+  }
+  return value;
+}
+
+// One key of a section that holds only numbers, and where its value goes.
+struct RealKey {
+  std::string_view key;
+  double min;
+  double max;
+  double *value;
+};
+
+void readReals(const Section &section, std::initializer_list<RealKey> keys,
+               const std::string &source) {
+  for (const Entry &entry : section.entries) {
+    const auto known = std::find_if(keys.begin(), keys.end(),
+                                    [&entry](const RealKey &k) { return k.key == entry.key; });
+    if (known == keys.end()) {
+      fail(source, entry.line, "unknown key '" + entry.key + "' in [" + section.name + "]");
+    }
+    *known->value = toReal(entry, known->min, known->max, source);
+  }
+}
+
+GeometryProfile readGeometry(const Section &section, const std::string &source) {
+  GeometryProfile g;
+  readReals(section,
+            {{"length", 0.05, 3.0, &g.length},
+             {"width", 0.05, 3.0, &g.width},
+             {"max_speed", 0.01, 5.0, &g.maxSpeed},
+             {"max_turn_rate", 0.01, 20.0, &g.maxTurnRate},
+             {"accel", 0.01, 10.0, &g.accel},
+             {"brake", 0.01, 20.0, &g.brake}},
+            source);
+  return g;
+}
+
+LidarProfile readLidar(const Section &section, const std::string &source) {
+  LidarProfile l;
+  readReals(section,
+            {{"x", -2.0, 2.0, &l.x},
+             {"y", -2.0, 2.0, &l.y},
+             {"yaw_deg", -180.0, 180.0, &l.yawDeg},
+             {"height", 0.0, 2.0, &l.height}},
+            source);
+  return l;
+}
+
+OdometryProfile readOdometry(const Section &section, const std::string &source) {
+  OdometryProfile o;
+  readReals(section,
+            {{"x", -2.0, 2.0, &o.x},
+             {"y", -2.0, 2.0, &o.y},
+             {"yaw_deg", -180.0, 180.0, &o.yawDeg},
+             {"linear_scalar", kMinOtosScalar, kMaxOtosScalar, &o.linearScalar},
+             {"angular_scalar", kMinOtosScalar, kMaxOtosScalar, &o.angularScalar}},
+            source);
+  return o;
+}
+
+NavigationProfile readNavigation(const Section &section, const std::string &source) {
+  NavigationProfile n;
+  readReals(section,
+            {{"stop_margin", 0.0, 1.0, &n.stopMargin},
+             {"slow_margin", 0.0, 2.0, &n.slowMargin}},
+            source);
+  return n;
+}
+
 // Every key a section needs; a missing one is reported at the section's
 // header line.
 void requireKeys(const Section &section, std::initializer_list<std::string_view> keys,
@@ -299,6 +404,19 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
   bool formatSeen = false;
   const Section *rig = nullptr;
   const Section *motor = nullptr;
+  const Section *geometry = nullptr;
+  const Section *lidar = nullptr;
+  const Section *odometry = nullptr;
+  const Section *navigation = nullptr;
+
+  // The sections that may have a [<name>.calibration], and where it goes.
+  const std::array<std::pair<std::string_view, CalibrationRecord *>, 5> calibrations = {{
+      {kMotor, &profile.motorCalibration},
+      {kGeometry, &profile.geometryCalibration},
+      {kLidar, &profile.lidarCalibration},
+      {kOdometry, &profile.odometryCalibration},
+      {kNavigation, &profile.navigationCalibration},
+  }};
 
   for (const Section &section : sections) {
     if (section.name == kTopLevel) {
@@ -309,13 +427,49 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
     } else if (section.name == kMotor) {
       readMotor(section, profile.motor, source);
       motor = &section;
-    } else if (section.name == kMotorCalibration) {
-      for (const Entry &entry : section.entries) {
-        profile.motorCalibration.emplace_back(entry.key, entry.value);
-      }
+    } else if (section.name == kGeometry) {
+      profile.geometry = readGeometry(section, source);
+      geometry = &section;
+    } else if (section.name == kLidar) {
+      profile.lidar = readLidar(section, source);
+      lidar = &section;
+    } else if (section.name == kOdometry) {
+      profile.odometry = readOdometry(section, source);
+      odometry = &section;
+    } else if (section.name == kNavigation) {
+      profile.navigation = readNavigation(section, source);
+      navigation = &section;
     } else {
-      fail(source, section.line,
-           "unknown section [" + section.name + "]; known: [rig], [motor], [motor.calibration]");
+      const auto record = std::find_if(
+          calibrations.begin(), calibrations.end(), [&section](const auto &c) {
+            return section.name == std::string(c.first) + std::string(kCalibrationSuffix);
+          });
+      if (record == calibrations.end()) {
+        fail(source, section.line,
+             "unknown section [" + section.name +
+                 "]; known: [rig], [motor], [geometry], [lidar], [odometry], [navigation], "
+                 "each but [rig] with a [<section>.calibration]");
+      }
+      for (const Entry &entry : section.entries) {
+        record->second->emplace_back(entry.key, entry.value);
+      }
+    }
+  }
+
+  // A calibration record needs its section: checked after the loop, so the
+  // two may come in either order.
+  for (const Section &section : sections) {
+    for (const auto &calibration : calibrations) {
+      const std::string_view parent = calibration.first;
+      if (section.name != std::string(parent) + std::string(kCalibrationSuffix)) {
+        continue;
+      }
+      const bool parentSeen = std::any_of(sections.begin(), sections.end(),
+                                          [parent](const Section &s) { return s.name == parent; });
+      if (!parentSeen) {
+        fail(source, section.line,
+             "[" + section.name + "] has no [" + std::string(parent) + "] section to record");
+      }
     }
   }
 
@@ -332,6 +486,24 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
   requireKeys(*rig, {"name", "platform"}, source);
   requireKeys(*motor, {"terminal", "sign", "ramp_per_ms", "min_duty_forward", "min_duty_backward"},
               source);
+  if (geometry != nullptr) {
+    requireKeys(*geometry, {"length", "width", "max_speed", "max_turn_rate", "accel", "brake"},
+                source);
+  }
+  if (lidar != nullptr) {
+    requireKeys(*lidar, {"x", "y", "yaw_deg", "height"}, source);
+  }
+  if (odometry != nullptr) {
+    requireKeys(*odometry, {"x", "y", "yaw_deg", "linear_scalar", "angular_scalar"}, source);
+  }
+  if (navigation != nullptr) {
+    requireKeys(*navigation, {"stop_margin", "slow_margin"}, source);
+    if (profile.navigation->slowMargin < profile.navigation->stopMargin) {
+      fail(source, navigation->line,
+           "[navigation] slow_margin must be at least stop_margin: the slow zone lies outside "
+           "the stop zone");
+    }
+  }
   return profile;
 }
 

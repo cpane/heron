@@ -1,6 +1,7 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-09. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-11: the profile reader takes N1's sections, one
+shared `[geometry]`; the N1 measurements next. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 which waits on N1's profile sections.**
@@ -77,23 +78,30 @@ navigation, so SwC to Manual always takes over.
   progress, the field interpolated (§8.9). The review page was updated
   to match, at the user's request.
 
+## Decided (2026-11-11)
+
+- **One shared `[geometry]` section** (user): navigation's keys
+  (length, width, max_speed, max_turn_rate, accel, brake; design §10) go
+  in now; the mixing's wheel keys (wheel radius, track, wheelbase) are
+  added to the same section by motor when the mixing needs them, so
+  `max_speed` is held once.
+
 ## Picking up
 
-1. **N1's profile sections, with the user.** `heron_robot` needs
-   `[lidar]`, `[odometry]`, `[navigation]` and navigation's `[geometry]`
-   in `profiles/<rig>.conf`; `heron_profile` refuses unknown sections
-   today (`rig-profiles.md` §2). First decide, with the user, the two
-   `[geometry]`s: the mixing's planned one (wheel radius, track,
-   wheelbase, max speed) and navigation's (length, width, max_speed,
-   max_turn_rate, accel, brake; design §10): one section or two names.
-   Then the reader change is shared work on its own branch
-   (`navigation-cpp-design.md` §7.1 has the structs).
+1. **N1's profile sections: built 2026-11-11** (`navigation-cpp-design.md`
+   §7.1, "As built"). `heron_profile` reads `[geometry]` (one shared
+   section), `[lidar]`, `[odometry]` and `[navigation]`, each optional,
+   all-or-nothing, each with a `[<section>.calibration]` record;
+   `rig_profile show` prints them; `rig_profile_test` passes on the Mac
+   and the Pi (67 checks), and every host test still passes.
 2. **The N1 measurements on the bench rig** (`rig-calibration.md` §8,
    not yet run): needs the user at the bench. §8.3 (the LiDAR's yaw) on
    AC; §8.4 to §8.6 on the floor, the speeds and brake driven with
-   `heron_teleop` on the power block, nothing reading the LiDAR. Numbers
-   recorded on paper with how they were found until the reader takes
-   them. Also the A1M8's range noise (design §18, 6): the spread of
+   `heron_teleop` on the power block through its buck (item 6), which
+   holds the LiDAR up while driving. Each section goes into
+   `profiles/bench.conf` once all its numbers are measured, how they were
+   found in its `[<section>.calibration]`; `accel` and the margins start
+   from design §10's values. Also the A1M8's range noise (design §18, 6): the spread of
    repeated ranges to a still wall.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
@@ -109,14 +117,19 @@ navigation, so SwC to Manual always takes over.
 5. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
    weighed later, with the user, once N1 has measured the A1M8's range
    noise (design §18, 6 and 7). Do not change rule 4 before then.
-6. **Power for the LiDAR.** On the robot's power block the LiDAR goes
-   silent for seconds while its motor runs, and the Pi's under-voltage
-   flag does not catch it; on AC it answers every request (2026-11-08,
-   `rig-profiles.md` §1). Driving with the LiDAR waits on a 5 V supply
-   that holds under its motor, checked with
-   `python/probes/lidar_07_requests.py`, motor running, before driving
-   on battery. Unit A's own adapter board is faulty: the bench rig uses
-   unit B's. Give the LiDAR's cable strain relief before the robot
+6. **Power for the LiDAR.** The power block straight into the Pi fails:
+   the LiDAR goes silent for seconds while its motor runs, and the Pi's
+   under-voltage flag does not catch it (2026-11-08); the block's own
+   5 V reads 4.89 V at near-zero load. **Through a PD trigger (12 V) and
+   a 5.2 V buck it holds** (2026-11-10 and -11, folded from LiDAR's
+   Inbox) [ours]: 1499, 1498 and 1500 of 1500 requests in three soaks,
+   two with the robot driving, a scope on the LiDAR's 5 V never below
+   4.70 V. Still thin: the LiDAR's own wire reads 4.85 to 4.89 V, and
+   LiDAR plans a dedicated feed from the buck (`rig-profiles.md` §1;
+   findings traps 12 and 13). Unit A's adapter board is back on the
+   bench rig and passed; whether it was faulty is not established.
+   Check a supply with `python/probes/lidar_07_requests.py`, motor
+   running. Give the LiDAR's cable strain relief before the robot
    drives.
 
 N5's planner (2026-11-09): `planner_test` and `nav_scenario_test` pass
@@ -174,12 +187,10 @@ budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
-- **N1's numbers wait on the profile reader.** The measurement
-  checklist is `rig-calibration.md` §8 (2026-11-09), not yet run. The
-  reader rejects unknown sections, so the numbers wait on paper until N1
-  adds them, and the planned `[geometry]` section clashes with the
-  mixing's `[geometry]`. `odometry_adapter` prints no velocity, so
-  §18's velocity frame cannot be checked yet.
+- **N1's numbers are not measured.** The checklist is
+  `rig-calibration.md` §8, not yet run; the reader takes them since
+  2026-11-11. `odometry_adapter` prints no velocity, so §18's velocity
+  frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once
   `heron_robot` runs (design §18, 2).
@@ -199,21 +210,4 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-### From LiDAR, 2026-11-10: the power block passes through a buck
-
-[ours] With the Pi on 12 V from the power block through a PD trigger and
-a 5.2 V buck, the LiDAR answered 1499 of 1500 requests with the robot
-driving, a scope on its 5 V never below 4.70 V; the block's own 5 V reads
-4.89 V at near-zero load, which is why it failed. The LiDAR's wire still
-reads 4.85 to 4.89 V, so a dedicated feed is planned. `rig-profiles.md`
-§1, "The power block through a buck"; findings trap 13. Bears on
-"Picking up" 6 (power for the LiDAR).
-
-### From LiDAR, 2026-11-11: unit A's adapter board is back, and passed
-
-[ours] "Picking up" 6 says unit A's adapter board is faulty and the bench
-rig uses unit B's. On 2026-11-11 unit A's board was refitted and, on the
-supply through the buck, answered 1500 of 1500 requests with the robot
-driving (1498 of 1500 disarmed, both misses at motor starts). Whether it
-is faulty is no longer established; the bench rig keeps it.
-`rig-profiles.md` §1, "Unit A's board again"; findings trap 12.
+Nothing waiting.

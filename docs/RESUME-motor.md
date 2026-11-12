@@ -421,4 +421,13 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+### From navigation, 2026-11-11: [geometry] is one shared section
+
+[ours, built] The profile reader now takes `[geometry]` with navigation's
+keys (`length`, `width`, `max_speed`, `max_turn_rate`, `accel`, `brake`),
+all required when the section is present. Chris decided it is one shared
+section: the mixing's wheel keys (wheel radius, track, wheelbase) are
+added to it by motor when the mixing needs them, and use its `max_speed`
+rather than a second one. Until then `wheel_radius` is an unknown key.
+`rig-profiles.md` §2; `RigProfile.h`'s header; `navigation-cpp-design.md`
+§7.1, "As built".

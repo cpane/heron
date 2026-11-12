@@ -45,17 +45,27 @@
 //   date = 2026-10-25
 //   method = motor_link sweep, step 20, from rest; +10 margin
 //
+//   [geometry]
+//   length = 0.24
+//   width = 0.20
+//   ...
+//
 // The rules, each one an error if broken:
 //
 //   - A "#" starts a comment only at the start of a line, so a value may
 //     contain one. Blank lines are ignored; spaces around keys and values
 //     are trimmed.
 //   - format must be 1, before any section.
-//   - The sections are [rig], [motor] and [motor.calibration]; no others.
-//     [rig] and [motor] are required, with every key below. No section or
-//     key may appear twice.
-//   - [motor.calibration] is a free-text record of how the numbers were
-//     measured: any keys, any values, all optional.
+//   - The sections are [rig], [motor], [geometry], [lidar], [odometry] and
+//     [navigation], each with an optional [<section>.calibration]; no
+//     others. [rig] and [motor] are required; the other four are optional,
+//     but one that is present has every key below. No section or key may
+//     appear twice.
+//   - A [<section>.calibration] is a free-text record of how that section's
+//     numbers were measured: any keys, any values, all optional. It needs
+//     its section: [lidar.calibration] without [lidar] is an error.
+//   - A number with a fraction is digits with at most one ".", and an
+//     optional leading sign: 0.24, -0.05, 1. Not 1e3, not .5.
 //
 // The keys, in protocol motor order (1 front-left, 2 front-right, 3
 // back-right, 4 back-left; docs/motor-protocol.md §1):
@@ -71,9 +81,34 @@
 //             min_duty_forward   PWM duty, four of 0..255: where each motor
 //             min_duty_backward  starts turning from rest (the dead band)
 //
+// The robot's own sections, read by heron_robot for navigation
+// (docs/navigation-design.md §10). Lengths in metres, in the robot frame:
+// x forward, y left, from the wheelbase centre; angles in degrees,
+// positive turning left. How each is measured: docs/rig-calibration.md §8.
+//
+//   [geometry]   length         0.05..3     the outline, wheels included
+//                width          0.05..3
+//                max_speed      0.01..5     m/s at full command
+//                max_turn_rate  0.01..20    rad/s at full command
+//                accel          0.01..10    m/s^2, the planner's window
+//                brake          0.01..20    m/s^2 from full speed
+//   [lidar]      x, y           -2..2       the spin axis
+//                yaw_deg        -180..180   the housing's front
+//                height         0..2        above the floor
+//   [odometry]   x, y           -2..2       the OTOS's centre
+//                yaw_deg        -180..180
+//                linear_scalar  0.872..1.127, true / reported, as the OTOS
+//                angular_scalar takes them (Odometry::OtosConfig)
+//   [navigation] stop_margin    0..1        m round the outline
+//                slow_margin    0..2        at least stop_margin
+//
+// [geometry] is shared: the mixing's wheel keys (wheel radius, track,
+// wheelbase) join it when the mixing needs them, so max_speed is held once
+// (decided 2026-11-11).
+//
 // Strict on purpose: a misspelt key that was silently ignored would leave a
-// motor running on a default. When a later workstream needs a section
-// ([odometry], [lidar], [geometry]), it is added here, with its checks.
+// motor running on a default. A new section is added here, with its
+// checks.
 //
 // Which rig this Pi is
 // --------------------
@@ -103,6 +138,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -134,16 +170,62 @@ struct MotorProfile {
   std::array<std::uint8_t, kProfileMotorCount> minDutyBackward{};
 };
 
+/** The [geometry] section: the robot's outline and how fast it moves. */
+struct GeometryProfile {
+  double length{0.0};       // m, the outline along x, wheels included
+  double width{0.0};        // m, along y
+  double maxSpeed{0.0};     // m/s at full command
+  double maxTurnRate{0.0};  // rad/s at full command
+  double accel{0.0};        // m/s^2
+  double brake{0.0};        // m/s^2, stopping from full speed
+};
+
+/** The [lidar] section: where the LiDAR is mounted. */
+struct LidarProfile {
+  double x{0.0};       // m, the spin axis, robot frame
+  double y{0.0};       // m
+  double yawDeg{0.0};  // degrees, the housing's front from the robot's x
+  double height{0.0};  // m above the floor
+};
+
+/** The [odometry] section: where the OTOS is mounted, and its scalars. */
+struct OdometryProfile {
+  double x{0.0};              // m, the sensor's centre, robot frame
+  double y{0.0};              // m
+  double yawDeg{0.0};         // degrees
+  double linearScalar{1.0};   // true / reported distance
+  double angularScalar{1.0};  // true / reported angle
+};
+
+/** The [navigation] section: the margins kept round the outline. */
+struct NavigationProfile {
+  double stopMargin{0.0};  // m: nothing comes nearer
+  double slowMargin{0.0};  // m: slower within this, at least stopMargin
+};
+
+/** A [<section>.calibration]: key and value, in file order. */
+using CalibrationRecord = std::vector<std::pair<std::string, std::string>>;
+
 /**
- * One rig's profile, every value checked.
+ * One rig's profile, every value checked. The optional sections are empty
+ * when the file has none; a program that needs one says so (heron_robot
+ * refuses Assisted and Navigate without them).
  */
 struct RigProfile {
   std::string source;    // where it was read from, for messages
   std::string name;      // [rig] name
   std::string platform;  // [rig] platform, one of kKnownPlatforms
   MotorProfile motor;
-  /** [motor.calibration], key and value, in file order; empty if absent. */
-  std::vector<std::pair<std::string, std::string>> motorCalibration;
+  std::optional<GeometryProfile> geometry;
+  std::optional<LidarProfile> lidar;
+  std::optional<OdometryProfile> odometry;
+  std::optional<NavigationProfile> navigation;
+  /** Each section's [<section>.calibration]; empty if absent. */
+  CalibrationRecord motorCalibration;
+  CalibrationRecord geometryCalibration;
+  CalibrationRecord lidarCalibration;
+  CalibrationRecord odometryCalibration;
+  CalibrationRecord navigationCalibration;
 };
 
 /**

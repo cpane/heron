@@ -880,6 +880,27 @@ std::optional<NavigationProfile> navigation;
 to enter Assisted or Navigate on a rig whose profile lacks any of them,
 or whose LiDAR fails `checkBlindSpot()`.
 
+**As built (2026-11-11),** in `RigProfile.h`, with three additions:
+
+- **One shared `[geometry]`** (decided 2026-11-11): the mixing's wheel
+  keys join it when the mixing needs them, so `max_speed` is held once.
+  Until then `wheel_radius` and the like are unknown keys.
+- **Each section may have a `[<section>.calibration]`**, free text as
+  `[motor.calibration]` is, kept in `RigProfile::geometryCalibration` and
+  so on, so each number is recorded with how it was found
+  (`rig-calibration.md` §8). One without its section is an error.
+- **Ranges,** each an error outside: `length`, `width` 0.05 to 3 m;
+  `max_speed` 0.01 to 5 m/s; `max_turn_rate` 0.01 to 20 rad/s; `accel`
+  0.01 to 10 and `brake` 0.01 to 20 m/s²; `x`, `y` −2 to 2 m; `yaw_deg`
+  −180 to 180; `height` 0 to 2 m; the OTOS's scalars 0.872 to 1.127 (what
+  `OtosConfig` takes); `stop_margin` 0 to 1 m, `slow_margin` 0 to 2 m and
+  at least `stop_margin`. Numbers are digits with at most one point: no
+  exponents, units or leading point.
+
+A present section needs every key. `rig_profile show` prints all four,
+or "none". `rig_profile_test` covers each rule (67 checks, on the Mac and
+the Pi).
+
 ### 7.2 Modes and units
 
 ```cpp

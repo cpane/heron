@@ -68,6 +68,22 @@ void printFour(const char *label, const auto &values) {
   std::printf("\n");
 }
 
+// A [<section>.calibration], if there is one.
+void printCalibration(const CalibrationRecord &record) {
+  if (record.empty()) {
+    return;
+  }
+  std::printf("  calibration\n");
+  for (const auto &[key, value] : record) {
+    std::printf("    %-16s %s\n", key.c_str(), value.c_str());
+  }
+}
+
+// One number of the robot's own sections, with its unit.
+void printReal(const char *key, double value, const char *unit) {
+  std::printf("  %-19s%g %s\n", key, value, unit);
+}
+
 int runShow(const std::vector<std::string> &files) {
   if (files.size() > 1) {
     usage(2);
@@ -90,11 +106,44 @@ int runShow(const std::vector<std::string> &files) {
   printFour("min duty backward", profile.motor.minDutyBackward);
   std::printf("  %-19s%u per ms (0 to full in %u ms)\n", "ramp", profile.motor.rampPerMs,
               profile.motor.rampPerMs == 0 ? 0U : 1000U / profile.motor.rampPerMs);
-  if (!profile.motorCalibration.empty()) {
-    std::printf("\ncalibration\n");
-    for (const auto &[key, value] : profile.motorCalibration) {
-      std::printf("  %-19s%s\n", key.c_str(), value.c_str());
-    }
+  printCalibration(profile.motorCalibration);
+
+  // The robot's own sections, optional: "none" says the file has none.
+  std::printf("\n[geometry]%s\n", profile.geometry ? "" : "     none");
+  if (profile.geometry) {
+    const GeometryProfile &g = *profile.geometry;
+    printReal("length", g.length, "m");
+    printReal("width", g.width, "m");
+    printReal("max_speed", g.maxSpeed, "m/s");
+    printReal("max_turn_rate", g.maxTurnRate, "rad/s");
+    printReal("accel", g.accel, "m/s^2");
+    printReal("brake", g.brake, "m/s^2");
+    printCalibration(profile.geometryCalibration);
+  }
+  std::printf("[lidar]%s\n", profile.lidar ? "" : "        none");
+  if (profile.lidar) {
+    const LidarProfile &l = *profile.lidar;
+    printReal("x", l.x, "m");
+    printReal("y", l.y, "m");
+    printReal("yaw_deg", l.yawDeg, "degrees");
+    printReal("height", l.height, "m");
+    printCalibration(profile.lidarCalibration);
+  }
+  std::printf("[odometry]%s\n", profile.odometry ? "" : "     none");
+  if (profile.odometry) {
+    const OdometryProfile &o = *profile.odometry;
+    printReal("x", o.x, "m");
+    printReal("y", o.y, "m");
+    printReal("yaw_deg", o.yawDeg, "degrees");
+    printReal("linear_scalar", o.linearScalar, "");
+    printReal("angular_scalar", o.angularScalar, "");
+    printCalibration(profile.odometryCalibration);
+  }
+  std::printf("[navigation]%s\n", profile.navigation ? "" : "   none");
+  if (profile.navigation) {
+    printReal("stop_margin", profile.navigation->stopMargin, "m");
+    printReal("slow_margin", profile.navigation->slowMargin, "m");
+    printCalibration(profile.navigationCalibration);
   }
   return 0;
 }
