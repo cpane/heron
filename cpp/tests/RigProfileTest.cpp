@@ -54,19 +54,63 @@ const std::string kGood =
     "date = 2026-10-25\n"
     "method = sweep # with a hash, kept\n";
 
-// kGood with one line replaced: line is 1-based, as in error messages.
-std::string withLine(std::int32_t line, const std::string &replacement) {
+// kGood with the robot's own sections after it: lines 18 to 47.
+const std::string kFull =
+    kGood +
+    "\n"                         // 18
+    "[geometry]\n"               // 19
+    "length = 0.24\n"
+    "width = 0.20\n"
+    "max_speed = 0.35\n"
+    "max_turn_rate = 2.0\n"
+    "accel = 0.6\n"
+    "brake = 1\n"                // 25
+    "\n"
+    "[lidar]\n"                  // 27
+    "x = 0.06\n"
+    "y = -0.01\n"
+    "yaw_deg = 180\n"            // 30
+    "height = 0.14\n"
+    "\n"
+    "[odometry]\n"               // 33
+    "x = -0.05\n"
+    "y = 0\n"
+    "yaw_deg = -90\n"
+    "linear_scalar = 1.0\n"
+    "angular_scalar = 0.995\n"   // 38
+    "\n"
+    "[navigation]\n"             // 40
+    "stop_margin = 0.05\n"
+    "slow_margin = 0.25\n"       // 42
+    "\n"
+    "[lidar.calibration]\n"      // 44
+    "date = 2026-11-12\n"
+    "\n"
+    "# end\n";                   // 47
+
+// base with one line replaced: line is 1-based, as in error messages.
+std::string withLine(std::int32_t line, const std::string &replacement,
+                     const std::string &base = kGood) {
   std::string out;
   std::int32_t number = 0;
   std::size_t start = 0;
-  while (start < kGood.size()) {
-    const std::size_t end = kGood.find('\n', start);
+  while (start < base.size()) {
+    const std::size_t end = base.find('\n', start);
     ++number;
-    out += (number == line) ? replacement : kGood.substr(start, end - start);
+    out += (number == line) ? replacement : base.substr(start, end - start);
     out += '\n';
     start = end + 1;
   }
   return out;
+}
+
+// kFull with one line replaced.
+std::string fullWithLine(std::int32_t line, const std::string &replacement) {
+  return withLine(line, replacement, kFull);
+}
+
+bool near(double a, double b) {
+  return a - b < 1e-9 && b - a < 1e-9;
 }
 
 // The error message parsing text gives, or "" if it parses.
@@ -142,7 +186,7 @@ int main() {
 
   std::printf("Strictness\n");
 
-  checkError("an unknown section", withLine(15, "[geometry]"), ":15", "unknown section [geometry]");
+  checkError("an unknown section", withLine(15, "[wheels]"), ":15", "unknown section [wheels]");
   checkError("an unknown key", withLine(11, "ramp_per_sec = 4"), ":11",
              "unknown key 'ramp_per_sec' in [motor]");
   checkError("an unknown key in [rig]", withLine(6, "plaform = uno-l293d"), ":6",
@@ -172,6 +216,71 @@ int main() {
              "'4ms' is not a whole number");
   checkError("a ramp too fast", withLine(11, "ramp_per_ms = 2001"), ":11", "outside 0..2000");
   check("a ramp of 0 (none) is allowed", errorOf(withLine(11, "ramp_per_ms = 0")).empty());
+
+  std::printf("The robot's own sections\n");
+
+  {
+    const RigProfile p = parseRigProfile(kGood, "test.conf");
+    check("absent: each optional section is empty",
+          !p.geometry && !p.lidar && !p.odometry && !p.navigation);
+  }
+
+  {
+    const RigProfile p = parseRigProfile(kFull, "test.conf");
+    check("[geometry]", p.geometry && near(p.geometry->length, 0.24) &&
+                            near(p.geometry->width, 0.20) && near(p.geometry->maxSpeed, 0.35) &&
+                            near(p.geometry->maxTurnRate, 2.0) && near(p.geometry->accel, 0.6) &&
+                            near(p.geometry->brake, 1.0));
+    check("[lidar], a negative and a whole number read as numbers",
+          p.lidar && near(p.lidar->x, 0.06) && near(p.lidar->y, -0.01) &&
+              near(p.lidar->yawDeg, 180.0) && near(p.lidar->height, 0.14));
+    check("[odometry]", p.odometry && near(p.odometry->x, -0.05) && near(p.odometry->y, 0.0) &&
+                            near(p.odometry->yawDeg, -90.0) &&
+                            near(p.odometry->linearScalar, 1.0) &&
+                            near(p.odometry->angularScalar, 0.995));
+    check("[navigation]", p.navigation && near(p.navigation->stopMargin, 0.05) &&
+                              near(p.navigation->slowMargin, 0.25));
+    check("[lidar.calibration] kept; the others empty",
+          p.lidarCalibration.size() == 1 && p.lidarCalibration[0].second == "2026-11-12" &&
+              p.geometryCalibration.empty() && p.motorCalibration.size() == 2);
+  }
+
+  checkError("a key missing from [geometry]", fullWithLine(23, "# none"), ":19",
+             "[geometry] is missing 'max_turn_rate'");
+  checkError("a key missing from [odometry]", fullWithLine(38, "# none"), ":33",
+             "[odometry] is missing 'angular_scalar'");
+  checkError("an unknown key in [lidar]", fullWithLine(30, "yaw = 180"), ":30",
+             "unknown key 'yaw' in [lidar]");
+  checkError("the mixing's keys are not there yet", fullWithLine(25, "wheel_radius = 0.03"), ":25",
+             "unknown key 'wheel_radius' in [geometry]");
+  checkError("a length of 0", fullWithLine(20, "length = 0"), ":20", "0 is outside 0.05..3");
+  checkError("a yaw past 180", fullWithLine(30, "yaw_deg = 181"), ":30", "181 is outside -180..180");
+  checkError("a scalar the OTOS cannot hold", fullWithLine(38, "angular_scalar = 1.2"), ":38",
+             "1.2 is outside 0.872..1.127");
+  checkError("a number with a unit", fullWithLine(20, "length = 0.24m"), ":20",
+             "'0.24m' is not a number");
+  checkError("an exponent", fullWithLine(20, "length = 2e-1"), ":20", "'2e-1' is not a number");
+  checkError("no digit before the point", fullWithLine(20, "length = .24"), ":20",
+             "'.24' is not a number");
+  checkError("two points", fullWithLine(20, "length = 0.2.4"), ":20", "'0.2.4' is not a number");
+  checkError("a sign alone", fullWithLine(28, "x = -"), ":28", "'-' is not a number");
+  checkError("slow inside stop", fullWithLine(42, "slow_margin = 0.04"), ":40",
+             "slow_margin must be at least stop_margin");
+  check("slow equal to stop is allowed", errorOf(fullWithLine(42, "slow_margin = 0.05")).empty());
+  {
+    // [navigation.calibration] while there is a [navigation]: fine. Then
+    // with [navigation] renamed away, the record has nothing to describe.
+    check("a record for a section that is present",
+          errorOf(fullWithLine(44, "[navigation.calibration]")).empty());
+    std::string noNav = fullWithLine(44, "[navigation.calibration]");
+    noNav = withLine(40, "[geometry.calibration]", noNav);
+    noNav = withLine(41, "# none", noNav);
+    noNav = withLine(42, "# none", noNav);
+    checkError("a record whose section is missing", noNav, ":44",
+               "[navigation.calibration] has no [navigation] section to record");
+  }
+  checkError("no record for [rig]", withLine(15, "[rig.calibration]"), ":15",
+             "unknown section [rig.calibration]");
 
   std::printf("Rig names\n");
 
