@@ -120,6 +120,14 @@ checked on the Pi).
    `heron_teleop`, from the Pi's USB 5 V. Count it in any supply or
    battery sizing until LiDAR's park program exists
    (`RESUME-lidar.md` §9a).
+   Since 2026-11-10 [ours] the bench rig's Pi, and through it the LiDAR
+   and the Uno's logic, runs from the power block through a PD trigger
+   (12 V) and a 5.2 V buck; the drive motors stay on their own battery
+   (`rig-profiles.md` §1, "The power block through a buck"). Driving with
+   `heron_teleop` through LiDAR soaks on 2026-11-10 and 2026-11-11, wheels
+   up to +0.97 with the LiDAR's motor running: `motors OK, resets 0`
+   throughout. The LiDAR's own 5 V reads 4.85 to 4.89 V on this path; a
+   dedicated feed for it is planned (LiDAR's work).
 
 AFMotor's licence, once open here, was checked 2026-10-25: public domain.
 It is not used ([`motor-design.md`](motor-design.md) §3).
@@ -409,10 +417,4 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-### From LiDAR, 2026-11-10: the robot's 5 V path changed
-
-[ours] The bench rig's Pi now runs from the power block through a PD
-trigger (12 V) and a 5.2 V buck; the drive motors stay on their own
-supply. Driving with `heron_teleop` through a 10-run LiDAR soak: `motors
-OK, resets 0` throughout. `rig-profiles.md` §1, "The power block through
-a buck". Bears on open item 7 (the LiDAR's motor on the 5 V budget).
+Nothing waiting.
