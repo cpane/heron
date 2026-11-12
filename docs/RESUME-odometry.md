@@ -106,4 +106,15 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+### From navigation, 2026-11-11: the OTOS's scale depends on the floor
+
+[ours] On the bench rig, sensor 14–15 mm above the floor, tape off,
+default scalars. **Carpet:** about 405 mm pushed by hand read 297 mm
+forward and 275 mm sideways (about −27%), status 0x00, no warnings. A
+board laid on the same carpet: 517 mm and 496 mm for 500 mm.
+**Hardwood** (`otos_move`, five 1000 mm pushes along a straight edge):
+mean 1101.8 mm, +10.2%, sd 8.7 mm, correcting scalar 0.908 (0.902 to
+0.920). Your sled's wood floor read +0.2% (reference §5). The reference's
+"more than 5% points to poor tracking" and the LUT "built at 10 mm"
+[community] may bear on it: whether height explains the hardwood's +10%
+is [unverified]. Full numbers: `RESUME-navigation.md`, "Picking up" 2.
