@@ -344,7 +344,12 @@ The method of [`odometry-otos-reference.md`](odometry-otos-reference.md)
 - **Angular first.** `otos_spin` on the Pi, spinning in place with the
   remote (`heron_teleop`, the boot service, or started in a second
   terminal), 5 turns out and 5 back, about 5 trials. Under its own motors
-  is where the reference says to re-measure it.
+  is where the reference says to re-measure it. **Stop at the
+  turnaround and square it up to the mark by hand, flat on the floor**,
+  before spinning back: the probe takes the turnaround to be on the
+  mark, so an overshoot of 25° reads as +1.4% on both legs. Count the
+  turns aloud; enter the true count. The bench rig read +0.9% under its
+  motors, 0.991 (2026-11-13).
 - **Linear.** `otos_move`, the robot pushed or driven 1 m along a
   straight edge, 5 trials, forward every time (turn it round to come
   back). The scalar is for that floor: the bench rig's hardwood needed
