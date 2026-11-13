@@ -1,8 +1,8 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-11: N1 on the bench rig under way. `[lidar]` in
-the profile (yaw 180); the OTOS's axes checked, its linear scale measured
-(0.908 on hardwood, −27% on carpet); next, the angular scalar (§8.5). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-13: N1 on the bench rig under way. `[lidar]` and
+`[odometry]` in the profile (LiDAR yaw 180; OTOS scalars 0.908 linear on
+hardwood, 0.991 angular); next, the speeds and brake (§8.6). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 which waits on N1's profile sections.**
@@ -87,6 +87,13 @@ navigation, so SwC to Manual always takes over.
   added to the same section by motor when the mixing needs them, so
   `max_speed` is held once.
 
+## Decided (2026-11-13)
+
+- **`[odometry]` for the bench rig** (Chris): `linear_scalar = 0.908`,
+  for the hardwood floor at 14–15 mm, and `angular_scalar = 0.991`, from
+  motor-driven spins; both in `profiles/bench.conf` with how they were
+  found.
+
 ## Picking up
 
 1. **N1's profile sections: built 2026-11-11** (`navigation-cpp-design.md`
@@ -142,18 +149,38 @@ navigation, so SwC to Manual always takes over.
    `linear_scalar = 0.908`, for this floor and height only, with a
    caveat: the reference calls more than 5% a sign of poor tracking
    [community], and the odometry workstream's sled read +0.2% on its wood
-   floor [ours]. Not yet agreed with Chris.
+   floor [ours]. Agreed with Chris 2026-11-13.
 
-   **Next: §8.5 angular** (`otos_spin`), on the hardwood: Chris spins
-   the robot with the remote (`heron_teleop` is the boot service; left
-   stick), 5 turns one way and 5 back per trial, 5 trials; Enter at the
-   start mark resets, Enter at the end, true turns 5 per leg; `q` for
-   the table. Run it in Chris's own terminal:
-   `ssh -t <user>@<pi> '~/heron/bin/otos_spin'`. Then `[odometry]` goes
-   into the profile (x 0, y 0, yaw_deg 0, the two scalars), with an
-   `[odometry.calibration]` record saying hardwood and 14–15 mm. Then
-   §8.6 on the floor. The Pi was reached over Wi-Fi this session; its
-   wired address did not answer.
+   **§8.5 angular done 2026-11-13** [ours, `otos_spin`, hardwood,
+   spun by `heron_teleop`, out and back]. Three sessions, 20 legs, every
+   one long or about zero (−0.06% to +2.36%), mean +0.98%. The last three
+   trials, stopped and squared up by hand at the turnaround, 5 turns each
+   way: legs +1.00, +0.68, +0.64, +0.86, +1.04, +1.14%, mean **+0.89%**, sd
+   0.20%; `angular_scalar` = **0.991**. Found on the way:
+   - **The turnaround's lining up is the trial's error:** the probe
+     takes the turnaround to be on the mark, so letting the robot run
+     on 20–40° before reversing read +1.1 to +2.4% on both legs. Squared
+     up by hand there, the spread fell to 0.20%. `rig-calibration.md`
+     §8.5 now says so.
+   - **Driven spins read +0.9%; the odometry workstream's hand-spun sled
+     read −0.20%** [ours, both]. Why is not known; motor vibration on
+     the gyro is a guess [unverified]. Told odometry (its Inbox).
+   - Tilt warnings (0x01) in most trials, none when the robot was kept
+     flat at the turnaround; the heading is gyro only.
+
+   `[odometry]` is in `profiles/bench.conf` (x 0, y 0, yaw_deg 0, 0.908,
+   0.991), `rig_profile check` passes.
+
+   **Next: §8.6, the speeds and brake**, on the hardwood, driven with
+   `heron_teleop`, throttle at the top, a stopwatch and tape
+   (`rig-calibration.md` §8.6): `max_speed` over a taped 2 m, 3 runs;
+   `max_turn_rate`, turns counted in 10 s; `brake`, disarm at a mark, the
+   shortest stop of 3. Then `[geometry]` goes in (length 0.1905, width
+   0.1905, the three, and `accel` from design §10), and `[navigation]`
+   from design §10's margins: `stop_margin` at least 40 mm, or the blind
+   circle does not fit (above). The Pi answered on Wi-Fi
+   both sessions (its address is in Claude's memory); its wired address
+   did not.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
    values for the same frames), then Navigate with `CourseKeeper` and
@@ -238,9 +265,9 @@ budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
-- **N1's numbers are not measured.** The checklist is
-  `rig-calibration.md` §8, not yet run; the reader takes them since
-  2026-11-11. `odometry_adapter` prints no velocity, so §18's velocity
+- **N1's numbers are half measured:** `[lidar]` and `[odometry]` are
+  in the profile; §8.6's speeds and brake are not (`rig-calibration.md`
+  §8). `odometry_adapter` prints no velocity, so §18's velocity
   frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once
