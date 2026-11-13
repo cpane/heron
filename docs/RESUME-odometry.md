@@ -118,3 +118,15 @@ mean 1101.8 mm, +10.2%, sd 8.7 mm, correcting scalar 0.908 (0.902 to
 "more than 5% points to poor tracking" and the LUT "built at 10 mm"
 [community] may bear on it: whether height explains the hardwood's +10%
 is [unverified]. Full numbers: `RESUME-navigation.md`, "Picking up" 2.
+
+### From navigation, 2026-11-13: driven spins read +0.9%, hand spins −0.2%
+
+[ours] On the bench rig, hardwood, `otos_spin`, the robot spun in place
+by its own motors (`heron_teleop`), 5 turns out and 5 back, squared up
+by hand at the turnaround: six legs +0.64% to +1.14%, mean +0.89%, sd
+0.20%. All 20 driven legs that day read long or about zero, mean +0.98%.
+Your hand-spun sled read −0.20% (reference §5, run 3), same chip. The
+bench rig's profile now has `angular_scalar = 0.991`. Why driven spins
+differ is [unverified]: motor vibration on the gyro is a guess, untested.
+Full numbers: `RESUME-navigation.md`, "Picking up" 2, and the profile's
+`[odometry.calibration]`.
