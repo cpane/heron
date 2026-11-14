@@ -130,3 +130,16 @@ bench rig's profile now has `angular_scalar = 0.991`. Why driven spins
 differ is [unverified]: motor vibration on the gyro is a guess, untested.
 Full numbers: `RESUME-navigation.md`, "Picking up" 2, and the profile's
 `[odometry.calibration]`.
+
+### From navigation, 2026-11-14: a speed with the robot still, and sideways while driving straight
+
+[ours, seen in four runs, not studied] On the bench rig, hardwood,
+`heron_robot --lines 10` printing `PoseTracker`'s velocity (the OTOS's,
+robot frame). **Still:** after a run that ended with the robot coasting
+to a stop, x read −0.02 to −0.05 m/s and y +0.01 to +0.02 for as long as
+it was watched (over 10 s), the robot not moving; before the first run
+it read ±0.00. **Driving straight** at full speed: y read 0.05 to 0.09
+m/s to the right, and x alternated 0.31 to 0.41 from line to line.
+Whether the robot crabs or the sensor reads across is [unverified]. It
+matters to navigation: the limiter's look-ahead uses this speed.
+`RESUME-navigation.md`, "Picking up" 3.
