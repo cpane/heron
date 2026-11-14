@@ -116,6 +116,11 @@ navigation, so SwC to Manual always takes over.
   early rather than late, 7 to 10 cm short of the stop line. Stopping
   nearer it needs the limiter to report the cut and the slow zone
   apart.
+- **Design §19, P13 to P18 accepted** (Chris): a measured motion table
+  per floor, heading hold, the planner on commands, plausibility, the
+  simulator by the table, surface profiles sorted by drive with a
+  library of known surfaces. I17 to I22 (the interfaces) still to be
+  reviewed. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
 
 ## Picking up
 
@@ -458,10 +463,6 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **N1's numbers are measured** for the bench rig (2026-11-14), except
   `accel` and the margins, which are the design's starting values; and
   the strafe speed, for which `max_speed` and `min_speed` stand in.
-- **Design §19, P13 to P18** (2026-11-14): proposed, for review on
-  https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU. Nothing in it is
-  tied to hardwood (Chris): floor-dependent numbers go in surface
-  profiles (P18).
 - **Assisted stops 7 to 10 cm short of the stop line** (2026-11-14):
   under `min_speed` a cut stops. To stop nearer it, the limiter would
   report the cut's scale and the slow zone's apart; not asked for yet.

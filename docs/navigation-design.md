@@ -5,7 +5,7 @@ base into a semi-autonomous one: it knows where it is, sees obstacles,
 slides around them, and goes back to its course. **Goal and decisions
 D1 to D5 accepted 2026-11-04; the design below, P1 to P12, accepted
 2026-11-08. P13 to P18, allowing for how the robot really moves (§19),
-proposed 2026-11-14, wait on review.** Its C++ interfaces are
+accepted 2026-11-14.** Its C++ interfaces are
 [`navigation-cpp-design.md`](navigation-cpp-design.md). The libraries
 and `heron_robot`'s Manual and Assisted are built
 ([`RESUME-navigation.md`](RESUME-navigation.md)).
@@ -920,7 +920,7 @@ mapping is from general knowledge of ROS 2, not tried here.
    §6.2, end): accepted to weigh later, after the range noise is known
    and Heron has driven near walls in Assisted.
 
-## 19. Moving as the robot really moves (proposed 2026-11-14)
+## 19. Moving as the robot really moves (accepted 2026-11-14)
 
 **In short.** The plan assumed the wheels do what they are told: speed
 in proportion to the command, every direction alike, the heading
@@ -982,7 +982,7 @@ straight line through max_speed, sideways as forward) predicts a
 strafe the robot cannot make, and the planner, which slides to avoid
 (D3), would plan slides that do not happen.
 
-### 19.2 Proposals
+### 19.2 Proposals (accepted by Chris, 2026-11-14)
 
 | # | Proposal | Why |
 |---|---|---|

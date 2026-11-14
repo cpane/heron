@@ -1017,7 +1017,8 @@ status line. Changes from §7.2 and §7.3:
 
 ### 7.5 Proposed for step 2: moving as the robot moves (2026-11-14)
 
-The interfaces for design §19 (P13 to P18), to be reviewed with it; I17 to I22.
+The interfaces for design §19 (P13 to P18, accepted 2026-11-14): I17 to
+I22, still proposed; to be reviewed before `heron_motion` is written.
 Nothing here is built.
 
 | # | Decision | Why |
