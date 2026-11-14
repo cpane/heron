@@ -950,7 +950,7 @@ Manual (D5).
 | Command (fraction of full) | Forward | Sideways | Heading |
 |---|---|---|---|
 | forward 0.20, 0.39, 0.59, 1.0 | 0.19, 0.26, 0.30, 0.42 m/s | 0 to 0.09 (at full) | not measured |
-| strafe 0.3 | nothing: the wheels turn, the robot does not move | | |
+| strafe 0.3 | nothing moved (whether the wheels turned was not watched) | | |
 | strafe 0.6 | creeps back 0.05 to 0.16 | 0.13 to 0.19 m/s | turns clockwise (by eye) |
 | strafe 1.0 | about 0 | 0.28 m/s | |
 | strafe 0.6, 4.4 s, on a tape | 18 cm back | 81 cm | about 30° clockwise, steadily (≈7°/s) |
@@ -1039,3 +1039,10 @@ the method as §8.8 once it is used.
   (between 0.3 and 0.6, not yet measured).
 - Whether the drift depends on the robot's weight balance, which a
   mounted payload would change.
+- **Motors or traction?** Cheap motors explain the forward floor and may
+  explain some of the turn; the slow strafe and drift look like rollers
+  slipping on hardwood [unverified]. Two checks would tell: on the block,
+  strafe at 0.3 and 0.6 and see whether all four wheels turn evenly; and
+  the taped strafe on a rubber mat (by tape: the OTOS misreads carpet).
+  Either way the table (P13) holds; better motors would only bring it
+  nearer the ideal.
