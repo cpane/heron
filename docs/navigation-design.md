@@ -922,6 +922,21 @@ mapping is from general knowledge of ROS 2, not tried here.
 
 ## 19. Moving as the robot really moves (proposed 2026-11-14)
 
+**In short.** The plan assumed the wheels do what they are told: speed
+in proportion to the command, every direction alike, the heading
+steady. Measurements on the bench rig on hardwood show forward roughly
+holds but sideways does not: a strafe needs a large command before it
+moves at all, then goes about half as fast as forward, drifts backward
+and slowly turns, and diagonal moves are not forward plus sideways.
+Navigate gets round obstacles by sliding sideways (D3), so the planner
+would plan slides the robot cannot make. Separately, the OTOS can
+report nonsense speeds after a lift, and nothing rejects them. This
+section proposes five changes: measure what each command really does
+and share that table (P13); hold the heading during moves (P14); plan
+only moves the table says work (P15); distrust nonsense OTOS readings
+(P16); and simulate the real robot (P17). Manual and the safety limiter
+stay as they are.
+
 The design so far assumes the wheels make what they are asked: speed in
 proportion to the command, any direction alike, the heading steady.
 The bench rig on its hardwood floor does none of these, measured
