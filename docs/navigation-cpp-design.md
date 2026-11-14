@@ -1017,7 +1017,7 @@ status line. Changes from §7.2 and §7.3:
 
 ### 7.5 Proposed for step 2: moving as the robot moves (2026-11-14)
 
-The interfaces for design §19 (P13 to P17), to be reviewed with it.
+The interfaces for design §19 (P13 to P18), to be reviewed with it; I17 to I22.
 Nothing here is built.
 
 | # | Decision | Why |
@@ -1027,6 +1027,7 @@ Nothing here is built.
 | I19 | **A plan carries the command as well as the twist** (`Plan::command`), and Navigate drives the command | The twist is the prediction; driving it back through an inverse would lose what the planner chose |
 | I20 | **Heading hold is a pure class in `RobotCore`,** fed the heading, the turn stick and the table's drift each cycle | The loop stays reading and driving; the hold is tested on the Mac like `decide()` |
 | I21 | **Plausibility is `PoseTracker`'s,** by config: it already judges freshness, and every user of the pose then sees the same verdict | The limiter, perception, the planner and the status line cannot disagree about a nonsense speed |
+| I22 | **A surface is resolved once, in `heron_profile`,** by `onSurface()`: it returns the profile with that floor's numbers in place, and no library knows surfaces exist | The libraries keep taking their own configs (I6); a floor is a different set of numbers, not a different code path |
 
 ```cpp
 namespace Heron::Motion {                    // include/heron/motion/MotionTable.h
@@ -1060,12 +1061,23 @@ class MotionTable {
 };
 }  // namespace Heron::Motion
 
-namespace Heron::Profile {                   // [motion], optional
-struct MotionProfile {
+namespace Heron::Profile {                   // [surface.<name>], optional, any number
+/** P18: one floor's numbers. Each optional value overrides [geometry]'s
+ *  or [odometry]'s; points empty means no table for this floor. */
+struct SurfaceProfile {
+  std::string name;                          // the <name> in [surface.<name>]
   std::vector<Motion::MotionPoint> points;   // p01 = <direction deg> <size> <vx> <vy> <wz>
   bool mirror{true};                         // mirror = 1
+  std::optional<double> maxSpeed, minSpeed, maxTurnRate, brake;
+  std::optional<double> linearScalar, angularScalar;
+  std::vector<std::pair<std::string, std::string>> calibration;  // [surface.<name>.calibration]
 };
-// RigProfile gains std::optional<MotionProfile> motion;
+// RigProfile gains std::vector<SurfaceProfile> surfaces, and
+// std::string defaultSurface ([rig] surface = <name>, which must exist).
+/** The profile as seen on one floor: [geometry] and [odometry] with the
+ *  surface's values in place. @throws std::invalid_argument for an
+ *  unknown name. heron_robot calls it once at start-up. */
+[[nodiscard]] RigProfile onSurface(const RigProfile &profile, const std::string &name);
 }
 
 namespace Heron::Robot {
@@ -1111,10 +1123,17 @@ class HeadingHold {
 - **Navigate:** the plan's command if the plan is for this course and
   fresh (§8.7); the limiter is given its `predict()` × 1.2; anything but
   Clear stops the translation and keeps the turn rate.
-- **Without `[motion]`:** today's model (`min_speed`, `max_speed`), so the
+- **Surfaces:** `heron_robot --surface <name>` (default `[rig]
+  surface`) calls `onSurface()` once, before any library's config is
+  filled, so everything downstream sees one floor's numbers and the
+  status line names it. A chosen surface with no table refuses Assisted
+  and Navigate (`assistedRefusal()` says so).
+- **Without any `[surface.*]`:** today's model (`min_speed`, `max_speed`), so the
   tests and rigs without a table keep working.
 
-**Tests, when built:** `motion_test` (interpolation both ways against
+**Tests, when built:** `rig_profile_test` (surface sections, overrides,
+the default surface, an unknown name refused, a calibration record per
+surface); `motion_test` (interpolation both ways against
 hand tables, the mirror, the least speed, the dead band below the
 smallest size, malformed grids refused); `robot_test` (Assisted through a
 table, heading hold's sign, limit, reset and standing still, not fresh
