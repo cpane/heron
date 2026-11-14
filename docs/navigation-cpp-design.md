@@ -972,8 +972,9 @@ status line. Changes from §7.2 and §7.3:
   then `checkBlindSpot()`). Perception's and the planner's come with
   step 2.
 - **SwC is CH9, slot 8**, `kModeChannel`. Which end is Manual is a flag,
-  `--manual-is-high` (default: Low is Manual), until §18 item 4 is
-  checked; the program prints the mode whenever it changes.
+  `--manual-is-high` (default: Low is Manual); the program prints the
+  mode whenever it changes. On our transmitter SwC up reads Low (design
+  §18 item 4, 2026-11-14), so by default up is Manual, down Navigate.
 - **Not ready is stop:** a missing section, the blind spot, or the OTOS
   or LiDAR failing to start leaves Assisted `AssistedUnavailable`;
   Manual still drives. A LiDAR that stops while running goes stale, and

@@ -898,7 +898,10 @@ mapping is from general knowledge of ROS 2, not tried here.
    in N4.
 3. **The grid counts and planner weights** (§6.1, §8.2): starting values,
    settled in the simulator.
-4. **Which end of SwC is up** on our transmitter (§9).
+4. **Which end of SwC is up** on our transmitter (§9): settled 2026-11-14
+   with `heron_robot --dry-run` [ours]: SwC up reads Low (1000 side), the
+   middle Mid, down High. `heron_robot` takes Low as Manual by default, so
+   **up is Manual, middle Assisted, down Navigate**.
 5. **The frame of the OTOS's velocity:** its own (the robot's) or the
    odom frame. `PoseTracker` stores it in the robot frame either way
    (`navigation-cpp-design.md` §4.2); checked with the axes in N1.
