@@ -952,6 +952,45 @@ Manual touches nothing new: no scan, no pose, no limiter, as D5 requires.
 A test drives Manual and `heron_teleop` with the same recorded remote
 frames and compares the wheel values.
 
+### 7.4 As built, step 1: Manual and Assisted (2026-11-14)
+
+`heron_robot_core` (`src/robot/RobotCore.h`, private) holds the
+decisions; `cpp/tools/HeronRobot.cpp` is the start-up, the loop and the
+status line. Changes from §7.2 and §7.3:
+
+- **`decide(mode, armed, stick, assisted)`** is the cycle's choice, so
+  the program's loop is only reading and driving. `assisted` is
+  `nullptr` when Assisted is not ready; it carries the limiter, the
+  `[geometry]` and the `LimitInput` (scan, history, freshness, measured
+  velocity, now). It returns the wheels, the body velocity, a `Why`
+  (`Disarmed`, `Manual`, `Limited`, `AssistedUnavailable`,
+  `NavigateNotBuilt`) and the limiter's result.
+- **The settings from the profile** are four functions:
+  `toOtosConfig()` (scalars, offset), `toLidarConfig()` (`yaw_deg` as the
+  scan's mounting offset), `toLimiterConfig()` (outline halved, the
+  LiDAR's x and y, margins, brake) and `assistedRefusal()` (every section,
+  then `checkBlindSpot()`). Perception's and the planner's come with
+  step 2.
+- **SwC is CH9, slot 8**, `kModeChannel`. Which end is Manual is a flag,
+  `--manual-is-high` (default: Low is Manual), until §18 item 4 is
+  checked; the program prints the mode whenever it changes.
+- **Not ready is stop:** a missing section, the blind spot, or the OTOS
+  or LiDAR failing to start leaves Assisted `AssistedUnavailable`;
+  Manual still drives. A LiDAR that stops while running goes stale, and
+  the limiter stops (`Stale`).
+- **Strafe speed** is taken as `max_speed`: only forward was measured.
+  The limiter then overestimates a strafe's reach, the safe side.
+- **Navigate stops** (`NavigateNotBuilt`) until step 2.
+- **`robot_test`**: 5000 random frames (sticks, throttle, arming, link)
+  through `heron_teleop`'s own calls and through `decide()` in Manual,
+  with a wall ahead in the Assisted input: identical wheels. The mode
+  switch either way up; the units and their round trip; the settings
+  from `profiles/bench.conf`; Assisted refused without its sections or
+  with the blind circle outside; Assisted with a wall at 0.30 m slows full
+  forward to 0.62 of full (`Slowed`), keeps full backward, stops with no
+  scan; Navigate and disarmed stop. A hand-built scan, as
+  `limiter_test`'s, not the simulator.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9
