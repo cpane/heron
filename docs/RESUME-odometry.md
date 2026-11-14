@@ -143,3 +143,18 @@ m/s to the right, and x alternated 0.31 to 0.41 from line to line.
 Whether the robot crabs or the sensor reads across is [unverified]. It
 matters to navigation: the limiter's look-ahead uses this speed.
 `RESUME-navigation.md`, "Picking up" 3.
+
+### From navigation, 2026-11-14: nonsense speeds after a lift, called fresh
+
+[ours, five times in one session] On the bench rig, hardwood,
+`heron_robot --lines 10` printing `PoseTracker`'s velocity (the OTOS's,
+robot frame). After the robot was lifted and set down between runs, the
+forward speed read −2.6 m/s and −3.4 to −3.6 m/s for seconds, through a
+whole 3.7 s strafe left, while the sideways speed stayed sane (0.14 m/s);
+and −1.23 m/s with the robot standing disarmed. It recovered after the
+robot had driven, or stood, for a while. `PoseTracker` still called the
+pose fresh (Odometry OK, no gap). Whether the OTOS's status or warning
+bits flagged it was not printed [unverified]. Navigation proposes to
+treat such readings as not fresh (`navigation-design.md` §19, P16); what
+the OTOS is doing is yours. Log: `captures/strafe-2026-11-14.log` (not
+in git; ask navigation). `RESUME-navigation.md`, "Picking up" 3.

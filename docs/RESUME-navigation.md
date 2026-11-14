@@ -4,7 +4,10 @@ Last updated 2026-11-14: N1's profile complete for the bench rig, the
 A1M8's range noise measured; `heron_robot` step 1 (Manual and Assisted)
 built and checked on the block and on the floor: Assisted stops short of
 a box at every speed and slides along it, once the motors' dead band was
-modelled (`min_speed`); next, step 2, Navigate. Started 2026-11-04. **Every navigation library
+modelled (`min_speed`). Sideways measured: slow, drifting, needing a
+large command; design §19 (P13 to P18: a measured motion table, heading
+hold, plausibility, surface profiles per floor) proposed for review
+before step 2 (https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -326,7 +329,42 @@ navigation, so SwC to Manual always takes over.
      refused, as it should. The next start passed, and every one after
      [unexplained, once].
 
-   **Next: step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7):
+   **Sideways, 2026-11-14** [ours, `heron_robot --lines 10`, Manual,
+   hardwood, log `captures/strafe-2026-11-14.log`, Chris driving; the
+   first try had the motor battery off, so nothing moved and
+   `heron_robot` still said `motors OK`]:
+   - Strafe right at 0.3: nothing moved. At 0.6: 0.13 to 0.19 m/s right,
+     creeping back 0.05 to 0.16. At 1.0: 0.28 m/s right. Left at 0.6:
+     0.14 m/s left. About half forward's speed for the same command.
+   - Strafe at 0.6 for about 4.4 s on a tape: 32 in (81 cm) right, about
+     7 in (18 cm) back, front 34.5 in and back 30.75 in from the tape:
+     about 30° clockwise, gradually. The OTOS added up to 62 cm right
+     and 32 cm back, robot frame; half the backward is its standing
+     offset (−0.04 m/s).
+   - 45° forward-right at 0.6 (wheels 1, 0, 1, 0): 0.12 to 0.17 forward,
+     0.11 to 0.24 right. Forward 0.59 with 0.16 right: 0.32 forward, 0
+     to 0.09 right. Forward then sliding round to right: 0.15 to 0.23
+     right, no better than from rest.
+   - **The OTOS gave nonsense after lifts**, called fresh: −2.6 m/s and
+     −3.4 to −3.6 m/s forward for seconds (all of the strafe left run),
+     −1.23 m/s standing disarmed; the sideways reading stayed sane.
+     Told odometry (its Inbox).
+   - The remote's right stick reads +0.04 to +0.23 forward when pushed
+     fully right: its trim or centring [unverified].
+   - **A planner told `min_speed` per axis** (tried, not kept): scenario
+     1 passed 9 of 10 boxes, stopped for good 368 mm short of the tenth
+     (dead ahead), and ended 14 to 16 cm off the line, not 10. Per axis
+     is the wrong model: the dead band is per wheel, and sideways has
+     its own.
+
+   **Next: review design §19 and `navigation-cpp-design.md` §7.5**
+   (P13 to P18, I17 to I22): a motion table measured on the floor,
+   heading hold, the planner on commands, plausibility, the simulator by
+   the table. Then its order of work (§19.4): measure the table (half an
+   hour with the robot), Assisted through it, heading hold, the
+   simulator and planner, and only then Navigate.
+
+   **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
    floor check is round a box and back to the course (design §15). Its
    own PR. To drive: robot on the hardwood, `heron_teleop` off
@@ -420,6 +458,10 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **N1's numbers are measured** for the bench rig (2026-11-14), except
   `accel` and the margins, which are the design's starting values; and
   the strafe speed, for which `max_speed` and `min_speed` stand in.
+- **Design §19, P13 to P18** (2026-11-14): proposed, for review on
+  https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU. Nothing in it is
+  tied to hardwood (Chris): floor-dependent numbers go in surface
+  profiles (P18).
 - **Assisted stops 7 to 10 cm short of the stop line** (2026-11-14):
   under `min_speed` a cut stops. To stop nearer it, the limiter would
   report the cut's scale and the slow zone's apart; not asked for yet.

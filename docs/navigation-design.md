@@ -4,8 +4,11 @@ How the LiDAR and the odometry sensor turn Heron from a remote-controlled
 base into a semi-autonomous one: it knows where it is, sees obstacles,
 slides around them, and goes back to its course. **Goal and decisions
 D1 to D5 accepted 2026-11-04; the design below, P1 to P12, accepted
-2026-11-08.** Its C++ interfaces are
-[`navigation-cpp-design.md`](navigation-cpp-design.md). Nothing is built.
+2026-11-08. P13 to P18, allowing for how the robot really moves (§19),
+proposed 2026-11-14, wait on review.** Its C++ interfaces are
+[`navigation-cpp-design.md`](navigation-cpp-design.md). The libraries
+and `heron_robot`'s Manual and Assisted are built
+([`RESUME-navigation.md`](RESUME-navigation.md)).
 
 It builds on what exists and is measured: `Lidar` and its `Scan`
 ([`lidar-cpp-design.md`](lidar-cpp-design.md),
@@ -916,3 +919,228 @@ mapping is from general knowledge of ROS 2, not tried here.
 7. **Rule 4's alternative, a margin per side** (`navigation-cpp-design.md`
    §6.2, end): accepted to weigh later, after the range noise is known
    and Heron has driven near walls in Assisted.
+
+## 19. Moving as the robot really moves (proposed 2026-11-14)
+
+**In short.** The plan assumed the wheels do what they are told: speed
+in proportion to the command, every direction alike, the heading
+steady. Measurements on the bench rig on hardwood show forward roughly
+holds but sideways does not: a strafe needs a large command before it
+moves at all, then goes about half as fast as forward, drifts backward
+and slowly turns, and diagonal moves are not forward plus sideways.
+Navigate gets round obstacles by sliding sideways (D3), so the planner
+would plan slides the robot cannot make. Separately, the OTOS can
+report nonsense speeds after a lift, and nothing rejects them. This
+section proposes five changes: measure what each command really does
+and share that table (P13); hold the heading during moves (P14); plan
+only moves the table says work (P15); distrust nonsense OTOS readings
+(P16); and simulate the real robot (P17). None of it is tied to
+hardwood: the floor in the house is only where it was measured. Every
+number that depends on the floor lives in a named **surface profile**
+(hardwood, ceramic, gym, rubber...), one chosen when `heron_robot`
+starts, and a new floor is a new profile, calibrated by the same
+half-hour procedure (P18). Manual and the safety limiter stay as they
+are.
+
+The design so far assumes the wheels make what they are asked: speed in
+proportion to the command, any direction alike, the heading steady.
+The bench rig on its hardwood floor does none of these, measured
+2026-11-14 with `heron_robot --lines 10` (`RESUME-navigation.md`,
+"Picking up" 3) **[ours]**. This section proposes how navigation
+allows for it, before step 2 (Navigate) is built. Nothing here changes
+Manual (D5).
+
+### 19.1 What was measured
+
+| Command (fraction of full) | Forward | Sideways | Heading |
+|---|---|---|---|
+| forward 0.20, 0.39, 0.59, 1.0 | 0.19, 0.26, 0.30, 0.42 m/s | 0 to 0.09 (at full) | not measured |
+| strafe 0.3 | nothing moved (whether the wheels turned was not watched) | | |
+| strafe 0.6 | creeps back 0.05 to 0.16 | 0.13 to 0.19 m/s | turns clockwise (by eye) |
+| strafe 1.0 | about 0 | 0.28 m/s | |
+| strafe 0.6, 4.4 s, on a tape | 18 cm back | 81 cm | about 30° clockwise, steadily (≈7°/s) |
+| 45° forward-right, 0.6 | 0.12 to 0.17 | 0.11 to 0.24 | |
+| forward 0.59 and a little right | 0.32 | 0 to 0.09 | |
+| letting go, any direction | coasts at 0.6 to 0.8 m/s² | | |
+
+- **Forward** has a floor: the firmware lifts any wheel command above
+  zero to the motor's dead band, so the least it moves at is 0.16 m/s
+  (`[geometry] min_speed`, already in `heron_robot`).
+- **Sideways** needs far more command, then goes about half as fast as
+  forward, drifts back and turns. Mecanum rollers slipping on hardwood
+  is the likely cause [unverified].
+- **Combined** motion is neither the sum of its parts nor either alone:
+  45° at 0.6 drives two wheels at full and two at zero.
+- **The OTOS can report nonsense after a lift** and call it fresh:
+  −2.6 m/s and −3.6 m/s forward, held for seconds, with the robot still
+  or strafing slowly; it recovered after the robot had driven or stood
+  for a while. The limiter's look-ahead and the planner's window both
+  use this speed.
+
+So the per-direction model in `heron_robot` today (min_speed, one
+straight line through max_speed, sideways as forward) predicts a
+strafe the robot cannot make, and the planner, which slides to avoid
+(D3), would plan slides that do not happen.
+
+### 19.2 Proposals
+
+| # | Proposal | Why |
+|---|---|---|
+| P13 | **A measured motion table:** for a grid of commands (direction × size, as fractions of full drive), the vx, vy and wz the robot actually makes, measured on the floor and kept in that floor's surface profile (P18). One pure library, `heron_motion`, interpolates it both ways: a command to the twist it makes, and a direction and speed to the command that makes it, or none | One model shared by `heron_robot`, the planner and the simulator, from numbers, not formulas. It covers the dead bands, the slow strafe and the drift alike, and a rig without the section keeps today's behaviour |
+| P14 | **Heading hold in Assisted and Navigate:** with the turn stick centred and the robot translating, the turn rate is set to hold the heading taken when the stick was centred (or the motion began), from the OTOS, less the drift the table predicts. The turn stick overrides it; letting it go takes the new heading. Standing still, nothing is held | D3 keeps the heading, and nothing holds it now: a strafe turns the bench rig 7°/s. While the wheels are moving, a small turn rate shifts them unevenly without meeting the dead band, so the correction is smooth; standing still it would meet the dead band and dither |
+| P15 | **The planner chooses commands, not speeds:** its candidates are commands on a grid of directions and sizes, each imagined with the twist the table predicts; the plan carries both, and Navigate drives the command | The planner only offers what the robot can do, at the speed it will really go, so a slide it plans is a slide that happens. It replaces P9's window of speeds; the window becomes a limit on how far the predicted twist may be from the measured one |
+| P16 | **An implausible OTOS reading is not fresh:** faster than 1.5 × `max_speed`, or a jump in speed beyond what `brake` and `accel` allow, or the OTOS's tracking warning, marks the pose not fresh until it has read plausibly for 0.3 s; and **Assisted stops while the pose is not fresh**, as Navigate already does | A lift or a wheel off the ground gave seconds of nonsense, called fresh. Today a stale pose in Assisted only doubles the limiter's reaction time; with a nonsense speed that is not enough to trust |
+| P18 | **Surface profiles:** everything that depends on the floor, kept per floor, in a named section of the rig's profile, `[surface.<name>]`: the motion table, `max_speed`, `min_speed`, `max_turn_rate`, `brake`, and the OTOS's `linear_scalar` and `angular_scalar`; each with its calibration record. A rig names its default surface (`[rig] surface = hardwood`), `heron_robot --surface <name>` picks another at start-up, and the status line shows which. A surface's keys override `[geometry]` and `[odometry]`'s; a surface with no table refuses Assisted and Navigate rather than borrow another floor's  | Floors differ: the OTOS's scale moved by 10% on hardwood and 27% on carpet, coasting and slip will differ on rubber or a gym floor, and the drive is the same robot on all of them. Keeping the robot's own numbers (outline, mountings, margins) in one place and the floor's in another means a new floor is a new section, calibrated without touching the rest, and old floors stay usable |
+| P17 | **The simulator moves by the table:** `heron_nav_sim`'s base takes commands and moves as the table says, drift included, with today's lag and acceleration limits | Scenarios 1 to 4 then test the planner and heading hold against the robot as measured, not an ideal one; today they pass with motion the robot cannot make |
+
+**Known surfaces, and choosing one** (P18 continued, asked for by Chris
+on the review page). A library of named, known surfaces ships with the code,
+`profiles/surfaces/<drive>/<name>.conf` (`hardwood-1`, `ceramic-1`,
+`field-house-1`...), each one floor's section with a line saying what
+floor it is and when, on which robot, it was measured. **A surface is
+measured for a drive, not just a floor:** the same floor gives a
+different table under other motors, controller, wheels or weight, and
+robots on this codebase will get better ones (Chris). So each rig names
+its drive, `[rig] drive = <name>` (the bench rig's: `bench-mecanum`, the
+Uno and L293D shield, the yellow TT motors, its mecanum wheels and
+weight), and the library is sorted by drive: a rig only ever sees the
+known surfaces of its own drive, and a new drive starts with none. A
+rig's surface name is looked up in its own profile first, then in its
+drive's library, so a rig can use a known surface as it is or keep its
+own tuned copy. A
+navigation tool, `heron_surface`, does the robot's part: `list` (the
+known surfaces), `check <name>` (the taped forward and strafe runs,
+compared with the profile: fits or not), and `add <name>` (the §19.3
+runs one at a time, then the new section, with its calibration record;
+it stops, saving nothing, if the OTOS fails the taped check). The
+builder's set-up script (the builder workstream's, told through its
+Inbox once this is accepted) offers the known surfaces, runs the check,
+and walks a builder through adding a new one when none fits.
+
+**What the first entry looks like** (example: the numbers measured on
+2026-11-14; the table has only the points measured so far, and is filled
+to the full grid by the §19.3 runs):
+
+```
+# profiles/surfaces/bench-mecanum/hardwood-1.conf
+# Hardwood floor, indoors (the species and finish not recorded).
+# Measured on the bench rig (drive bench-mecanum), 2026-11-14.
+format = 1
+
+[surface.hardwood-1]
+max_speed = 0.42
+min_speed = 0.16
+max_turn_rate = 3.4
+brake = 0.7
+linear_scalar = 0.908
+angular_scalar = 0.991
+mirror = 1
+# The motion table: p<n> = <direction deg> <size> <vx m/s> <vy m/s> <wz rad/s>.
+# Direction counterclockwise from forward, so right is -90.
+p01 = 0 0.2 0.19 0 0
+p02 = 0 0.4 0.26 0 0
+p03 = 0 0.6 0.30 0 0
+p04 = 0 1.0 0.42 0 0
+p05 = -45 0.84 0.15 -0.17 0
+p06 = -90 0.3 0 0 0
+p07 = -90 0.6 -0.04 -0.18 -0.12
+p08 = -90 1.0 0 -0.28 0
+
+[surface.hardwood-1.calibration]
+date = 2026-11-14
+speeds = heron_robot --lines 10, Manual, the OTOS's speed held 2 s (forward); stopwatch over 2 m (max_speed)
+strafe = by tape for 0.6 over 4.4 s: 81 cm right, 18 cm back, about 30 deg clockwise; 1.0 by the OTOS
+scalars = otos_move and otos_spin, as rig-calibration.md 8.5
+brake = the coasting rate, from the OTOS's speed after letting go
+not_yet = 30 and 60 deg, sizes 0.2 to 1.0 in every direction, the turn at 1.0, the left and backward checks
+```
+
+Today these numbers sit in `profiles/bench.conf`'s `[geometry]` and
+`[odometry]`; step 3 of §19.4 moves the floor's ones here and sets
+`[rig] surface = hardwood-1` and `drive = bench-mecanum`.
+
+The limiter is unchanged: it is given the twist the table predicts for
+the command, made 20% faster so that a table measured on a good day
+cannot make it late, and it still takes the OTOS's speed for its
+look-ahead (with P16, never a nonsense one). In Assisted, a limited
+twist goes back through the table along the same direction: the command
+that makes that speed, or a stop if the direction has none that slow
+(today's `min_speed` rule, for every direction). In Navigate, the
+planner's choice keeps 8.3 cm more than the limiter (I11), so the
+limiter should rarely act; when it does, the translation stops and the
+turn rate stays.
+
+### 19.3 Measuring the table
+
+`heron_robot --lines 10` in Manual on the floor the rig drives on,
+battery charged, `heron_teleop` off; the status line first gains the
+OTOS's turn rate and its warning flags. For each command, hold it 2 s
+and take the median of the last second; set the robot down and wait a
+second before each run, since a lift upsets the OTOS (§19.1).
+
+- Directions 0°, 30°, 60° and 90° to the right; sizes 0.2, 0.4, 0.6,
+  0.8 and 1.0 of full: 20 runs. Then 90° left at 0.6 and 1.0, and
+  backward at 0.6, to check the table may be mirrored.
+- One strafe of 3 s on a tape, to check the OTOS against the floor
+  sideways, as §8.5 did forward.
+- The table is for that floor and that battery, as `linear_scalar` is
+  (`rig-calibration.md` §8), and goes into that floor's
+  `[surface.<name>]` with the floor's other numbers (P18): the OTOS's
+  scalars (§8.5), the speeds and `brake` (§8.6). **A new floor gets the
+  whole procedure**, starting with the taped forward and strafe checks:
+  if the OTOS does not track that floor (as on carpet), its table cannot
+  be trusted either, and that floor waits for another way to measure
+  motion.
+
+About 25 runs, half an hour with the robot. `rig-calibration.md` gains
+the method as §8.8 once it is used.
+
+### 19.4 Order of work
+
+1. This section reviewed; the interfaces (`navigation-cpp-design.md`
+   §7.5) reviewed.
+2. The status line's turn rate and warnings; the table measured.
+3. `heron_motion` and surface profiles (P18), the bench rig's hardwood
+   numbers moved into `[surface.hardwood]`; Assisted through the table; P16; the
+   floor checks of step 1 repeated, with a strafe at a box.
+4. Heading hold (P14), checked on the floor in Assisted.
+5. The simulator by the table (P17) and the planner on commands (P15),
+   scenarios 1 to 4 passing again.
+6. Step 2 proper: Navigate in `heron_robot`, then round a box on the
+   floor.
+7. `heron_surface` (`list`, `check`, `add`) and the library of known
+   surfaces, starting with `hardwood-1` from step 2; then the builder's
+   set-up script, in the builder workstream.
+
+### 19.5 Open
+
+- **Floors the OTOS cannot track.** Carpet read 27% short; rubber and
+  some gym finishes may too [unverified]. Such a floor needs another
+  source of motion (wheel encoders, or the LiDAR matching scans) before
+  Assisted or Navigate can use it.
+- **A known surface fits one build.** It measures one robot on one
+  floor: another builder's `hardwood-1` fits only a robot built the same
+  way (motors, wheels, weight, battery). Sorting the library by drive
+  keeps unlike robots apart, but two robots of one drive still differ a
+  little, which is why `check` comes before trusting one. What makes two
+  drives "the same" (a battery change? a payload?) is to be settled with
+  the second robot.
+- **Changing surface while running.** The OTOS's scalars are written at
+  start-up, so for now a surface is chosen when `heron_robot` starts.
+  Changing it while disarmed, or recognising the floor from the OTOS's
+  readings, is later.
+
+- Whether the table holds from day to day, battery full to flat, and
+  for other floors [unverified]; the floor-dependence of the OTOS
+  (§18) suggests not across floors.
+- Whether 4 × 5 commands is fine enough where the strafe starts
+  (between 0.3 and 0.6, not yet measured).
+- Whether the drift depends on the robot's weight balance, which a
+  mounted payload would change.
+- **Motors or traction?** Cheap motors explain the forward floor and may
+  explain some of the turn; the slow strafe and drift look like rollers
+  slipping on hardwood [unverified]. Two checks would tell: on the block,
+  strafe at 0.3 and 0.6 and see whether all four wheels turn evenly; and
+  the taped strafe on a rubber mat (by tape: the OTOS misreads carpet).
+  Either way the table (P13) holds; better motors would only bring it
+  nearer the ideal.
