@@ -264,6 +264,18 @@ target_link_libraries(heron_nav_sim
     PUBLIC heron_geometry heron_pose heron_scan_builder
     PRIVATE heron_warnings)
 
+# heron_robot's decisions: SwC as a mode, fractions of full drive to m/s and
+# back, each library's settings from the rig profile, and one cycle's
+# choice. Pure, so robot_test checks them with no hardware; the program
+# (tools/HeronRobot.cpp) owns the threads and the loop. Its header is
+# private (src/robot/), so the program and the test are given its path. docs/navigation-cpp-design.md §7.
+add_library(heron_robot_core STATIC src/robot/RobotCore.cpp)
+target_include_directories(heron_robot_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_robot_core
+    PUBLIC heron_drive heron_geometry heron_limiter heron_lidar heron_odometry heron_profile
+           heron_ibus
+    PRIVATE heron_warnings)
+
 # -- tests -------------------------------------------------------------------
 
 add_executable(ibus_parser_test tests/IBusParserTest.cpp)
@@ -380,6 +392,14 @@ target_link_libraries(nav_scenario_test
             heron_warnings)
 add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
 
+# The bench profile from the repository on the Mac; on a Pi the test falls
+# back to ~/heron/profiles, where deploy_cpp.sh puts it.
+add_executable(robot_test tests/RobotTest.cpp)
+target_include_directories(robot_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_definitions(robot_test PRIVATE HERON_PROFILE_DIR="${PROJECT_SOURCE_DIR}/profiles")
+target_link_libraries(robot_test PRIVATE heron_robot_core heron_warnings)
+add_test(NAME robot_test COMMAND robot_test)
+
 # Not a ctest: needs recordings, which are git-ignored. Driven by
 # python/tools/lidar_gapcheck.py against the Python reference.
 add_executable(scan_builder_check tests/ScanBuilderCheck.cpp)
@@ -486,3 +506,13 @@ target_link_libraries(rig_profile PRIVATE heron_profile heron_warnings)
 add_executable(heron_teleop tools/HeronTeleop.cpp)
 target_link_libraries(heron_teleop
     PRIVATE heron_remote heron_drive heron_motor heron_profile heron_warnings)
+
+# The robot program: heron_teleop grown up, with the LiDAR, the OTOS, the
+# pose tracker and the safety limiter, SwC choosing Manual, Assisted or
+# Navigate. Its decisions are heron_robot_core's, tested by robot_test;
+# the sensor libraries and the limiter come through it.
+# docs/navigation-design.md §9.
+add_executable(heron_robot tools/HeronRobot.cpp)
+target_include_directories(heron_robot PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_robot
+    PRIVATE heron_robot_core heron_remote heron_motor heron_warnings)

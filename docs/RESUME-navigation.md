@@ -1,9 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-14: N1's profile sections are all in
-`profiles/bench.conf`: `[geometry]` (0.42 m/s, 3.4 rad/s, brake 2.2),
-`[lidar]`, `[odometry]` and `[navigation]`; the A1M8's range noise
-measured (under 2 mm to 2 m); next, `heron_robot`. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-14: N1's profile complete for the bench rig, the
+A1M8's range noise measured; `heron_robot` step 1 (Manual and Assisted)
+built, tested on the Mac and the Pi, and checked in a dry run on the
+bench rig; next, the wheels on the block in Assisted. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -225,13 +225,44 @@ navigation, so SwC to Manual always takes over.
      measured noise, about 1 mm at its 0.6 to 1.5 m, to see how much of
      the margin's erosion (23.5 to 35.6 mm kept of 50 with 5 mm) is
      left. That decides how urgent rule 4's alternative is (item 5).
-3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
-   Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
-   values for the same frames), then Navigate with `CourseKeeper` and
-   `LocalPlanner`. Checks: on the block a box stops the wheels; on the
-   floor it stops short of a box at walking pace; then round a box and
-   back (design §15). Which end of SwC is up is checked with
-   `ibus_reader monitor` then.
+3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7), in three
+   steps, each its own PR (agreed with Chris 2026-11-14): 1, Manual and
+   Assisted; 2, Navigate with `CourseKeeper` and `LocalPlanner`; 3, the
+   telemetry channels (design §11). Checks: on the block a box stops the
+   wheels; on the floor it stops short of a box at walking pace; then
+   round a box and back (design §15).
+
+   **Step 1 built 2026-11-14** (§7.4 as built): `heron_robot_core`
+   (`src/robot/RobotCore.h`: the mode, the units, the settings from the
+   profile, `assistedRefusal()`, `decide()`), `cpp/tools/HeronRobot.cpp`,
+   `robot_test` (passes on the Mac and the Pi; Manual gave `heron_teleop`'s
+   wheels for 5000 random frames). Navigate stops (`NAVIGATE_NOT_BUILT`).
+   **Dry run on the bench rig, 2026-11-14** [ours, `heron_robot
+   --dry-run`, run by Chris in a terminal on the Mac, robot on the hardwood]:
+   - Start-up: profile, OTOS, LiDAR, "Assisted: ready".
+   - **SwC: up reads Low, middle Mid, down High:** up is Manual, middle
+     Assisted, down Navigate, with no flag (design §18 item 4 settled).
+   - Arming as `heron_teleop`; Manual full forward at throttle 0.61 gave
+     +0.60 on all four wheels.
+   - **Assisted, the LiDAR's points land in front** (the yaw 180 applied):
+     a wall ahead read `nearest +0.46 m`, CLEAR, just beyond the slow
+     zone (0.395 m). At +0.22 m, full forward 0.63 came out 0.18
+     (SLOWED; 0.075 / 0.25 = 0.30 of it, by hand 0.19); full back
+     unchanged. At +0.13 m, inside the stop margin: BACKING_OFF (the
+     stick not tried there). Scans 15 to 156 ms old.
+   - `heron_teleop`'s autostart is off for this (Chris, sudo, in a Mac
+     terminal); turn it back on after: `scripts/teleop_autostart.sh
+     <user>@<pi> on`.
+
+   **Next: the wheels on the block, Assisted** (design §15): the robot on
+   the block, `heron_teleop` off, Chris runs `ssh -t <user>@<pi>
+   '~/heron/bin/heron_robot'` in a Mac terminal; SwC middle, a box held
+   in front, the wheels slow and stop as it comes near, back still turns;
+   SwC up, Manual drives through it. Then the floor at walking pace
+   toward a box. **Deploy with `scripts/deploy_cpp.sh <user>@<pi>` and no
+   binary:** with a binary it also runs it, with no flags; on 2026-11-14
+   that started `heron_robot` with its motors live when a dry run was
+   meant (no wheel turned).
 4. **The planner's weights** are tuned to scenario 1's ten runs with
    little to spare (154 mm against 150, 85 mm against 100; §8.9): the
    floor settles them. `plan()` takes 15.8 ms of its 20 ms budget on
