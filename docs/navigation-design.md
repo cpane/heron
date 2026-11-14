@@ -990,8 +990,24 @@ strafe the robot cannot make, and the planner, which slides to avoid
 | P14 | **Heading hold in Assisted and Navigate:** with the turn stick centred and the robot translating, the turn rate is set to hold the heading taken when the stick was centred (or the motion began), from the OTOS, less the drift the table predicts. The turn stick overrides it; letting it go takes the new heading. Standing still, nothing is held | D3 keeps the heading, and nothing holds it now: a strafe turns the bench rig 7°/s. While the wheels are moving, a small turn rate shifts them unevenly without meeting the dead band, so the correction is smooth; standing still it would meet the dead band and dither |
 | P15 | **The planner chooses commands, not speeds:** its candidates are commands on a grid of directions and sizes, each imagined with the twist the table predicts; the plan carries both, and Navigate drives the command | The planner only offers what the robot can do, at the speed it will really go, so a slide it plans is a slide that happens. It replaces P9's window of speeds; the window becomes a limit on how far the predicted twist may be from the measured one |
 | P16 | **An implausible OTOS reading is not fresh:** faster than 1.5 × `max_speed`, or a jump in speed beyond what `brake` and `accel` allow, or the OTOS's tracking warning, marks the pose not fresh until it has read plausibly for 0.3 s; and **Assisted stops while the pose is not fresh**, as Navigate already does | A lift or a wheel off the ground gave seconds of nonsense, called fresh. Today a stale pose in Assisted only doubles the limiter's reaction time; with a nonsense speed that is not enough to trust |
-| P18 | **Surface profiles:** everything that depends on the floor, kept per floor, in a named section of the rig's profile, `[surface.<name>]`: the motion table, `max_speed`, `min_speed`, `max_turn_rate`, `brake`, and the OTOS's `linear_scalar` and `angular_scalar`; each with its calibration record. A rig names its default surface (`[rig] surface = hardwood`), `heron_robot --surface <name>` picks another at start-up, and the status line shows which. A surface's keys override `[geometry]` and `[odometry]`'s; a surface with no table refuses Assisted and Navigate rather than borrow another floor's | Floors differ: the OTOS's scale moved by 10% on hardwood and 27% on carpet, coasting and slip will differ on rubber or a gym floor, and the drive is the same robot on all of them. Keeping the robot's own numbers (outline, mountings, margins) in one place and the floor's in another means a new floor is a new section, calibrated without touching the rest, and old floors stay usable |
+| P18 | **Surface profiles:** everything that depends on the floor, kept per floor, in a named section of the rig's profile, `[surface.<name>]`: the motion table, `max_speed`, `min_speed`, `max_turn_rate`, `brake`, and the OTOS's `linear_scalar` and `angular_scalar`; each with its calibration record. A rig names its default surface (`[rig] surface = hardwood`), `heron_robot --surface <name>` picks another at start-up, and the status line shows which. A surface's keys override `[geometry]` and `[odometry]`'s; a surface with no table refuses Assisted and Navigate rather than borrow another floor's  | Floors differ: the OTOS's scale moved by 10% on hardwood and 27% on carpet, coasting and slip will differ on rubber or a gym floor, and the drive is the same robot on all of them. Keeping the robot's own numbers (outline, mountings, margins) in one place and the floor's in another means a new floor is a new section, calibrated without touching the rest, and old floors stay usable |
 | P17 | **The simulator moves by the table:** `heron_nav_sim`'s base takes commands and moves as the table says, drift included, with today's lag and acceleration limits | Scenarios 1 to 4 then test the planner and heading hold against the robot as measured, not an ideal one; today they pass with motion the robot cannot make |
+
+**Known surfaces, and choosing one** (P18 continued, asked for by Chris
+on the review page). A library of named, known surfaces ships with the code,
+`profiles/surfaces/<name>.conf` (`hardwood-1`, `ceramic-1`,
+`field-house-1`...), each one floor's section with a line saying what
+floor it is and when, on which robot, it was measured. A rig's surface
+name is looked up in its own profile first, then in the library, so a
+rig can use a known surface as it is or keep its own tuned copy. A
+navigation tool, `heron_surface`, does the robot's part: `list` (the
+known surfaces), `check <name>` (the taped forward and strafe runs,
+compared with the profile: fits or not), and `add <name>` (the §19.3
+runs one at a time, then the new section, with its calibration record;
+it stops, saving nothing, if the OTOS fails the taped check). The
+builder's set-up script (the builder workstream's, told through its
+Inbox once this is accepted) offers the known surfaces, runs the check,
+and walks a builder through adding a new one when none fits.
 
 The limiter is unchanged: it is given the twist the table predicts for
 the command, made 20% faster so that a table measured on a good day
@@ -1042,6 +1058,9 @@ the method as §8.8 once it is used.
    scenarios 1 to 4 passing again.
 6. Step 2 proper: Navigate in `heron_robot`, then round a box on the
    floor.
+7. `heron_surface` (`list`, `check`, `add`) and the library of known
+   surfaces, starting with `hardwood-1` from step 2; then the builder's
+   set-up script, in the builder workstream.
 
 ### 19.5 Open
 
@@ -1049,6 +1068,10 @@ the method as §8.8 once it is used.
   some gym finishes may too [unverified]. Such a floor needs another
   source of motion (wheel encoders, or the LiDAR matching scans) before
   Assisted or Navigate can use it.
+- **A known surface fits one build.** It measures one robot on one
+  floor: another builder's `hardwood-1` fits only a robot built the same
+  way (motors, wheels, weight, battery). The library is a starting
+  point, which is why `check` comes before trusting one.
 - **Changing surface while running.** The OTOS's scalars are written at
   start-up, so for now a surface is chosen when `heron_robot` starts.
   Changing it while disarmed, or recognising the floor from the OTOS's

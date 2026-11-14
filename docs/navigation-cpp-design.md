@@ -1078,7 +1078,17 @@ struct SurfaceProfile {
  *  surface's values in place. @throws std::invalid_argument for an
  *  unknown name. heron_robot calls it once at start-up. */
 [[nodiscard]] RigProfile onSurface(const RigProfile &profile, const std::string &name);
+// A name not in the rig's own profile is looked up in the library,
+// profiles/surfaces/<name>.conf: one [surface.<name>] and its record.
 }
+
+// heron_surface (a tool, cpp/tools/HeronSurface.cpp), for the builder's
+// set-up script to call:
+//   heron_surface list              the known surfaces: name, floor, robot, date
+//   heron_surface check <name>      taped forward and strafe runs against the profile
+//   heron_surface add <name>        the design §19.3 runs, one at a time; writes
+//                                   [surface.<name>] with its record, or nothing
+//                                   if the OTOS fails the taped check
 
 namespace Heron::Robot {
 /** P14. With the turn stick centred and a translation commanded, a turn
