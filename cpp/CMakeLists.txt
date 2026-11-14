@@ -506,3 +506,13 @@ target_link_libraries(rig_profile PRIVATE heron_profile heron_warnings)
 add_executable(heron_teleop tools/HeronTeleop.cpp)
 target_link_libraries(heron_teleop
     PRIVATE heron_remote heron_drive heron_motor heron_profile heron_warnings)
+
+# The robot program: heron_teleop grown up, with the LiDAR, the OTOS, the
+# pose tracker and the safety limiter, SwC choosing Manual, Assisted or
+# Navigate. Its decisions are heron_robot_core's, tested by robot_test;
+# the sensor libraries and the limiter come through it.
+# docs/navigation-design.md §9.
+add_executable(heron_robot tools/HeronRobot.cpp)
+target_include_directories(heron_robot PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(heron_robot
+    PRIVATE heron_robot_core heron_remote heron_motor heron_warnings)
