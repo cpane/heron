@@ -238,7 +238,7 @@ navigation, so SwC to Manual always takes over.
    `robot_test` (passes on the Mac and the Pi; Manual gave `heron_teleop`'s
    wheels for 5000 random frames). Navigate stops (`NAVIGATE_NOT_BUILT`).
    **Dry run on the bench rig, 2026-11-14** [ours, `heron_robot
-   --dry-run`, run by Chris in his own terminal, robot on the hardwood]:
+   --dry-run`, run by Chris in a terminal on the Mac, robot on the hardwood]:
    - Start-up: profile, OTOS, LiDAR, "Assisted: ready".
    - **SwC: up reads Low, middle Mid, down High:** up is Manual, middle
      Assisted, down Navigate, with no flag (design §18 item 4 settled).
@@ -250,13 +250,13 @@ navigation, so SwC to Manual always takes over.
      (SLOWED; 0.075 / 0.25 = 0.30 of it, by hand 0.19); full back
      unchanged. At +0.13 m, inside the stop margin: BACKING_OFF (the
      stick not tried there). Scans 15 to 156 ms old.
-   - `heron_teleop`'s autostart is off for this (Chris, sudo, his own
+   - `heron_teleop`'s autostart is off for this (Chris, sudo, in a Mac terminal
      terminal); turn it back on after: `scripts/teleop_autostart.sh
      <user>@<pi> on`.
 
    **Next: the wheels on the block, Assisted** (design §15): the robot on
    the block, `heron_teleop` off, Chris runs `ssh -t <user>@<pi>
-   '~/heron/bin/heron_robot'` in his own terminal; SwC middle, a box held
+   '~/heron/bin/heron_robot'` in a Mac terminal; SwC middle, a box held
    in front, the wheels slow and stop as it comes near, back still turns;
    SwC up, Manual drives through it. Then the floor at walking pace
    toward a box. **Deploy with `scripts/deploy_cpp.sh <user>@<pi>` and no
