@@ -2,8 +2,8 @@
 
 Last updated 2026-11-14: N1's profile complete for the bench rig, the
 A1M8's range noise measured; `heron_robot` step 1 (Manual and Assisted)
-built, tested on the Mac and the Pi, and checked in a dry run on the
-bench rig; next, the wheels on the block in Assisted. Started 2026-11-04. **Every navigation library
+built, tested on the Mac and the Pi, dry-run and checked with the
+wheels turning on the block; next, the floor at walking pace toward a box. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -254,15 +254,28 @@ navigation, so SwC to Manual always takes over.
      terminal); turn it back on after: `scripts/teleop_autostart.sh
      <user>@<pi> on`.
 
-   **Next: the wheels on the block, Assisted** (design §15): the robot on
-   the block, `heron_teleop` off, Chris runs `ssh -t <user>@<pi>
-   '~/heron/bin/heron_robot'` in a Mac terminal; SwC middle, a box held
-   in front, the wheels slow and stop as it comes near, back still turns;
-   SwC up, Manual drives through it. Then the floor at walking pace
-   toward a box. **Deploy with `scripts/deploy_cpp.sh <user>@<pi>` and no
+   **On the block, wheels turning, 2026-11-14** [ours, `heron_robot`,
+   motors live, the box held at the LiDAR's height, Chris watching the
+   wheels]: Assisted, box about 16 cm from the front wheels (0.26 m from
+   the centre), forward slowed to 0.46 of the stick (0.115 / 0.25, as
+   computed), all four wheels forward, slowly. The box brought in: 0.27 m
+   SLOWED (+0.97 to +0.47), 0.18 m CUT (+0.35 to +0.04), 0.13 to 0.14 m
+   BACKING_OFF, out 0.00 with the stick pushed: the wheels slowed, then
+   stopped. With the box close, back (−0.26) passed unchanged. Manual
+   (SwC up) with the box there: forward +0.20 to the wheels, turning.
+   Motors OK, no resets.
+
+   **Next: the floor, Assisted, at walking pace** (design §15): the robot
+   on the hardwood, `heron_teleop` off, `ssh -t <user>@<pi>
+   '~/heron/bin/heron_robot'` in a Mac terminal; a box **taller than
+   27 cm** (the scan plane) about 1.5 m ahead; SwC middle, throttle low,
+   straight at it: it should stop short, about 5 cm from the front edge.
+   Then faster, and at a slant (sliding along it). SwC up takes over at
+   any time. **Deploy with `scripts/deploy_cpp.sh <user>@<pi>` and no
    binary:** with a binary it also runs it, with no flags; on 2026-11-14
    that started `heron_robot` with its motors live when a dry run was
-   meant (no wheel turned).
+   meant (no wheel turned). Afterwards, `heron_teleop`'s autostart back
+   on: `scripts/teleop_autostart.sh <user>@<pi> on` (sudo).
 4. **The planner's weights** are tuned to scenario 1's ten runs with
    little to spare (154 mm against 150, 85 mm against 100; §8.9): the
    floor settles them. `plan()` takes 15.8 ms of its 20 ms budget on
