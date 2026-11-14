@@ -995,11 +995,19 @@ strafe the robot cannot make, and the planner, which slides to avoid
 
 **Known surfaces, and choosing one** (P18 continued, asked for by Chris
 on the review page). A library of named, known surfaces ships with the code,
-`profiles/surfaces/<name>.conf` (`hardwood-1`, `ceramic-1`,
+`profiles/surfaces/<drive>/<name>.conf` (`hardwood-1`, `ceramic-1`,
 `field-house-1`...), each one floor's section with a line saying what
-floor it is and when, on which robot, it was measured. A rig's surface
-name is looked up in its own profile first, then in the library, so a
-rig can use a known surface as it is or keep its own tuned copy. A
+floor it is and when, on which robot, it was measured. **A surface is
+measured for a drive, not just a floor:** the same floor gives a
+different table under other motors, controller, wheels or weight, and
+robots on this codebase will get better ones (Chris). So each rig names
+its drive, `[rig] drive = <name>` (the bench rig's: `bench-mecanum`, the
+Uno and L293D shield, the yellow TT motors, its mecanum wheels and
+weight), and the library is sorted by drive: a rig only ever sees the
+known surfaces of its own drive, and a new drive starts with none. A
+rig's surface name is looked up in its own profile first, then in its
+drive's library, so a rig can use a known surface as it is or keep its
+own tuned copy. A
 navigation tool, `heron_surface`, does the robot's part: `list` (the
 known surfaces), `check <name>` (the taped forward and strafe runs,
 compared with the profile: fits or not), and `add <name>` (the §19.3
@@ -1008,6 +1016,48 @@ it stops, saving nothing, if the OTOS fails the taped check). The
 builder's set-up script (the builder workstream's, told through its
 Inbox once this is accepted) offers the known surfaces, runs the check,
 and walks a builder through adding a new one when none fits.
+
+**What the first entry looks like** (example: the numbers measured on
+2026-11-14; the table has only the points measured so far, and is filled
+to the full grid by the §19.3 runs):
+
+```
+# profiles/surfaces/bench-mecanum/hardwood-1.conf
+# Hardwood floor, indoors (the species and finish not recorded).
+# Measured on the bench rig (drive bench-mecanum), 2026-11-14.
+format = 1
+
+[surface.hardwood-1]
+max_speed = 0.42
+min_speed = 0.16
+max_turn_rate = 3.4
+brake = 0.7
+linear_scalar = 0.908
+angular_scalar = 0.991
+mirror = 1
+# The motion table: p<n> = <direction deg> <size> <vx m/s> <vy m/s> <wz rad/s>.
+# Direction counterclockwise from forward, so right is -90.
+p01 = 0 0.2 0.19 0 0
+p02 = 0 0.4 0.26 0 0
+p03 = 0 0.6 0.30 0 0
+p04 = 0 1.0 0.42 0 0
+p05 = -45 0.84 0.15 -0.17 0
+p06 = -90 0.3 0 0 0
+p07 = -90 0.6 -0.04 -0.18 -0.12
+p08 = -90 1.0 0 -0.28 0
+
+[surface.hardwood-1.calibration]
+date = 2026-11-14
+speeds = heron_robot --lines 10, Manual, the OTOS's speed held 2 s (forward); stopwatch over 2 m (max_speed)
+strafe = by tape for 0.6 over 4.4 s: 81 cm right, 18 cm back, about 30 deg clockwise; 1.0 by the OTOS
+scalars = otos_move and otos_spin, as rig-calibration.md 8.5
+brake = the coasting rate, from the OTOS's speed after letting go
+not_yet = 30 and 60 deg, sizes 0.2 to 1.0 in every direction, the turn at 1.0, the left and backward checks
+```
+
+Today these numbers sit in `profiles/bench.conf`'s `[geometry]` and
+`[odometry]`; step 3 of §19.4 moves the floor's ones here and sets
+`[rig] surface = hardwood-1` and `drive = bench-mecanum`.
 
 The limiter is unchanged: it is given the twist the table predicts for
 the command, made 20% faster so that a table measured on a good day
@@ -1070,8 +1120,11 @@ the method as §8.8 once it is used.
   Assisted or Navigate can use it.
 - **A known surface fits one build.** It measures one robot on one
   floor: another builder's `hardwood-1` fits only a robot built the same
-  way (motors, wheels, weight, battery). The library is a starting
-  point, which is why `check` comes before trusting one.
+  way (motors, wheels, weight, battery). Sorting the library by drive
+  keeps unlike robots apart, but two robots of one drive still differ a
+  little, which is why `check` comes before trusting one. What makes two
+  drives "the same" (a battery change? a payload?) is to be settled with
+  the second robot.
 - **Changing surface while running.** The OTOS's scalars are written at
   start-up, so for now a surface is chosen when `heron_robot` starts.
   Changing it while disarmed, or recognising the floor from the OTOS's
