@@ -979,17 +979,40 @@ status line. Changes from §7.2 and §7.3:
   or LiDAR failing to start leaves Assisted `AssistedUnavailable`;
   Manual still drives. A LiDAR that stops while running goes stale, and
   the limiter stops (`Stale`).
-- **Strafe speed** is taken as `max_speed`: only forward was measured.
-  The limiter then overestimates a strafe's reach, the safe side.
+- **Speed is not in proportion to the command** (found on the floor,
+  2026-11-14): the firmware lifts any wheel command above zero to the
+  motor's dead band, so the smallest command already moves the bench
+  rig at 0.16 m/s. Per axis, `toTwist()` gives 0 at 0, otherwise
+  `min_speed + (max_speed − min_speed) × |fraction|`, from an optional
+  `[geometry] min_speed` (0 is plain proportion); the turn's floor is in
+  the same proportion. `toBodyVelocity()` turns a speed under the floor
+  into a stop, or, when `decide()` asks because only the slow zone
+  lowered it (`Slowed`), into the floor itself (0.001, one protocol
+  step): the sweep found the faster command clear for T, so the slower
+  one is. Without this the limiter believed it had slowed the robot it
+  had not, and it ran 45 mm past the stop line at 0.25 m/s. With it the
+  stop is early, 3.5 to 7 cm short of the line: under the floor a cut
+  stops even when the cut alone would have allowed the floor.
+- **`brake` is the coasting rate**, 0.7 m/s² on the bench rig: at zero
+  the motors are released, not braked.
+- **Strafe speed** is taken as forward's: only forward was measured.
+  The limiter then overestimates a strafe's reach, the safe side; pure
+  strafe from rest barely moved the bench rig (0.01 to 0.06 m/s at
+  0.6), forward and sideways together 0.13 to 0.16.
+- **`--lines N`** prints the status line N times a second (default 1),
+  with the OTOS's speed, read for the line only: Manual's decisions
+  still read nothing new.
 - **Navigate stops** (`NavigateNotBuilt`) until step 2.
 - **`robot_test`**: 5000 random frames (sticks, throttle, arming, link)
   through `heron_teleop`'s own calls and through `decide()` in Manual,
   with a wall ahead in the Assisted input: identical wheels. The mode
   switch either way up; the units and their round trip; the settings
   from `profiles/bench.conf`; Assisted refused without its sections or
-  with the blind circle outside; Assisted with a wall at 0.30 m slows full
-  forward to 0.62 of full (`Slowed`), keeps full backward, stops with no
-  scan; Navigate and disarmed stop. A hand-built scan, as
+  with the blind circle outside; the dead band's floor, both ways, and
+  plain proportion at `min_speed` 0; Assisted with a wall at 0.30 m slows
+  full forward (`Slowed`), keeps full backward, takes 0.05 forward up to
+  the floor (`Slowed` under it), stops with no scan; at 0.17 m a cut
+  under the floor stops; Navigate and disarmed stop. A hand-built scan, as
   `limiter_test`'s, not the simulator.
 
 ## 8. `heron_planner`: the local planner (N5)
