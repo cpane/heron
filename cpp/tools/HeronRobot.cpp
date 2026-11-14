@@ -37,9 +37,17 @@
 //   As heron_teleop: SwA down arms, throttle to the bottom, then the
 //   throttle sets the speed limit; right stick drives and strafes, left
 //   stick left-right turns. SwC chooses the mode: middle Assisted, one end
-//   Manual, the other Navigate. Which end is up is not yet checked (design
-//   §18 item 4): by default SwC Low is Manual; --manual-is-high swaps it.
-//   The mode is printed whenever it changes: check it before arming.
+//   Manual, the other Navigate. SwC up reads Low (design §18 item 4), so
+//   by default up is Manual and down Navigate; --manual-is-high swaps
+//   them. The mode is printed whenever it changes: check it before arming.
+//
+// The status line
+// ---------------
+//   Once a second, or --lines N times: the mode, armed, the throttle, the
+//   stick and what went out (fractions of full drive), the four wheels,
+//   the measured speed from the OTOS (m/s, x forward, y left), and in
+//   Assisted the limiter's reason, the nearest point and the scan's age.
+//   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
 // --------
@@ -94,9 +102,11 @@ constexpr std::chrono::milliseconds kPeriod(20);  // 50 Hz, the protocol's rate
 
 [[noreturn]] void usage(int status) {
   std::fprintf(status == 0 ? stdout : stderr,
-               "Usage: heron_robot [--dry-run] [--manual-is-high] [--profile FILE] [--remote DEVICE]\n"
+               "Usage: heron_robot [--dry-run] [--manual-is-high] [--lines N] [--profile FILE]\n"
+               "                   [--remote DEVICE]\n"
                "  --dry-run         everything but the motors; print the wheels\n"
                "  --manual-is-high  SwC High is Manual (default: Low is Manual)\n"
+               "  --lines N         status lines a second, 1 to 50 (default 1)\n"
                "  --profile FILE    the rig profile (default this Pi's)\n"
                "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n");
   std::exit(status);
@@ -111,6 +121,7 @@ int main(int argc, char **argv) {
 
   bool dryRun = false;
   bool manualIsHigh = false;
+  int linesPerSecond = 1;
   std::string profilePath;
   Heron::Remote::ReceiverConfig remoteConfig;  // /dev/serial0, stale after 100 ms
   // SwA on CH7, as heron_teleop: 1000 up (disarmed) and the transmitter's
@@ -125,6 +136,14 @@ int main(int argc, char **argv) {
       dryRun = true;
     } else if (arg == "--manual-is-high") {
       manualIsHigh = true;
+    } else if (arg == "--lines" && i + 1 < argc) {
+      char *end = nullptr;
+      const long n = std::strtol(argv[++i], &end, 10);
+      if (*end != '\0' || n < 1 || n > 50) {
+        std::fprintf(stderr, "ERROR: --lines takes 1 to 50, not '%s'\n", argv[i]);
+        usage(2);
+      }
+      linesPerSecond = static_cast<int>(n);
     } else if ((arg == "--profile" || arg == "--remote") && i + 1 < argc) {
       (arg == "--profile" ? profilePath : remoteConfig.serial.device) = argv[++i];
     } else {
@@ -277,7 +296,7 @@ int main(int argc, char **argv) {
         first = false;
         shownMode = mode;
         shownWhy = d.why;
-        nextLine = now + seconds(1);
+        nextLine = now + microseconds(1000000 / linesPerSecond);
 
         std::string limitText;
         if (d.limited) {
@@ -294,6 +313,17 @@ int main(int argc, char **argv) {
             limitText += "  scan " + std::to_string(duration_cast<milliseconds>(now - scan->tEnd).count()) + " ms";
           }
         }
+        // The measured speed, robot frame, read for this line only: it never
+        // reaches decide(), so Manual still reads nothing new. Against
+        // "out" x max_speed it shows whether the robot does what it is told.
+        std::string speedText;
+        if (pose) {
+          const Heron::Pose::PoseSnapshot p = pose->getLatest();
+          char text[64];
+          std::snprintf(text, sizeof(text), "  speed %+5.2f %+5.2f m/s%s", p.newest.velocity.vx,
+                        p.newest.velocity.vy, p.fresh ? "" : " (not fresh)");
+          speedText = text;
+        }
         std::string motorText = "dry run";
         if (motors) {
           const Heron::Motor::MotorsSnapshot m = motors->getLatest(now);
@@ -301,11 +331,11 @@ int main(int argc, char **argv) {
                       std::to_string(motors->getHealth().resets);
         }
         std::printf("%-8s %-8s throttle %4.2f  stick %+5.2f %+5.2f %+5.2f  out %+5.2f %+5.2f %+5.2f  "
-                    "wheels %+5.2f %+5.2f %+5.2f %+5.2f%s  %s\n",
+                    "wheels %+5.2f %+5.2f %+5.2f %+5.2f%s%s  %s\n",
                     Heron::Robot::toString(mode), armed ? "ARMED" : r.isOk() ? "WAIT" : "DISARMED",
                     throttle, stick.vx, stick.vy, stick.wz, d.body.vx, d.body.vy, d.body.wz,
-                    d.wheels[0], d.wheels[1], d.wheels[2], d.wheels[3], limitText.c_str(),
-                    motorText.c_str());
+                    d.wheels[0], d.wheels[1], d.wheels[2], d.wheels[3], speedText.c_str(),
+                    limitText.c_str(), motorText.c_str());
       }
 
       next += kPeriod;

@@ -39,10 +39,24 @@
 // Units (I2). The remote and the mixing work in fractions of full drive,
 // -1..1; the limiter and the planner in m/s and rad/s. toTwist() and
 // toBodyVelocity() are the one place the two meet, through [geometry]'s
-// max_speed and max_turn_rate. The bench rig's max_speed was measured
-// driving forward (rig-calibration.md §8.6); sideways uses the same figure
-// until a strafe speed is measured. The limiter then expects a strafe to
-// go further than it does, which is the safe side.
+// max_speed, min_speed and max_turn_rate. The bench rig's max_speed was
+// measured driving forward (rig-calibration.md §8.6); sideways uses the
+// same figure until a strafe speed is measured. The limiter then expects a
+// strafe to go further than it does, which is the safe side.
+//
+// Speed is not in proportion to the command. The firmware lifts any wheel
+// command above zero to the motor's dead band (min_duty), so on the floor
+// the smallest command already moves the robot at min_speed; measured on
+// the bench rig, 2026-11-14: 0.20, 0.39, 0.59 of full gave 0.19, 0.26,
+// 0.30 m/s, where proportion said 0.08, 0.16, 0.25. So, per axis:
+//
+//   speed = 0 at 0, otherwise min_speed + (max_speed - min_speed) x |fraction|
+//
+// and the turn the same, its floor in the same proportion (not measured
+// on its own). Back the other way, a speed under min_speed cannot be
+// driven: it stops, unless upToMinSpeed, when it goes at min_speed, the
+// least that moves. decide() asks for that only when the slow zone alone
+// lowered the command; a cut stops. min_speed 0 is plain proportion.
 //
 // Usage, one cycle (HeronRobot.cpp has it in full):
 //
@@ -92,14 +106,17 @@ inline constexpr std::size_t kModeChannel = 8;
 /** @return "MANUAL", "ASSISTED" or "NAVIGATE" */
 [[nodiscard]] const char *toString(Mode mode) noexcept;
 
-/** Fractions of full drive to m/s and rad/s, through max_speed (vx and vy)
- *  and max_turn_rate (wz). */
+/** Fractions of full drive to m/s and rad/s, through min_speed and
+ *  max_speed (vx and vy) and max_turn_rate (wz): header, "Units". */
 [[nodiscard]] Geometry::Twist toTwist(const Drive::BodyVelocity &v,
                                       const Profile::GeometryProfile &g) noexcept;
 
-/** m/s and rad/s back to fractions of full drive, each held to -1..1. */
+/** m/s and rad/s back to fractions of full drive, each held to -1..1. A
+ *  speed under min_speed (or the turn's floor) stops that axis, or with
+ *  upToMinSpeed goes at the floor, the smallest fraction that moves. */
 [[nodiscard]] Drive::BodyVelocity toBodyVelocity(const Geometry::Twist &t,
-                                                 const Profile::GeometryProfile &g) noexcept;
+                                                 const Profile::GeometryProfile &g,
+                                                 bool upToMinSpeed = false) noexcept;
 
 // -- each library's settings, from the profile (I6) ---------------------------
 

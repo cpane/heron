@@ -431,3 +431,19 @@ added to it by motor when the mixing needs them, and use its `max_speed`
 rather than a second one. Until then `wheel_radius` is an unknown key.
 `rig-profiles.md` §2; `RigProfile.h`'s header; `navigation-cpp-design.md`
 §7.1, "As built".
+
+### From navigation, 2026-11-14: the smallest command is about 40% of full speed
+
+[ours] On the bench rig, hardwood, `heron_robot` in Manual (the same
+sticks and mixing as `heron_teleop`), right stick fully forward, the
+OTOS's speed read 10 times a second and held 2 s: wheel commands 0.20,
+0.39, 0.59 gave 0.19, 0.26, 0.30 m/s; full is 0.42. `speed = 0.42 ×
+(0.38 + 0.62 × command)` fits within 0.02 m/s, which is what mapping
+1..1000 onto `min_duty`..255 predicts if speed follows the duty once
+rolling: the smallest command moves the robot at about 0.16 m/s, so slow
+driving by hand is coarse. Letting go, it coasts at 0.6 to 0.8 m/s²
+(motors released at zero). Navigation now models this
+(`[geometry] min_speed`) and changes nothing of yours; whether
+`min_duty`, measured lifted and from rest, should stay as the floor on
+the ground is yours to weigh. `RESUME-navigation.md`, "Picking up" 3;
+`RobotCore.h`, "Units".

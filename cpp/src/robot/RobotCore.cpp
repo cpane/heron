@@ -10,14 +10,53 @@
 #include "robot/RobotCore.h"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace Heron::Robot {
 
 namespace {
 
-double held(double fraction) {
-  return std::clamp(fraction, -1.0, 1.0);
+// The smallest wheel command the protocol carries, one step in 1000: the
+// least that turns the motors, at the dead band's floor.
+constexpr double kSmallestFraction = 0.001;
+
+// One axis, a fraction of full drive to a speed: nothing at 0, otherwise
+// the floor plus the rest in proportion (the motors' dead band, measured
+// 2026-11-14 on the bench rig; header, "Units").
+double toSpeed(double fraction, double full, double floor) {
+  if (fraction == 0.0) {
+    return 0.0;
+  }
+  return std::copysign(floor + (full - floor) * std::abs(fraction), fraction);
+}
+
+// One axis back. A speed under the floor cannot be driven: it stops, or,
+// with upToFloor, goes at the floor, the least that moves. Held to -1..1.
+double toFraction(double speed, double full, double floor, bool upToFloor) {
+  const double size = std::abs(speed);
+  if (size == 0.0) {
+    return 0.0;
+  }
+  double fraction = 0.0;
+  if (size < floor * (1.0 - 1e-9)) {
+    if (!upToFloor) {
+      return 0.0;
+    }
+    fraction = kSmallestFraction;
+  } else {
+    fraction = (size - floor) / (full - floor);
+    if (fraction <= 0.0) {
+      fraction = kSmallestFraction;  // the floor exactly: the least that moves
+    }
+  }
+  return std::copysign(std::min(fraction, 1.0), speed);
+}
+
+// The turn's floor, in the same proportion as the speed's: the same dead
+// band on the same wheels. Not measured on its own.
+double turnFloor(const Profile::GeometryProfile &g) {
+  return g.maxTurnRate * g.minSpeed / g.maxSpeed;
 }
 
 }  // namespace
@@ -47,13 +86,16 @@ const char *toString(Mode mode) noexcept {
 }
 
 Geometry::Twist toTwist(const Drive::BodyVelocity &v, const Profile::GeometryProfile &g) noexcept {
-  return Geometry::Twist{v.vx * g.maxSpeed, v.vy * g.maxSpeed, v.wz * g.maxTurnRate};
+  return Geometry::Twist{toSpeed(v.vx, g.maxSpeed, g.minSpeed),
+                         toSpeed(v.vy, g.maxSpeed, g.minSpeed),
+                         toSpeed(v.wz, g.maxTurnRate, turnFloor(g))};
 }
 
-Drive::BodyVelocity toBodyVelocity(const Geometry::Twist &t,
-                                   const Profile::GeometryProfile &g) noexcept {
-  return Drive::BodyVelocity{held(t.vx / g.maxSpeed), held(t.vy / g.maxSpeed),
-                             held(t.wz / g.maxTurnRate)};
+Drive::BodyVelocity toBodyVelocity(const Geometry::Twist &t, const Profile::GeometryProfile &g,
+                                   bool upToMinSpeed) noexcept {
+  return Drive::BodyVelocity{toFraction(t.vx, g.maxSpeed, g.minSpeed, upToMinSpeed),
+                             toFraction(t.vy, g.maxSpeed, g.minSpeed, upToMinSpeed),
+                             toFraction(t.wz, g.maxTurnRate, turnFloor(g), upToMinSpeed)};
 }
 
 Odometry::OtosConfig toOtosConfig(const Profile::OdometryProfile &o) {
@@ -137,7 +179,11 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       Limiter::LimitInput input = assisted->limit;
       input.command = toTwist(stick, assisted->geometry);
       const Limiter::LimitResult limited = assisted->limiter->limit(input);
-      decision.body = toBodyVelocity(limited.command, assisted->geometry);
+      // Under min_speed: up to it if only the slow zone lowered it (the
+      // sweep found the faster command clear for T, so the slower one is
+      // too); otherwise stop. Header, "Units".
+      decision.body = toBodyVelocity(limited.command, assisted->geometry,
+                                     limited.reason == Limiter::Reason::Slowed);
       decision.why = Why::Limited;
       decision.limited = limited;
       break;

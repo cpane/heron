@@ -175,6 +175,10 @@ struct GeometryProfile {
   double length{0.0};       // m, the outline along x, wheels included
   double width{0.0};        // m, along y
   double maxSpeed{0.0};     // m/s at full command
+  /** m/s at the smallest command that moves it: the motors' dead band
+   *  lifts every command above zero to at least this. Optional; 0 (the
+   *  default) is speed in proportion to the command. */
+  double minSpeed{0.0};
   double maxTurnRate{0.0};  // rad/s at full command
   double accel{0.0};        // m/s^2
   double brake{0.0};        // m/s^2, stopping from full speed

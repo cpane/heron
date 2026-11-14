@@ -2,8 +2,9 @@
 
 Last updated 2026-11-14: N1's profile complete for the bench rig, the
 A1M8's range noise measured; `heron_robot` step 1 (Manual and Assisted)
-built, tested on the Mac and the Pi, dry-run and checked with the
-wheels turning on the block; next, the floor at walking pace toward a box. Started 2026-11-04. **Every navigation library
+built and checked on the block and on the floor: Assisted stops short of
+a box at every speed and slides along it, once the motors' dead band was
+modelled (`min_speed`); next, step 2, Navigate. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -100,7 +101,18 @@ navigation, so SwC to Manual always takes over.
 - **`brake = 2.2`** (Chris), the shortest of three stops as
   `rig-calibration.md` §8.6 says, not the design's 1.0: the limiter's
   0.3 s reaction term adds 126 mm at full speed (0.42 m/s), more than
-  the longest stop measured (110 mm).
+  the longest stop measured (110 mm). **Replaced the same day**, below.
+- **`brake = 0.7` and `min_speed = 0.16`** (Chris, after the floor
+  check): the motors coast at zero, so `brake` is the coasting rate,
+  measured on the floor; and speed is not in proportion to the command
+  (the firmware's dead band), so `heron_robot` models it with a new,
+  optional `[geometry] min_speed`. 1.1, the middle stop, was tried
+  between and changed nothing (item 3).
+- **Under `min_speed`, a cut stops and the slow zone alone goes at
+  `min_speed`** (Chris agreed, "go ahead with 1 and 2"): the stop is
+  early rather than late, 7 to 10 cm short of the stop line. Stopping
+  nearer it needs the limiter to report the cut and the slow zone
+  apart.
 
 ## Picking up
 
@@ -265,17 +277,68 @@ navigation, so SwC to Manual always takes over.
    (SwC up) with the box there: forward +0.20 to the wheels, turning.
    Motors OK, no resets.
 
-   **Next: the floor, Assisted, at walking pace** (design §15): the robot
-   on the hardwood, `heron_teleop` off, `ssh -t <user>@<pi>
-   '~/heron/bin/heron_robot'` in a Mac terminal; a box **taller than
-   27 cm** (the scan plane) about 1.5 m ahead; SwC middle, throttle low,
-   straight at it: it should stop short, about 5 cm from the front edge.
-   Then faster, and at a slant (sliding along it). SwC up takes over at
-   any time. **Deploy with `scripts/deploy_cpp.sh <user>@<pi>` and no
-   binary:** with a binary it also runs it, with no flags; on 2026-11-14
-   that started `heron_robot` with its motors live when a dry run was
-   meant (no wheel turned). Afterwards, `heron_teleop`'s autostart back
-   on: `scripts/teleop_autostart.sh <user>@<pi> on` (sudo).
+   **On the floor, 2026-11-14** [ours, `heron_robot`, hardwood, a box
+   taller than 27 cm about 1.5 m ahead, Chris driving and measuring
+   from the front wheels; `--lines 10` from run 4, a status line every
+   0.1 s with the OTOS's speed]:
+
+   | Run | Model | Speed at the box | Stopped, front wheels to box | Past the stop line |
+   |---|---|---|---|---|
+   | 1, stick 0.2 | proportion, brake 2.2 | 0.08 m/s | 3.8 to 5.1 cm (LiDAR 4.5) | 5 mm |
+   | 2, stick 0.6 | proportion, brake 2.2 | 0.25 to 0.3 | 1 to 2 cm (LiDAR 0.5) | 45 mm |
+   | 3, stick 0.6 | proportion, brake 1.1 | the same | LiDAR 0.5 cm, as run 2 | 45 mm |
+   | 4, stick 0.6 | `min_speed`, brake 0.7 | 0.28 | 10 to 11 cm (LiDAR 12.5) | none, 7 cm short |
+   | 5, stick 1.0 | `min_speed`, brake 0.7 | 0.36 to 0.42 | 13 cm (LiDAR 8.5) | none, 3.5 cm short |
+
+   - **Runs 2 and 3 overshot because the robot did not slow as told.**
+     Between the slow zone and the box it kept about 0.3 m/s while the
+     command fell to 0.07; `brake` changed nothing, since near the box
+     the slow zone, not `brake`, sets the command. Manual at three
+     throttles, the OTOS's speed held 2 s: out 0.20, 0.39, 0.59 gave
+     0.19, 0.26, 0.30 m/s, where proportion said 0.08, 0.16, 0.25.
+     `speed = 0.42 × (0.38 + 0.62 × out)` fits within 0.02: the
+     firmware lifts any wheel command above zero to `min_duty`, about
+     90 of 255, and on the floor speed follows the duty. So the least
+     the robot moves at is about 0.16 m/s.
+   - **The motors coast at zero**, at 0.6 to 0.8 m/s² (the OTOS's
+     speed after letting go), and both overshoots work back to 0.7.
+     Run 5 rolled 7 cm from 0.30 m/s; 0.7 predicts 6.4.
+   - **The fix** (`RobotCore.h`, "Units"): `toTwist()` and
+     `toBodyVelocity()` model the floor; under it a cut stops and the
+     slow zone alone goes at `min_speed`; `brake` 0.7, `min_speed` 0.16.
+   - **The slide, run 6** (stick 0.6): stopped at the box with forward
+     held, forward stayed 0.00 for about 9 s while sideways passed
+     (−0.03 to −0.60); forward came back when the box's corner was
+     0.15 m to the side (half the width plus the margin, 0.145), and it
+     went on past.
+   - **Pure strafe barely moves it** [ours, one run]: wheels ±0.60
+     alone, the OTOS read 0.01 to 0.06 m/s sideways and the corner moved
+     about 3 cm in 6 s; forward and sideways together gave 0.13 to 0.16
+     m/s sideways. Wheel slip is a guess. The limiter assumes a strafe
+     is faster than this, the safe side.
+   - **The OTOS reads −0.02 to −0.05 m/s with the robot still** after a
+     run, for as long as it was watched; and 0.05 to 0.09 m/s sideways
+     at full speed straight ahead. Told odometry (its Inbox).
+   - **Told motor** (its Inbox): on the floor the smallest stick gives
+     about 40% of full speed.
+   - Start-up failed once, the Pi up 2 minutes: the OTOS's scalars read
+     back 0xA4 0x00 for 0xA4 0xF7 (the angular one not taken); Assisted
+     refused, as it should. The next start passed, and every one after
+     [unexplained, once].
+
+   **Next: step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7):
+   `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
+   floor check is round a box and back to the course (design §15). Its
+   own PR. To drive: robot on the hardwood, `heron_teleop` off
+   (`scripts/teleop_autostart.sh <user>@<pi> off`, sudo), `ssh -t
+   <user>@<pi> '~/heron/bin/heron_robot --lines 10'` in a Mac terminal;
+   SwA on, then the throttle to the bottom to arm (WAIT until then). SwC
+   up takes over at any time. **Deploy with `scripts/deploy_cpp.sh
+   <user>@<pi>` and no binary:** with a binary it also runs it, with no
+   flags; on 2026-11-14 that started `heron_robot` with its motors live
+   when a dry run was meant (no wheel turned). Afterwards,
+   `heron_teleop`'s autostart back on: `scripts/teleop_autostart.sh
+   <user>@<pi> on` (sudo).
 4. **The planner's weights** are tuned to scenario 1's ten runs with
    little to spare (154 mm against 150, 85 mm against 100; §8.9): the
    floor settles them. `plan()` takes 15.8 ms of its 20 ms budget on
@@ -355,8 +418,13 @@ and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
 - **N1's numbers are measured** for the bench rig (2026-11-14), except
-  `accel` and the margins, which are the design's starting values, and
-  the A1M8's range noise. `odometry_adapter` prints no velocity, so §18's velocity
+  `accel` and the margins, which are the design's starting values; and
+  the strafe speed, for which `max_speed` and `min_speed` stand in.
+- **Assisted stops 7 to 10 cm short of the stop line** (2026-11-14):
+  under `min_speed` a cut stops. To stop nearer it, the limiter would
+  report the cut's scale and the slow zone's apart; not asked for yet.
+- **The turn's floor** is `max_turn_rate × min_speed / max_speed`, by
+  the same dead band [unverified: not measured on its own]. `odometry_adapter` prints no velocity, so §18's velocity
   frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once

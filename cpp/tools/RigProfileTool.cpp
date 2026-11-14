@@ -115,6 +115,7 @@ int runShow(const std::vector<std::string> &files) {
     printReal("length", g.length, "m");
     printReal("width", g.width, "m");
     printReal("max_speed", g.maxSpeed, "m/s");
+    printReal("min_speed", g.minSpeed, "m/s");
     printReal("max_turn_rate", g.maxTurnRate, "rad/s");
     printReal("accel", g.accel, "m/s^2");
     printReal("brake", g.brake, "m/s^2");

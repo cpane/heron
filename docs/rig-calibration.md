@@ -242,7 +242,7 @@ are measured. Check the file with `build-host/bin/rig_profile check`.
 
 | Section | Holds | Wanted by |
 |---|---|---|
-| `[geometry]` | `length`, `width`, `max_speed`, `max_turn_rate`, `accel`, `brake`. The mixing's wheel radius, track and wheelbase join it when the mixing needs them | Navigation; motor later |
+| `[geometry]` | `length`, `width`, `max_speed`, `max_turn_rate`, `accel`, `brake`; optional `min_speed`. The mixing's wheel radius, track and wheelbase join it when the mixing needs them | Navigation; motor later |
 | `[lidar]` | `x`, `y`, `yaw_deg`, `height`: the LiDAR's mounting | Navigation |
 | `[odometry]` | `x`, `y`, `yaw_deg`, the OTOS's mounting; `linear_scalar`, `angular_scalar` ([`odometry-otos-reference.md`](odometry-otos-reference.md) §5, §6) | Navigation |
 | `[navigation]` | `stop_margin`, `slow_margin` | Navigation |
@@ -362,13 +362,16 @@ one at a time.
 
 On the floor, driven with `heron_teleop`, throttle at the top. A
 stopwatch, because no tool reads the OTOS fast enough during a drive
-(`odometry_adapter` prints once a second).
+(`odometry_adapter` prints once a second). `min_speed` and the check on
+`brake` need `heron_robot --lines 10`, which prints the OTOS's speed 10
+times a second (`heron_teleop`'s autostart off first).
 
 | Number | How |
 |---|---|
 | `max_speed` | Full forward from rest, 1 m run-up, then a taped 2 m timed front edge to front edge, 3 runs: distance / time, m/s |
 | `max_turn_rate` | Full turn stick, about 5 turns in one go, in `otos_spin` (Enter to skip the count): its `max deg/s` × the angular scalar × π / 180, rad/s. Counting turns by eye at full speed is hard: the bench rig turns about 200°/s |
-| `brake` | At full speed, disarm with SwA passing a mark; d is how far past it the robot stops: `brake` = `max_speed`² / (2d), m/s². Your reaction time is in d, so take the shortest of 3 runs: at 0.42 m/s a switch 0.1 s late adds 42 mm |
+| `min_speed` | Optional: the least the robot moves at, because the firmware lifts any wheel command above zero to `min_duty`. In Manual, the right stick fully forward at throttles about 0.2, 0.4 and 0.6, each held 2 s; read the settled `speed` against `out`. Fit `speed = max_speed × (f + (1 − f) × out)`; `min_speed` = `max_speed` × f. The bench rig: 0.19, 0.26, 0.30 m/s at 0.20, 0.39, 0.59, so f 0.38 and 0.16 m/s. Leave it out (0) only if speed follows the command in proportion |
+| `brake` | The motors coast at zero, so `brake` is the coasting rate. In `heron_robot --lines 10`, drive forward and let go of the stick: from the `speed` lines, the fall in m/s over each 0.1 s, ×10, m/s². The bench rig: 0.6 to 0.8, so 0.7, which its overshoots past the limiter's stop line also gave. The first method, disarming with SwA at a mark at full speed and taking the shortest of 3 stops, gave 2.2: too high, and the limiter stopped late (2026-11-14) |
 
 ### 8.7 Not measured
 

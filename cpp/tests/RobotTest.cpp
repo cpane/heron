@@ -177,6 +177,26 @@ int main() {
     check("fractions to SI and back: unchanged", roundTrip);
     check("faster than full: held to 1",
           same(toBodyVelocity(Twist{1.0, -1.0, 10.0}, geometry), BodyVelocity{1.0, -1.0, 1.0}));
+
+    // The dead band: the least that moves is min_speed 0.16 m/s.
+    const Twist least = toTwist(BodyVelocity{0.001, -0.001, 0.001}, geometry);
+    check("the smallest command: min_speed, not in proportion",
+          near(least.vx, 0.16026, 1e-9) && near(least.vy, -0.16026, 1e-9) &&
+              near(least.wz, 3.4 * 0.16 / 0.42 + (3.4 - 3.4 * 0.16 / 0.42) * 0.001, 1e-9));
+    check("  a fifth of full: 0.212 m/s (measured 0.19)",
+          near(toTwist(BodyVelocity{0.2, 0.0, 0.0}, geometry).vx, 0.212, 1e-12));
+    check("under min_speed: stopped",
+          same(toBodyVelocity(Twist{0.10, -0.10, 0.5}, geometry), BodyVelocity{}));
+    check("  or, asked to, the least that moves, signs kept",
+          same(toBodyVelocity(Twist{0.10, -0.10, 0.5}, geometry, true),
+               BodyVelocity{0.001, -0.001, 0.001}));
+    check("  min_speed exactly: the least that moves",
+          same(toBodyVelocity(Twist{0.16, 0.0, 0.0}, geometry), BodyVelocity{0.001, 0.0, 0.0}));
+    Heron::Profile::GeometryProfile plain = geometry;
+    plain.minSpeed = 0.0;
+    check("min_speed 0: in proportion, as before",
+          near(toTwist(BodyVelocity{0.2, 0.0, 0.2}, plain).vx, 0.084, 1e-12) &&
+              same(toBodyVelocity(Twist{0.084, 0.0, 0.0}, plain), BodyVelocity{0.2, 0.0, 0.0}));
   }
 
   std::printf("Each library's settings from the profile (I6)\n");
@@ -199,9 +219,9 @@ int main() {
               near(limiter.outline.halfWidth, 0.09525, 1e-12));
     check("  the LiDAR 8 mm behind the centre",
           near(limiter.lidarOffset.x, -0.008, 1e-12) && limiter.lidarOffset.y == 0.0);
-    check("  margins 0.05 and 0.25, brake 2.2",
+    check("  margins 0.05 and 0.25, brake 0.7",
           near(limiter.stopMarginM, 0.05, 1e-12) && near(limiter.slowMarginM, 0.25, 1e-12) &&
-              near(limiter.brakeMps2, 2.2, 1e-12));
+              near(limiter.brakeMps2, 0.7, 1e-12));
   }
 
   std::printf("Assisted refused (§7.1)\n");
@@ -306,6 +326,22 @@ int main() {
     check("wall at 3 m: unchanged, Clear",
           same(d.body, BodyVelocity{0.5, 0.2, 0.1}, 1e-12) &&
               d.limited->reason == Heron::Limiter::Reason::Clear);
+    // Under min_speed: the slow zone alone goes at the least that moves; a
+    // cut stops (header, "Units").
+    d = decide(Mode::Assisted, true, BodyVelocity{0.05, 0.0, 0.0}, &wall);
+    std::printf("        wall at 0.30 m, 0.05 forward: vx %.3f of full, %s\n", d.body.vx,
+                Heron::Limiter::toString(d.limited->reason));
+    check("  slowed under min_speed: the least that moves",
+          d.limited->reason == Heron::Limiter::Reason::Slowed && d.limited->command.vx < 0.16 &&
+              near(d.body.vx, 0.001, 1e-12));
+    const Scan veryClose = wallAhead(0.17, lidarAt, t0);
+    const AssistedInput nearWall = assistedWith(&veryClose);
+    d = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &nearWall);
+    std::printf("        wall at 0.17 m, full forward: %.3f m/s allowed, vx %.3f of full, %s\n",
+                d.limited->command.vx, d.body.vx, Heron::Limiter::toString(d.limited->reason));
+    check("  cut under min_speed: stopped",
+          d.limited->reason == Heron::Limiter::Reason::Cut && d.limited->command.vx > 0.0 &&
+              d.limited->command.vx < 0.16 && d.body.vx == 0.0);
     const AssistedInput blind = assistedWith(nullptr);
     d = decide(Mode::Assisted, true, BodyVelocity{0.5, 0.0, 0.0}, &blind);
     check("no scan: stopped, the limiter's NoScan",
