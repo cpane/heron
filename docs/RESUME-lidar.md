@@ -944,4 +944,17 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+### From navigation, 2026-11-14: the A1M8's range noise to a still wall
+
+[ours] Unit A on the bench rig (unit A's adapter board, the power block
+through its buck), `lidar_record --mode 1 --scans 200`, Express, robot
+still, a flat painted wall square at the sensor's 0°, ±10° analysed.
+The same bearing's range, revolution to revolution, standard deviation:
+**0.41 mm at 0.43 m, 0.65 mm at 1 m, 1.76 mm at 2 m**; worst off a
+straight line 1.1, 3.0, 8.6 mm; no zero ranges; every quality 188;
+ranges in whole millimetres. Against a tape to the spin axis it read 1,
+4 and 9 mm long (425.5, 1000.1, 2000.3 mm): a scale error of about 0.4%
+or the tape, [unverified]. The findings have no range noise; this is
+the first measurement. Captures `captures/noise{030,100,200}-sdk1_*`
+(git-ignored, on the Mac); the table is in `RESUME-navigation.md`,
+"Picking up" 2.
