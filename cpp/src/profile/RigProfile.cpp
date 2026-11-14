@@ -341,6 +341,7 @@ GeometryProfile readGeometry(const Section &section, const std::string &source) 
             {{"length", 0.05, 3.0, &g.length},
              {"width", 0.05, 3.0, &g.width},
              {"max_speed", 0.01, 5.0, &g.maxSpeed},
+             {"min_speed", 0.0, 5.0, &g.minSpeed},
              {"max_turn_rate", 0.01, 20.0, &g.maxTurnRate},
              {"accel", 0.01, 10.0, &g.accel},
              {"brake", 0.01, 20.0, &g.brake}},
@@ -487,8 +488,13 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
   requireKeys(*motor, {"terminal", "sign", "ramp_per_ms", "min_duty_forward", "min_duty_backward"},
               source);
   if (geometry != nullptr) {
+    // min_speed is optional: 0 is speed in proportion to the command.
     requireKeys(*geometry, {"length", "width", "max_speed", "max_turn_rate", "accel", "brake"},
                 source);
+    if (profile.geometry->minSpeed >= profile.geometry->maxSpeed) {
+      fail(source, geometry->line,
+           "[geometry] min_speed must be below max_speed: it is the slowest the robot moves");
+    }
   }
   if (lidar != nullptr) {
     requireKeys(*lidar, {"x", "y", "yaw_deg", "height"}, source);

@@ -245,6 +245,14 @@ int main() {
               p.geometryCalibration.empty() && p.motorCalibration.size() == 2);
   }
 
+  {
+    const RigProfile absent = parseRigProfile(kFull, "test.conf");
+    const RigProfile present = parseRigProfile(fullWithLine(26, "min_speed = 0.12"), "test.conf");
+    check("min_speed optional: absent reads 0, present is read",
+          near(absent.geometry->minSpeed, 0.0) && near(present.geometry->minSpeed, 0.12));
+  }
+  checkError("a min_speed not below max_speed", fullWithLine(26, "min_speed = 0.35"), ":19",
+             "min_speed must be below max_speed");
   checkError("a key missing from [geometry]", fullWithLine(23, "# none"), ":19",
              "[geometry] is missing 'max_turn_rate'");
   checkError("a key missing from [odometry]", fullWithLine(38, "# none"), ":33",
