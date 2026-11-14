@@ -902,11 +902,14 @@ mapping is from general knowledge of ROS 2, not tried here.
 5. **The frame of the OTOS's velocity:** its own (the robot's) or the
    odom frame. `PoseTracker` stores it in the robot frame either way
    (`navigation-cpp-design.md` §4.2); checked with the axes in N1.
-6. **The A1M8's range noise** is not measured; the simulator's 5 mm is a
-   guess. Noise erodes the limiter's margin while something is inside it
-   (23.5 to 35.6 mm kept of 50 in the simulator, 49 with none:
-   `navigation-cpp-design.md` §6.2). To measure in N1: the spread of
-   repeated ranges to a still wall.
+6. **The A1M8's range noise:** measured 2026-11-14 on the bench rig
+   (`RESUME-navigation.md`, "Picking up" 2): to a still wall, the same
+   bearing's range varies by 0.4 mm at 0.43 m, 0.7 mm at 1 m and 1.8 mm
+   at 2 m (standard deviation; worst 1.1, 3.0, 8.6 mm), no dropouts. The
+   simulator's 5 mm was a guess and overstates it. Noise erodes the
+   limiter's margin while something is inside it (23.5 to 35.6 mm kept
+   of 50 with 5 mm, 49 with none: `navigation-cpp-design.md` §6.2); with
+   the measured noise the erosion is untested.
 7. **Rule 4's alternative, a margin per side** (`navigation-cpp-design.md`
    §6.2, end): accepted to weigh later, after the range noise is known
    and Heron has driven near walls in Assisted.

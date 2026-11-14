@@ -808,8 +808,11 @@ the simulator's range noise set to zero: the body came no nearer than
    `closest`" lets some approach through. With the simulator's 5 mm on
    each range, scenario 2's closest was 23.5 mm on the Mac and 35.6 mm on
    the Pi (whose random numbers differ), against 49.2 mm with no noise.
-   The 5 mm is a guess: the A1M8's range noise has not been measured
-   (design §18). Nothing touched in any run.
+   The 5 mm was a guess; measured on the bench rig (2026-11-14, design
+   §18 item 6) the A1M8's noise is 0.4 mm at 0.43 m, 0.7 mm at 1 m and
+   1.8 mm at 2 m (standard deviation), so the simulator overstates it
+   several times at the limiter's ranges. Scenario 2 has not been re-run
+   with it. Nothing touched in any run.
 3. **It is cautious at corners and when turning.** A motion that shrinks
    both of a point's gaps is stopped however little it does so; turning
    with anything in the margin near a front or back edge is usually

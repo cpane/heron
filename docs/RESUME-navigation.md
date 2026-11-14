@@ -2,7 +2,8 @@
 
 Last updated 2026-11-14: N1's profile sections are all in
 `profiles/bench.conf`: `[geometry]` (0.42 m/s, 3.4 rad/s, brake 2.2),
-`[lidar]`, `[odometry]` and `[navigation]`; next, `heron_robot`. Started 2026-11-04. **Every navigation library
+`[lidar]`, `[odometry]` and `[navigation]`; the A1M8's range noise
+measured (under 2 mm to 2 m); next, `heron_robot`. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -193,10 +194,37 @@ navigation, so SwC to Manual always takes over.
    `[geometry]` (length and width 0.1905, the three, `accel` 0.6 from
    design §10) and `[navigation]` (design §10's 0.05 and 0.25, not
    measured) are in `profiles/bench.conf`; `rig_profile check` passes.
-   **N1's profile is complete for the bench rig.** Not done from §8:
-   the A1M8's range noise (the spread of repeated ranges to a still
-   wall, design §18 item 6), wanted before rule 4's alternative (item 5
-   below); and `accel` and the margins are tuned later.
+   **N1's profile is complete for the bench rig.** `accel` and the
+   margins are tuned later.
+
+   **The A1M8's range noise, 2026-11-14** [ours, `lidar_record --mode 1
+   --scans 200`, Express as the robot runs it, robot still and disarmed,
+   its back square to a flat painted wall, so the wall at the sensor's
+   0°; analysed over ±10°; captures `captures/noise{030,100,200}-sdk1_*`,
+   git-ignored]:
+
+   | Tape to the spin axis | LiDAR at 0° | Same bearing, revolution to revolution (sd) | Worst off a line | No return |
+   |---|---|---|---|---|
+   | 425.5 mm (16¾ in) | 426.5 mm | 0.41 mm | 1.1 mm | 0% |
+   | 1000.1 mm (39⅜ in) | 1004.0 mm | 0.65 mm | 3.0 mm | 0% |
+   | 2000.3 mm (78¾ in) | 2009.4 mm | 1.76 mm | 8.6 mm | 0% |
+
+   - **Far under the simulator's 5 mm** at the limiter's ranges; the
+     ranges come in whole millimetres, so at 0.43 m the noise is the
+     sensor's step. Every sample quality 188.
+   - **The LiDAR reads 1, 4 and 9 mm over the tape** (0.2, 0.4, 0.5%):
+     possibly a small scale error, possibly the tape held by hand
+     [unverified].
+   - **The LiDAR's x may be nearer 0 than −8 mm** [tape, a few mm]: at
+     the first placement the spin axis was 425.5 mm from the wall and
+     the back wheels 330 mm (13 in), 95 mm apart, which is half the
+     outline. The profile keeps −0.008; at 0 the blind circle has more
+     room, not less.
+   - Told LiDAR (its Inbox): the findings have no range noise.
+   - **Not done:** scenario 2 (`nav_scenario_test`) re-run with the
+     measured noise, about 1 mm at its 0.6 to 1.5 m, to see how much of
+     the margin's erosion (23.5 to 35.6 mm kept of 50 with 5 mm) is
+     left. That decides how urgent rule 4's alternative is (item 5).
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
    values for the same frames), then Navigate with `CourseKeeper` and
@@ -209,8 +237,9 @@ navigation, so SwC to Manual always takes over.
    floor settles them. `plan()` takes 15.8 ms of its 20 ms budget on
    the Pi, alone.
 5. **Rule 4's alternative** (a margin per side, §6.2's end) is to be
-   weighed later, with the user, once N1 has measured the A1M8's range
-   noise (design §18, 6 and 7). Do not change rule 4 before then.
+   weighed later, with the user: the range noise is now measured
+   (2026-11-14, under 2 mm to 2 m), and Heron has yet to drive near walls
+   in Assisted (design §18, 6 and 7). Do not change rule 4 before then.
 6. **Power for the LiDAR.** The power block straight into the Pi fails:
    the LiDAR goes silent for seconds while its motor runs, and the Pi's
    under-voltage flag does not catch it (2026-11-08); the block's own
