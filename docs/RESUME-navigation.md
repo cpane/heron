@@ -250,7 +250,7 @@ navigation, so SwC to Manual always takes over.
      (SLOWED; 0.075 / 0.25 = 0.30 of it, by hand 0.19); full back
      unchanged. At +0.13 m, inside the stop margin: BACKING_OFF (the
      stick not tried there). Scans 15 to 156 ms old.
-   - `heron_teleop`'s autostart is off for this (Chris, sudo, in a Mac terminal
+   - `heron_teleop`'s autostart is off for this (Chris, sudo, in a Mac
      terminal); turn it back on after: `scripts/teleop_autostart.sh
      <user>@<pi> on`.
 
