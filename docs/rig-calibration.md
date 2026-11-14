@@ -366,9 +366,9 @@ stopwatch, because no tool reads the OTOS fast enough during a drive
 
 | Number | How |
 |---|---|
-| `max_speed` | Full forward over a taped 2 m, timed, 3 runs: distance / time, m/s |
-| `max_turn_rate` | Full turn stick, the turns counted in 10 s: turns x 2π / 10, rad/s |
-| `brake` | At full speed, disarm with SwA passing a mark; d is how far past it the robot stops: `brake` = `max_speed`² / (2d), m/s². Your reaction time is in d, so take the shortest of 3 runs |
+| `max_speed` | Full forward from rest, 1 m run-up, then a taped 2 m timed front edge to front edge, 3 runs: distance / time, m/s |
+| `max_turn_rate` | Full turn stick, about 5 turns in one go, in `otos_spin` (Enter to skip the count): its `max deg/s` × the angular scalar × π / 180, rad/s. Counting turns by eye at full speed is hard: the bench rig turns about 200°/s |
+| `brake` | At full speed, disarm with SwA passing a mark; d is how far past it the robot stops: `brake` = `max_speed`² / (2d), m/s². Your reaction time is in d, so take the shortest of 3 runs: at 0.42 m/s a switch 0.1 s late adds 42 mm |
 
 ### 8.7 Not measured
 
