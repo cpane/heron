@@ -447,3 +447,13 @@ driving by hand is coarse. Letting go, it coasts at 0.6 to 0.8 m/s²
 `min_duty`, measured lifted and from rest, should stay as the floor on
 the ground is yours to weigh. `RESUME-navigation.md`, "Picking up" 3;
 `RobotCore.h`, "Units".
+
+### From navigation, 2026-11-14: the motor battery off still reads motors OK
+
+[ours, once] On the bench rig, `heron_robot` in Manual, the motor
+battery switched off by mistake: the Arduino (powered over USB) took
+every Drive, the status said `motors OK`, resets 0, and the robot did
+not move, though a motor sound could be heard. Nothing on the Pi's side can tell
+the motors have no power, so a builder or a robot program would drive
+on believing them. Whether the shield offers a way to sense the motor
+supply is yours to weigh.
