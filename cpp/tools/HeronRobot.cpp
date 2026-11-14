@@ -45,8 +45,10 @@
 // ---------------
 //   Once a second, or --lines N times: the mode, armed, the throttle, the
 //   stick and what went out (fractions of full drive), the four wheels,
-//   the measured speed from the OTOS (m/s, x forward, y left), and in
-//   Assisted the limiter's reason, the nearest point and the scan's age.
+//   the measured speed from the OTOS (m/s, x forward, y left; rad/s,
+//   left positive), the heading since start-up (degrees, left positive),
+//   the OTOS's TRACKING and TILT warnings when set, and in Assisted the
+//   limiter's reason, the nearest point and the scan's age.
 //   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
@@ -319,9 +321,12 @@ int main(int argc, char **argv) {
         std::string speedText;
         if (pose) {
           const Heron::Pose::PoseSnapshot p = pose->getLatest();
-          char text[64];
-          std::snprintf(text, sizeof(text), "  speed %+5.2f %+5.2f m/s%s", p.newest.velocity.vx,
-                        p.newest.velocity.vy, p.fresh ? "" : " (not fresh)");
+          char text[128];
+          std::snprintf(text, sizeof(text), "  speed %+5.2f %+5.2f m/s %+5.2f rad/s  heading %+6.1f deg%s%s%s",
+                        p.newest.velocity.vx, p.newest.velocity.vy, p.newest.velocity.wz,
+                        p.newest.pose.heading / Heron::Geometry::kDegToRad,
+                        p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
+                        p.tiltWarning ? " TILT" : "");
           speedText = text;
         }
         std::string motorText = "dry run";
