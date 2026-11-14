@@ -1015,6 +1015,114 @@ status line. Changes from §7.2 and §7.3:
   under the floor stops; Navigate and disarmed stop. A hand-built scan, as
   `limiter_test`'s, not the simulator.
 
+### 7.5 Proposed for step 2: moving as the robot moves (2026-11-14)
+
+The interfaces for design §19 (P13 to P17), to be reviewed with it.
+Nothing here is built.
+
+| # | Decision | Why |
+|---|---|---|
+| I17 | **`heron_motion`, a new pure library, holds the motion table** and nothing else; `heron_robot`, `heron_planner` and `heron_nav_sim` link it | One model, three users; tested alone with hand-made tables, as the other cores are |
+| I18 | **The table is indexed by the command's direction and size,** fractions of full drive, and holds what the robot made, a `Twist` | That is what is measured (§19.3), so the table stores observations, not fitted constants |
+| I19 | **A plan carries the command as well as the twist** (`Plan::command`), and Navigate drives the command | The twist is the prediction; driving it back through an inverse would lose what the planner chose |
+| I20 | **Heading hold is a pure class in `RobotCore`,** fed the heading, the turn stick and the table's drift each cycle | The loop stays reading and driving; the hold is tested on the Mac like `decide()` |
+| I21 | **Plausibility is `PoseTracker`'s,** by config: it already judges freshness, and every user of the pose then sees the same verdict | The limiter, perception, the planner and the status line cannot disagree about a nonsense speed |
+
+```cpp
+namespace Heron::Motion {                    // include/heron/motion/MotionTable.h
+
+/** One measured command and what the robot made of it. */
+struct MotionPoint {
+  double directionRad{0.0};  // the command's, robot frame: 0 forward, -pi/2 right
+  double size{0.0};          // its length, hypot of the vx and vy fractions, 0..1
+  Geometry::Twist made{};    // vx, vy in m/s, wz in rad/s: the drift
+};
+
+class MotionTable {
+  public:
+    /** @param mirror the left half is the right's, vy and wz negated
+     *  @throws std::invalid_argument unless the points form a grid of
+     *          directions x sizes, sizes rising, at least 2 of each */
+    MotionTable(std::vector<MotionPoint> points, bool mirror);
+
+    /** What a translation command makes: interpolated between the four
+     *  nearest points; below the smallest size, as the smallest (the dead
+     *  band lifts any command to it); zero at zero. */
+    [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
+
+    /** The command along directionRad whose predicted speed is speedMps:
+     *  no value under the direction's least speed or over its most. */
+    [[nodiscard]] std::optional<std::pair<double, double>> commandFor(double directionRad,
+                                                                      double speedMps) const;
+
+    /** The least speed along directionRad that moves the robot; 0 if none. */
+    [[nodiscard]] double leastSpeed(double directionRad) const;
+};
+}  // namespace Heron::Motion
+
+namespace Heron::Profile {                   // [motion], optional
+struct MotionProfile {
+  std::vector<Motion::MotionPoint> points;   // p01 = <direction deg> <size> <vx> <vy> <wz>
+  bool mirror{true};                         // mirror = 1
+};
+// RigProfile gains std::optional<MotionProfile> motion;
+}
+
+namespace Heron::Robot {
+/** P14. With the turn stick centred and a translation commanded, a turn
+ *  rate that holds the heading taken when either began, less the drift. */
+class HeadingHold {
+  public:
+    struct Config { double gainPerS{2.0}; double maxRateRadps{0.8}; };
+    explicit HeadingHold(Config config = {});
+    /** @return the turn rate to command, rad/s */
+    double update(double turnStickRadps, bool translating, double headingRad,
+                  double driftRadps, std::uint64_t epoch);
+    void reset() noexcept;  // on leaving Assisted or Navigate, and on disarming
+};
+}
+
+// Pose::PoseConfig gains (0 is off, as today):
+//   double maxPlausibleSpeedMps;   // heron_robot: 1.5 x max_speed
+//   double maxPlausibleAccelMps2;  // a speed change faster than this between readings
+//   Duration settle{300ms};        // plausible this long before fresh again
+// PoseSnapshot::reason says "implausible speed" or "OTOS tracking warning".
+
+// Planner::PlannerConfig gains std::shared_ptr<const Motion::MotionTable> motion;
+//   with it, candidates are commands: directions every 15 degrees, sizes
+//   0.1 to 1.0 in 0.1, as large as the course's size; each imagined with
+//   predict(), turn rate the course's; kept only if predict() is within
+//   accelMps2 x windowS of the measured twist. Without it, as now.
+// Planner::Plan gains double commandVx, commandVy (fractions).
+
+// NavSim::BaseConfig gains std::shared_ptr<const Motion::MotionTable> motion;
+//   Base::commandFractions(vx, vy, wz, now) moves by predict(), drift included,
+//   through today's lag and acceleration limits.
+```
+
+**`decide()` with a table:**
+
+- **Manual:** unchanged (D5).
+- **Assisted:** the stick's command goes to the limiter as `predict()` ×
+  1.2, its turn rate the stick's or the hold's. Clear: the stick's command
+  as it is. Otherwise the limited twist's direction and speed (÷ 1.2) go
+  back through `commandFor()`; no value stops the translation. The pose
+  not fresh stops Assisted (`Why::PoseNotFresh`, new).
+- **Navigate:** the plan's command if the plan is for this course and
+  fresh (§8.7); the limiter is given its `predict()` × 1.2; anything but
+  Clear stops the translation and keeps the turn rate.
+- **Without `[motion]`:** today's model (`min_speed`, `max_speed`), so the
+  tests and rigs without a table keep working.
+
+**Tests, when built:** `motion_test` (interpolation both ways against
+hand tables, the mirror, the least speed, the dead band below the
+smallest size, malformed grids refused); `robot_test` (Assisted through a
+table, heading hold's sign, limit, reset and standing still, not fresh
+stopping Assisted); `pose_test` (a nonsense speed and a jump not fresh,
+then fresh after the settle); `planner_test` (only table commands
+chosen, slides at the table's strafe speed); `nav_scenario_test`
+scenarios 1 to 4 with the bench rig's table.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

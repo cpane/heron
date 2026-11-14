@@ -4,8 +4,11 @@ How the LiDAR and the odometry sensor turn Heron from a remote-controlled
 base into a semi-autonomous one: it knows where it is, sees obstacles,
 slides around them, and goes back to its course. **Goal and decisions
 D1 to D5 accepted 2026-11-04; the design below, P1 to P12, accepted
-2026-11-08.** Its C++ interfaces are
-[`navigation-cpp-design.md`](navigation-cpp-design.md). Nothing is built.
+2026-11-08. P13 to P17, allowing for how the robot really moves (§19),
+proposed 2026-11-14, wait on review.** Its C++ interfaces are
+[`navigation-cpp-design.md`](navigation-cpp-design.md). The libraries
+and `heron_robot`'s Manual and Assisted are built
+([`RESUME-navigation.md`](RESUME-navigation.md)).
 
 It builds on what exists and is measured: `Lidar` and its `Scan`
 ([`lidar-cpp-design.md`](lidar-cpp-design.md),
@@ -916,3 +919,108 @@ mapping is from general knowledge of ROS 2, not tried here.
 7. **Rule 4's alternative, a margin per side** (`navigation-cpp-design.md`
    §6.2, end): accepted to weigh later, after the range noise is known
    and Heron has driven near walls in Assisted.
+
+## 19. Moving as the robot really moves (proposed 2026-11-14)
+
+The design so far assumes the wheels make what they are asked: speed in
+proportion to the command, any direction alike, the heading steady.
+The bench rig on its hardwood floor does none of these, measured
+2026-11-14 with `heron_robot --lines 10` (`RESUME-navigation.md`,
+"Picking up" 3) **[ours]**. This section proposes how navigation
+allows for it, before step 2 (Navigate) is built. Nothing here changes
+Manual (D5).
+
+### 19.1 What was measured
+
+| Command (fraction of full) | Forward | Sideways | Heading |
+|---|---|---|---|
+| forward 0.20, 0.39, 0.59, 1.0 | 0.19, 0.26, 0.30, 0.42 m/s | 0 to 0.09 (at full) | not measured |
+| strafe 0.3 | nothing: the wheels turn, the robot does not move | | |
+| strafe 0.6 | creeps back 0.05 to 0.16 | 0.13 to 0.19 m/s | turns clockwise (by eye) |
+| strafe 1.0 | about 0 | 0.28 m/s | |
+| strafe 0.6, 4.4 s, on a tape | 18 cm back | 81 cm | about 30° clockwise, steadily (≈7°/s) |
+| 45° forward-right, 0.6 | 0.12 to 0.17 | 0.11 to 0.24 | |
+| forward 0.59 and a little right | 0.32 | 0 to 0.09 | |
+| letting go, any direction | coasts at 0.6 to 0.8 m/s² | | |
+
+- **Forward** has a floor: the firmware lifts any wheel command above
+  zero to the motor's dead band, so the least it moves at is 0.16 m/s
+  (`[geometry] min_speed`, already in `heron_robot`).
+- **Sideways** needs far more command, then goes about half as fast as
+  forward, drifts back and turns. Mecanum rollers slipping on hardwood
+  is the likely cause [unverified].
+- **Combined** motion is neither the sum of its parts nor either alone:
+  45° at 0.6 drives two wheels at full and two at zero.
+- **The OTOS can report nonsense after a lift** and call it fresh:
+  −2.6 m/s and −3.6 m/s forward, held for seconds, with the robot still
+  or strafing slowly; it recovered after the robot had driven or stood
+  for a while. The limiter's look-ahead and the planner's window both
+  use this speed.
+
+So the per-direction model in `heron_robot` today (min_speed, one
+straight line through max_speed, sideways as forward) predicts a
+strafe the robot cannot make, and the planner, which slides to avoid
+(D3), would plan slides that do not happen.
+
+### 19.2 Proposals
+
+| # | Proposal | Why |
+|---|---|---|
+| P13 | **A measured motion table:** for a grid of commands (direction × size, as fractions of full drive), the vx, vy and wz the robot actually makes, measured on the floor and kept in a new optional profile section, `[motion]`. One pure library, `heron_motion`, interpolates it both ways: a command to the twist it makes, and a direction and speed to the command that makes it, or none | One model shared by `heron_robot`, the planner and the simulator, from numbers, not formulas. It covers the dead bands, the slow strafe and the drift alike, and a rig without the section keeps today's behaviour |
+| P14 | **Heading hold in Assisted and Navigate:** with the turn stick centred and the robot translating, the turn rate is set to hold the heading taken when the stick was centred (or the motion began), from the OTOS, less the drift the table predicts. The turn stick overrides it; letting it go takes the new heading. Standing still, nothing is held | D3 keeps the heading, and nothing holds it now: a strafe turns the bench rig 7°/s. While the wheels are moving, a small turn rate shifts them unevenly without meeting the dead band, so the correction is smooth; standing still it would meet the dead band and dither |
+| P15 | **The planner chooses commands, not speeds:** its candidates are commands on a grid of directions and sizes, each imagined with the twist the table predicts; the plan carries both, and Navigate drives the command | The planner only offers what the robot can do, at the speed it will really go, so a slide it plans is a slide that happens. It replaces P9's window of speeds; the window becomes a limit on how far the predicted twist may be from the measured one |
+| P16 | **An implausible OTOS reading is not fresh:** faster than 1.5 × `max_speed`, or a jump in speed beyond what `brake` and `accel` allow, or the OTOS's tracking warning, marks the pose not fresh until it has read plausibly for 0.3 s; and **Assisted stops while the pose is not fresh**, as Navigate already does | A lift or a wheel off the ground gave seconds of nonsense, called fresh. Today a stale pose in Assisted only doubles the limiter's reaction time; with a nonsense speed that is not enough to trust |
+| P17 | **The simulator moves by the table:** `heron_nav_sim`'s base takes commands and moves as the table says, drift included, with today's lag and acceleration limits | Scenarios 1 to 4 then test the planner and heading hold against the robot as measured, not an ideal one; today they pass with motion the robot cannot make |
+
+The limiter is unchanged: it is given the twist the table predicts for
+the command, made 20% faster so that a table measured on a good day
+cannot make it late, and it still takes the OTOS's speed for its
+look-ahead (with P16, never a nonsense one). In Assisted, a limited
+twist goes back through the table along the same direction: the command
+that makes that speed, or a stop if the direction has none that slow
+(today's `min_speed` rule, for every direction). In Navigate, the
+planner's choice keeps 8.3 cm more than the limiter (I11), so the
+limiter should rarely act; when it does, the translation stops and the
+turn rate stays.
+
+### 19.3 Measuring the table
+
+`heron_robot --lines 10` in Manual on the floor the rig drives on,
+battery charged, `heron_teleop` off; the status line first gains the
+OTOS's turn rate and its warning flags. For each command, hold it 2 s
+and take the median of the last second; set the robot down and wait a
+second before each run, since a lift upsets the OTOS (§19.1).
+
+- Directions 0°, 30°, 60° and 90° to the right; sizes 0.2, 0.4, 0.6,
+  0.8 and 1.0 of full: 20 runs. Then 90° left at 0.6 and 1.0, and
+  backward at 0.6, to check the table may be mirrored.
+- One strafe of 3 s on a tape, to check the OTOS against the floor
+  sideways, as §8.5 did forward.
+- The table is for that floor and that battery, as `linear_scalar` is
+  (`rig-calibration.md` §8).
+
+About 25 runs, half an hour with the robot. `rig-calibration.md` gains
+the method as §8.8 once it is used.
+
+### 19.4 Order of work
+
+1. This section reviewed; the interfaces (`navigation-cpp-design.md`
+   §7.5) reviewed.
+2. The status line's turn rate and warnings; the table measured.
+3. `heron_motion` and `[motion]`; Assisted through the table; P16; the
+   floor checks of step 1 repeated, with a strafe at a box.
+4. Heading hold (P14), checked on the floor in Assisted.
+5. The simulator by the table (P17) and the planner on commands (P15),
+   scenarios 1 to 4 passing again.
+6. Step 2 proper: Navigate in `heron_robot`, then round a box on the
+   floor.
+
+### 19.5 Open
+
+- Whether the table holds from day to day, battery full to flat, and
+  for other floors [unverified]; the floor-dependence of the OTOS
+  (§18) suggests not across floors.
+- Whether 4 × 5 commands is fine enough where the strafe starts
+  (between 0.3 and 0.6, not yet measured).
+- Whether the drift depends on the robot's weight balance, which a
+  mounted payload would change.
