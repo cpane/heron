@@ -199,9 +199,9 @@ int main() {
               near(limiter.outline.halfWidth, 0.09525, 1e-12));
     check("  the LiDAR 8 mm behind the centre",
           near(limiter.lidarOffset.x, -0.008, 1e-12) && limiter.lidarOffset.y == 0.0);
-    check("  margins 0.05 and 0.25, brake 2.2",
+    check("  margins 0.05 and 0.25, brake 1.1",
           near(limiter.stopMarginM, 0.05, 1e-12) && near(limiter.slowMarginM, 0.25, 1e-12) &&
-              near(limiter.brakeMps2, 2.2, 1e-12));
+              near(limiter.brakeMps2, 1.1, 1e-12));
   }
 
   std::printf("Assisted refused (§7.1)\n");
