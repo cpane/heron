@@ -1,11 +1,11 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-13: N1 on the bench rig under way. `[lidar]` and
-`[odometry]` in the profile (LiDAR yaw 180; OTOS scalars 0.908 linear on
-hardwood, 0.991 angular); next, the speeds and brake (§8.6). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-14: N1's profile sections are all in
+`profiles/bench.conf`: `[geometry]` (0.42 m/s, 3.4 rad/s, brake 2.2),
+`[lidar]`, `[odometry]` and `[navigation]`; next, `heron_robot`. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
-which waits on N1's profile sections.**
+whose profile sections are now measured on the bench rig.**
 
 ## Read this first when resuming
 
@@ -94,6 +94,13 @@ navigation, so SwC to Manual always takes over.
   motor-driven spins; both in `profiles/bench.conf` with how they were
   found.
 
+## Decided (2026-11-14)
+
+- **`brake = 2.2`** (Chris), the shortest of three stops as
+  `rig-calibration.md` §8.6 says, not the design's 1.0: the limiter's
+  0.3 s reaction term adds 126 mm at full speed (0.42 m/s), more than
+  the longest stop measured (110 mm).
+
 ## Picking up
 
 1. **N1's profile sections: built 2026-11-11** (`navigation-cpp-design.md`
@@ -120,8 +127,9 @@ navigation, so SwC to Manual always takes over.
    is in `profiles/bench.conf`. Waiting: `[geometry]` needs §8.6's
    speeds and brake (`length = 0.1905`, `width = 0.1905` until then);
    `[odometry]` needs §8.4's yaw and §8.5's scalars (x 0, y 0). Found:
-   - **The blind circle fits with 10.45 mm to spare** [computed by hand,
-     not by `checkBlindSpot()`]: 126.8 mm round the LiDAR at x −8 mm
+   - **The blind circle fits with 10.45 mm to spare** [computed by hand;
+     `checkBlindSpot()` agrees, 2026-11-14: fits at `stop_margin` 0.040,
+     fails at 0.035]: 126.8 mm round the LiDAR at x −8 mm
      reaches 134.8 mm behind the centre, against a stop outline of
      95.25 + 50 = 145.25 mm. A `stop_margin` under about 40 mm fails it.
    - **The scan plane is at 270 mm**, higher than the robot is long:
@@ -171,16 +179,24 @@ navigation, so SwC to Manual always takes over.
    `[odometry]` is in `profiles/bench.conf` (x 0, y 0, yaw_deg 0, 0.908,
    0.991), `rig_profile check` passes.
 
-   **Next: §8.6, the speeds and brake**, on the hardwood, driven with
-   `heron_teleop`, throttle at the top, a stopwatch and tape
-   (`rig-calibration.md` §8.6): `max_speed` over a taped 2 m, 3 runs;
-   `max_turn_rate`, turns counted in 10 s; `brake`, disarm at a mark, the
-   shortest stop of 3. Then `[geometry]` goes in (length 0.1905, width
-   0.1905, the three, and `accel` from design §10), and `[navigation]`
-   from design §10's margins: `stop_margin` at least 40 mm, or the blind
-   circle does not fit (above). The Pi answered on Wi-Fi
-   both sessions (its address is in Claude's memory); its wired address
-   did not.
+   **§8.6 done 2026-11-14** [ours, hardwood, `heron_teleop`, throttle
+   at the top, power block through its buck]:
+   - `max_speed` **0.42 m/s**: 2 m timed after a 1 m run-up, 4.98, 4.73,
+     4.63 s (0.40, 0.42, 0.43 m/s), quicker each run.
+   - `max_turn_rate` **3.4 rad/s**: `otos_spin`, about 5 turns at full
+     stick, peaks 200, 197, 198, 200°/s, × 0.991 = 196°/s, 3.42 rad/s,
+     rounded down. Not the gyro's limit: the sled was read at 544°/s.
+   - `brake` **2.2 m/s²**: SwA disarmed at a mark at full speed, stopped
+     40, 80, 110 mm past it; the shortest, 0.42² / (2 × 0.040). The
+     spread is the switch's timing (0.1 s is 42 mm).
+
+   `[geometry]` (length and width 0.1905, the three, `accel` 0.6 from
+   design §10) and `[navigation]` (design §10's 0.05 and 0.25, not
+   measured) are in `profiles/bench.conf`; `rig_profile check` passes.
+   **N1's profile is complete for the bench rig.** Not done from §8:
+   the A1M8's range noise (the spread of repeated ranges to a still
+   wall, design §18 item 6), wanted before rule 4's alternative (item 5
+   below); and `accel` and the margins are tuned later.
 3. **`heron_robot`** (`navigation-cpp-design.md` §7, §8.7): Manual and
    Assisted first, `robot_test` (Manual gives `heron_teleop`'s wheel
    values for the same frames), then Navigate with `CourseKeeper` and
@@ -265,9 +281,9 @@ budget, the grid counts and planner weights, which end of SwC is up,
 and the frame of the OTOS's velocity.
 Settled 2026-11-04: the bench rig carries navigation.
 
-- **N1's numbers are half measured:** `[lidar]` and `[odometry]` are
-  in the profile; §8.6's speeds and brake are not (`rig-calibration.md`
-  §8). `odometry_adapter` prints no velocity, so §18's velocity
+- **N1's numbers are measured** for the bench rig (2026-11-14), except
+  `accel` and the margins, which are the design's starting values, and
+  the A1M8's range noise. `odometry_adapter` prints no velocity, so §18's velocity
   frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once
