@@ -207,6 +207,16 @@ supply = AA cells on EXT_PWR
   track, wheelbase) join it when the mixing needs them, so `max_speed` is
   held once. Keys and ranges: the reader's header, and
   [`rig-calibration.md`](rig-calibration.md) §8 for how each is measured.
+- **Surfaces** (since 2026-11-14, navigation design §19, P18): the
+  numbers that depend on the floor, one named set per floor, in
+  `[surface.<name>]` sections (speeds, `brake`, the OTOS's scalars, and
+  the motion table). `[rig] drive` names the rig's drive (motors,
+  wheels, controller) and `[rig] surface` its default floor. Known
+  surfaces also live in a library sorted by drive,
+  `profiles/surfaces/<drive>/<name>.conf`, one surface a file; a rig sees
+  its drive's library after its own surfaces. The bench rig: drive
+  `bench-mecanum`, surface `hardwood-1`. Measuring one:
+  [`rig-calibration.md`](rig-calibration.md) §8.8.
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own
