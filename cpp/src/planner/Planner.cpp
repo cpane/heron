@@ -170,7 +170,7 @@ Plan Planner::plan(const PlanInput &input) {
         }
         if (nearlyStill) {  // must start a still robot (header)
           const Geometry::Twist start = table.predictFromRest(cx, cy);
-          if (std::hypot(start.vx, start.vy) < kStartMps) {
+          if (size < kStartSize - 1e-9 || std::hypot(start.vx, start.vy) < kStartMps) {
             continue;
           }
         }

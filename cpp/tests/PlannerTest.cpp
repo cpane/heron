@@ -515,6 +515,12 @@ int main() {
     check("still: the command chosen starts the robot from rest, at kStartMps or more",
           (plan.commandVx != 0.0 || plan.commandVy != 0.0) &&
               std::hypot(start.vx, start.vy) >= Heron::Planner::kStartMps);
+    check("  and is at least kStartSize", std::hypot(plan.commandVx, plan.commandVy) >= kStartSize - 1e-9);
+    Planner forward(still);
+    plan = forward.plan(inputFor(map, courseAlong(0.0, 0.42), Twist{}));
+    print("full speed ahead, still", plan);
+    check("  straight ahead from rest: forward, at least kStartSize, not the 0.2 point",
+          plan.commandVx >= kStartSize - 1e-9);
     Planner rolling(still);
     plan = rolling.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.06, 0.0}));
     print("a slow course to the left, rolling at 0.06", plan);

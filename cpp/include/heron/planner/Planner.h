@@ -57,6 +57,8 @@
 // 2026-11-16 Navigate slowed onto small left commands the robot could not
 // start from, and stood with the stick held; then, with only "moves at
 // all" required, onto right at 0.4, measured at 0.08 m/s, and stood again.
+// It must also be at least kStartSize: the smallest measured points stop
+// starting the robot as the battery runs down.
 // Nearly still, a direction's smallest such command is kept even when it is
 // faster than the course asks (I13's one exception, as forward's dead band
 // already makes 0.19 m/s of any stick): a slow course would otherwise
@@ -122,6 +124,12 @@ inline constexpr Duration kMovedWindow = std::chrono::milliseconds(500);
  *  measured 0.08 m/s, left it standing). The same speed as MotionWatch's
  *  expectMps. */
 inline constexpr double kStartMps = 0.10;
+
+/** Nearly still, a candidate must also be at least this size, fractions of
+ *  full drive: the table's smallest points were measured with a fresh
+ *  battery, and on 2026-11-16, after a day of runs, forward at 0.2
+ *  (measured 0.19 m/s on 2026-11-14) only hummed. 0.4 is twice that. */
+inline constexpr double kStartSize = 0.4;
 
 /** Design §8.2's starting weights; tuned in the simulator (design §18, 3). */
 struct ScoreWeights {
