@@ -19,7 +19,9 @@
 //   Assisted  the sticks through the safety limiter, against the newest
 //             LiDAR scan: anything that would bring a point inside the stop
 //             outline is slowed, cut or stopped, axis by axis, so sliding
-//             along a wall and backing away still work.
+//             along a wall and backing away still work. With the turn
+//             stick centred, heading hold keeps the heading while it
+//             moves (P14).
 //   Navigate  not built yet (step 2): stops.
 //
 // Its decisions are in src/robot/RobotCore.h, tested by robot_test; this
@@ -47,8 +49,10 @@
 //   stick and what went out (fractions of full drive), the four wheels,
 //   the measured speed from the OTOS (m/s, x forward, y left; rad/s,
 //   left positive), the heading since start-up (degrees, left positive),
-//   the OTOS's TRACKING and TILT warnings when set, and in Assisted the
-//   limiter's reason, the nearest point and the scan's age.
+//   the OTOS's TRACKING and TILT warnings when set, while heading hold
+//   holds the heading error it is correcting ("hold", degrees, held minus
+//   now), and in Assisted the limiter's reason, the nearest point and the
+//   scan's age.
 //   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
@@ -252,6 +256,7 @@ int main(int argc, char **argv) {
   Heron::Drive::ArmGate gate;
   const Heron::Profile::GeometryProfile geometry =
       profile.geometry.value_or(Heron::Profile::GeometryProfile{});
+  Heron::Robot::HeadingHold hold;
   Mode shownMode = Mode::Manual;
   Why shownWhy = Why::Disarmed;
   bool first = true;
@@ -288,7 +293,19 @@ int main(int argc, char **argv) {
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
         assisted = Heron::Robot::AssistedInput{
             limiter.get(), geometry, motion ? &*motion : nullptr,
-            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}};
+            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt};
+        // Heading hold (P14): with the turn stick centred and a translation
+        // asked for, its rate stands in for the stick's turn.
+        const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
+        const double stickTurn = Heron::Robot::toTwist(Heron::Drive::BodyVelocity{0.0, 0.0, stick.wz}, geometry).wz;
+        const double drift = motion && translating ? motion->predict(stick.vx, stick.vy).wz : 0.0;
+        const double rate = hold.update(stickTurn, translating, p.newest.pose.heading, drift, p.epoch);
+        if (armed && hold.holding()) {
+          assisted.holdRadps = rate;
+        }
+      }
+      if (!armed || mode != Mode::Assisted || !ready) {
+        hold.reset();
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
@@ -345,6 +362,12 @@ int main(int argc, char **argv) {
                         p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
                         p.tiltWarning ? " TILT" : "");
           speedText = text;
+          if (hold.holding()) {
+            std::snprintf(text, sizeof(text), "  hold %+5.1f deg",
+                          Heron::Geometry::wrapAngle(hold.targetRad() - p.newest.pose.heading) /
+                              Heron::Geometry::kDegToRad);
+            speedText += text;
+          }
         }
         std::string motorText = "dry run";
         if (motors) {

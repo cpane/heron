@@ -176,6 +176,47 @@ std::string assistedRefusal(const Profile::RigProfile &profile) {
   return Limiter::checkBlindSpot(toLimiterConfig(profile));
 }
 
+HeadingHold::HeadingHold() noexcept : HeadingHold(Config{}) {}
+
+HeadingHold::HeadingHold(Config config) noexcept : m_config(config) {}
+
+double HeadingHold::update(double turnStickRadps, bool translating, double headingRad, double driftRadps,
+                           std::uint64_t epoch) noexcept {
+  if (epoch != m_epoch) {
+    m_epoch = epoch;
+    m_holding = false;  // the heading held is in another frame (I8)
+  }
+  if (turnStickRadps != 0.0) {
+    m_holding = false;  // the stick turns; letting it go takes the new heading
+    return turnStickRadps;
+  }
+  if (!translating) {
+    m_holding = false;  // standing still nothing is held
+    return 0.0;
+  }
+  if (!m_holding) {
+    m_holding = true;
+    m_target = headingRad;
+  }
+  const double error = Geometry::wrapAngle(m_target - headingRad);
+  return std::clamp(m_config.gainPerS * error - driftRadps, -m_config.maxRateRadps, m_config.maxRateRadps);
+}
+
+void HeadingHold::reset() noexcept {
+  m_holding = false;
+}
+
+double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
+                    const Profile::GeometryProfile &g) noexcept {
+  const double slowest = std::min(std::abs(translation.vx - translation.vy),
+                                  std::abs(translation.vx + translation.vy));
+  const double perUnit = g.maxTurnRate * (1.0 - g.minSpeed / g.maxSpeed);
+  if (slowest <= 0.0 || !(perUnit > 0.0)) {
+    return 0.0;
+  }
+  return std::clamp(turnRadps / perUnit, -slowest / 2.0, slowest / 2.0);
+}
+
 const char *toString(Why why) noexcept {
   switch (why) {
     case Why::Disarmed:
@@ -218,12 +259,19 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       Limiter::LimitInput input = assisted->limit;
       if (assisted->motion == nullptr) {
         input.command = toTwist(stick, assisted->geometry);
+        if (assisted->holdRadps) {
+          input.command.wz = *assisted->holdRadps;
+        }
         const Limiter::LimitResult limited = assisted->limiter->limit(input);
         // Under min_speed: up to it if only the slow zone lowered it (the
         // sweep found the faster command clear for T, so the slower one is
         // too); otherwise stop. Header, "Units".
         decision.body = toBodyVelocity(limited.command, assisted->geometry,
                                        limited.reason == Limiter::Reason::Slowed);
+        if (assisted->holdRadps) {
+          decision.body.wz = holdFraction(*assisted->holdRadps * limited.scale.wz, decision.body,
+                                          assisted->geometry);
+        }
         decision.why = Why::Limited;
         decision.limited = limited;
         break;
@@ -231,7 +279,10 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       // With the floor's table (design §19.2): the limiter is told what
       // the command really makes, kTableMargin faster, drift included.
       const Motion::MotionTable &table = *assisted->motion;
-      const double turnRate = toTwist(Drive::BodyVelocity{0.0, 0.0, stick.wz}, assisted->geometry).wz;
+      // The turn: heading hold's rate when it holds (P14), else the stick's.
+      const double turnRate = assisted->holdRadps
+                                  ? *assisted->holdRadps
+                                  : toTwist(Drive::BodyVelocity{0.0, 0.0, stick.wz}, assisted->geometry).wz;
       const auto told = [&](double vx, double vy, double turn) {
         const Geometry::Twist made = table.predict(vx, vy);
         return Geometry::Twist{made.vx * kTableMargin, made.vy * kTableMargin, turn + made.wz};
@@ -242,6 +293,9 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       decision.limited = limited;
       if (limited.reason == Limiter::Reason::Clear) {
         decision.body = stick;
+        if (assisted->holdRadps) {
+          decision.body.wz = holdFraction(*assisted->holdRadps, stick, assisted->geometry);
+        }
         break;
       }
       // Limited: the turn by its scale; the translation the command nearest
@@ -266,6 +320,12 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
           decision.body.vx = command->first;
           decision.body.vy = command->second;
         }
+      }
+      // Held, the turn rides on the translation driven: none, no turn, so
+      // a stopped robot never meets the turn's dead band and spins.
+      if (assisted->holdRadps) {
+        decision.body.wz = holdFraction(*assisted->holdRadps * limited.scale.wz, decision.body,
+                                        assisted->geometry);
       }
       break;
     }

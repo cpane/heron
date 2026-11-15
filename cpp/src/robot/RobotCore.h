@@ -168,6 +168,80 @@ inline constexpr double kTableMargin = 1.2;
 
 // -- one cycle ----------------------------------------------------------------
 
+/**
+ * P14, heading hold (I20). With the turn stick centred and the robot told
+ * to translate, the turn rate that holds the heading taken when that
+ * began: the heading error times a gain, less the drift the table
+ * predicts, so the drift is cancelled before it shows. The turn stick
+ * overrides it, and letting the stick go takes the new heading. Standing
+ * still nothing is held, since a small turn alone would meet the motors'
+ * dead band and lurch (the turn's floor, header "Units", is about 1.3
+ * rad/s on the bench rig). A new pose epoch (I8) drops the heading held:
+ * the old one is in another frame.
+ *
+ * Measured reason (design §19.1): a full strafe on the hardwood turned the
+ * bench rig 8 to 12 degrees a second clockwise, and floor check 3 turned
+ * it 19 degrees on the way to a box.
+ *
+ * The rate it returns is rad/s; holdFraction() turns it into the mixing's
+ * wz for the translation actually driven.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class HeadingHold {
+  public:
+    struct Config {
+      double gainPerS{2.0};      // rad/s commanded per radian of error
+      double maxRateRadps{0.8};  // the most it turns, either way
+    };
+
+    HeadingHold() noexcept;  // Config's defaults
+    explicit HeadingHold(Config config) noexcept;
+
+    /**
+     * One cycle.
+     *
+     * @param turnStickRadps the turn stick as a rate; non-zero overrides
+     * @param translating whether the stick asks for any translation
+     * @param headingRad the pose's heading, odom frame
+     * @param driftRadps the table's predicted turn for this translation
+     * @param epoch the pose's epoch; a change drops the heading held
+     * @return the turn rate to command, rad/s: the stick's when it is
+     *         used, 0 standing still
+     */
+    double update(double turnStickRadps, bool translating, double headingRad, double driftRadps,
+                  std::uint64_t epoch) noexcept;
+
+    /** Drops the heading held: on leaving Assisted or Navigate, and on
+     *  disarming. */
+    void reset() noexcept;
+
+    /** @return whether a heading is held; targetRad() is then valid */
+    [[nodiscard]] bool holding() const noexcept { return m_holding; }
+
+    /** @return the heading held, odom frame */
+    [[nodiscard]] double targetRad() const noexcept { return m_target; }
+
+  private:
+    Config m_config;
+    bool m_holding{false};
+    double m_target{0.0};
+    std::uint64_t m_epoch{0};
+};
+
+/**
+ * A turn rate as the mixing's wz while translating (P14). With every
+ * wheel already turning, wz shifts them unevenly: each wheel's speed rises
+ * (max_speed - min_speed) per unit of command, so a rad/s is
+ * max_turn_rate x (1 - min_speed / max_speed) per unit of wz, not
+ * max_turn_rate. Held to half the slowest wheel's translation, so no wheel
+ * is pushed back toward the dead band or reversed; zero with no
+ * translation (two wheels stand still on a 45 degree diagonal, so nothing
+ * is held there either).
+ */
+[[nodiscard]] double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
+                                  const Profile::GeometryProfile &g) noexcept;
+
 /** What Assisted needs each cycle. Pointers are borrowed for the call. */
 struct AssistedInput {
   const Limiter::Limiter *limiter{nullptr};
@@ -177,6 +251,11 @@ struct AssistedInput {
   /** The scan, the pose history and freshness, the measured velocity and
    *  now; its command is ignored: decide() puts the stick's there. */
   Limiter::LimitInput limit{};
+  /** Heading hold's turn rate, rad/s, in place of the turn stick (P14):
+   *  set by the loop only with the turn stick centred and a translation
+   *  asked for. The limiter is told it; the wheels get holdFraction() of
+   *  it for the translation driven. */
+  std::optional<double> holdRadps;
 };
 
 /** Why the wheels are what they are this cycle. */

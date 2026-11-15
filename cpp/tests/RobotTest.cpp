@@ -258,7 +258,7 @@ int main() {
   const Scan far = wallAhead(3.0, lidarAt, t0);
   const auto assistedWith = [&](const Scan *scan) {
     return AssistedInput{&limiter, geometry, nullptr,
-                         Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}};
+                         Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}, std::nullopt};
   };
 
   std::printf("Manual is heron_teleop (D5)\n");
@@ -373,7 +373,7 @@ int main() {
 
     const auto through = [&](const Scan *scan, bool fresh) {
       return AssistedInput{&limiter, hw.geometry.value(), &*table,
-                           Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}};
+                           Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}, std::nullopt};
     };
     const AssistedInput open = through(&far, true);
     Decision d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &open);
@@ -413,6 +413,62 @@ int main() {
     check("check 1, box 0.20 to 0.60 m ahead, stick 0.58: forward within 15 degrees, or stopped",
           forwardOrStopped);
     check("  and near the box, stopped", someStopped);
+    std::printf("Heading hold (P14, I20)\n");
+    {
+      const auto &g = hw.geometry.value();
+      HeadingHold hold;
+      check("standing still: no turn, nothing held",
+            hold.update(0.0, false, 0.3, 0.0, 1) == 0.0 && !hold.holding());
+      double rate = hold.update(0.0, true, 0.3, -0.2, 1);
+      check("translating: holds the heading it began at, and cancels the drift (+0.2 for -0.2)",
+            hold.holding() && near(hold.targetRad(), 0.3, 1e-12) && near(rate, 0.2, 1e-12));
+      rate = hold.update(0.0, true, 0.2, 0.0, 1);
+      check("turned 0.1 rad clockwise: turns back anticlockwise, 2/s x 0.1", near(rate, 0.2, 1e-12));
+      rate = hold.update(0.0, true, 0.3 - 1.0, 0.0, 1);
+      check("a large error: held to 0.8 rad/s", near(rate, 0.8, 1e-12));
+      rate = hold.update(0.5, true, -0.5, 0.0, 1);
+      check("the turn stick overrides: its rate, nothing held", rate == 0.5 && !hold.holding());
+      (void)hold.update(0.0, true, -0.5, 0.0, 1);
+      check("  let go: the new heading is held", hold.holding() && near(hold.targetRad(), -0.5, 1e-12));
+      (void)hold.update(0.0, true, 0.1, 0.0, 2);
+      check("a new pose epoch: the heading taken again in the new frame", near(hold.targetRad(), 0.1, 1e-12));
+      hold.reset();
+      check("reset: nothing held", !hold.holding());
+      (void)hold.update(0.0, true, 3.1, 0.0, 2);
+      rate = hold.update(0.0, true, -3.1, 0.0, 2);
+      check("across +-pi: the short way round", near(rate, 2.0 * (3.1 - (2.0 * kPi - 3.1)), 1e-9) &&
+                                                  rate < 0.0);
+
+      const double perUnit = g.maxTurnRate * (1.0 - g.minSpeed / g.maxSpeed);
+      check("holdFraction, a full strafe: rate / (max_turn_rate x (1 - min/max))",
+            near(holdFraction(0.4, BodyVelocity{0.0, -1.0, 0.0}, g), 0.4 / perUnit, 1e-12));
+      check("  held to half the slowest wheel (0.1 forward: 0.05)",
+            near(holdFraction(0.8, BodyVelocity{0.1, 0.0, 0.0}, g), 0.05, 1e-12));
+      check("  no translation, or a 45 degree diagonal: nothing",
+            holdFraction(0.4, BodyVelocity{}, g) == 0.0 &&
+                holdFraction(0.4, BodyVelocity{0.5, 0.5, 0.0}, g) == 0.0);
+
+      AssistedInput held = open;
+      held.holdRadps = 0.3;
+      d = decide(Mode::Assisted, true, BodyVelocity{0.0, -1.0, 0.0}, &held);
+      check("Assisted, clear, full strafe with the hold at 0.3 rad/s: the stick's translation, the hold's turn",
+            d.limited->reason == Heron::Limiter::Reason::Clear && d.body.vx == 0.0 && d.body.vy == -1.0 &&
+                near(d.body.wz, holdFraction(0.3, BodyVelocity{0.0, -1.0, 0.0}, g), 1e-12) && d.body.wz > 0.0);
+      check("  the limiter told the hold's turn plus the table's drift",
+            near(d.limited->command.wz, 0.3 + table->predict(0.0, -1.0).wz, 1e-9));
+      const Scan box = wallAhead(0.20, lidarAt, t0);
+      AssistedInput heldToBox = through(&box, true);
+      heldToBox.holdRadps = 0.5;
+      d = decide(Mode::Assisted, true, BodyVelocity{0.58, 0.0, 0.0}, &heldToBox);
+      check("translation cut to nothing: no turn either, so it never spins at the turn's floor",
+            d.body.vx == 0.0 && d.body.vy == 0.0 && d.body.wz == 0.0 && stopped(d.wheels));
+      AssistedInput heldBare = assistedWith(&far);
+      heldBare.holdRadps = 0.3;
+      d = decide(Mode::Assisted, true, BodyVelocity{0.5, 0.0, 0.0}, &heldBare);
+      check("no table: the hold's turn as well",
+            near(d.body.wz, holdFraction(0.3, d.body, heldBare.geometry), 1e-12) && d.body.wz > 0.0);
+    }
+
     const AssistedInput stale = through(&far, false);
     d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &stale);
     check("the pose not fresh: stopped, POSE_NOT_FRESH (P16)",
