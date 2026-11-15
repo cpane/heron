@@ -78,7 +78,9 @@
 #include "heron/geometry/Pose2.h"
 #include "heron/lidar/Lidar.h"
 #include "heron/limiter/Limiter.h"
+#include "heron/motion/MotionTable.h"
 #include "heron/odometry/OtosConfig.h"
+#include "heron/pose/PoseTracker.h"
 #include "heron/profile/RigProfile.h"
 #include "heron/remote/Normalize.h"
 
@@ -146,12 +148,32 @@ inline constexpr std::size_t kModeChannel = 8;
  */
 [[nodiscard]] std::string assistedRefusal(const Profile::RigProfile &profile);
 
+/** How much faster than the table the limiter is told a command goes, so a
+ *  table measured on a good day cannot make it late (design §19.2). */
+inline constexpr double kTableMargin = 1.2;
+
+/**
+ * The active surface's motion table (design §19, P13): its points as
+ * heron_motion's, mirrored as the surface says.
+ *
+ * @return no value without an active surface, or one with no points
+ * @throws std::invalid_argument if its points form fewer than 2 columns
+ */
+[[nodiscard]] std::optional<Motion::MotionTable> toMotionTable(const Profile::RigProfile &profile);
+
+/** The pose tracker's settings: plausibility (P16) from [geometry]'s
+ *  max_speed, 1.5 times; the speed-jump check left off (its threshold
+ *  needs the OTOS's 100 Hz noise, unmeasured). */
+[[nodiscard]] Pose::PoseConfig toPoseConfig(const Profile::RigProfile &profile);
+
 // -- one cycle ----------------------------------------------------------------
 
 /** What Assisted needs each cycle. Pointers are borrowed for the call. */
 struct AssistedInput {
   const Limiter::Limiter *limiter{nullptr};
   Profile::GeometryProfile geometry{};
+  /** The floor's motion table, or nullptr for the model of "Units". */
+  const Motion::MotionTable *motion{nullptr};
   /** The scan, the pose history and freshness, the measured velocity and
    *  now; its command is ignored: decide() puts the stick's there. */
   Limiter::LimitInput limit{};
@@ -163,10 +185,11 @@ enum class Why : std::uint8_t {
   Manual,              // the sticks, mixed
   Limited,             // Assisted: the limiter's answer; see Decision::limited
   AssistedUnavailable, // Assisted but not ready: stopped
+  PoseNotFresh,        // Assisted with the pose not fresh (P16): stopped
   NavigateNotBuilt     // Navigate, step 2: stopped
 };
 
-/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE" or
+/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH" or
  *          "NAVIGATE_NOT_BUILT" */
 [[nodiscard]] const char *toString(Why why) noexcept;
 

@@ -280,7 +280,7 @@ target_link_libraries(heron_nav_sim
 add_library(heron_robot_core STATIC src/robot/RobotCore.cpp)
 target_include_directories(heron_robot_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(heron_robot_core
-    PUBLIC heron_drive heron_geometry heron_limiter heron_lidar heron_odometry heron_profile
+    PUBLIC heron_drive heron_geometry heron_limiter heron_lidar heron_motion heron_odometry heron_pose heron_profile
            heron_ibus
     PRIVATE heron_warnings)
 

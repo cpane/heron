@@ -126,6 +126,27 @@ Limiter::LimiterConfig toLimiterConfig(const Profile::RigProfile &profile) {
   return config;
 }
 
+std::optional<Motion::MotionTable> toMotionTable(const Profile::RigProfile &profile) {
+  const Profile::SurfaceProfile *surface = Profile::findSurface(profile, profile.activeSurface);
+  if (profile.activeSurface.empty() || surface == nullptr || surface->points.empty()) {
+    return std::nullopt;
+  }
+  std::vector<Motion::MotionPoint> points;
+  for (const Profile::SurfacePoint &p : surface->points) {
+    points.push_back(Motion::MotionPoint{p.directionDeg * Geometry::kDegToRad, p.size,
+                                         Geometry::Twist{p.vx, p.vy, p.wz}});
+  }
+  return Motion::MotionTable(std::move(points), surface->mirror);
+}
+
+Pose::PoseConfig toPoseConfig(const Profile::RigProfile &profile) {
+  Pose::PoseConfig config;
+  if (profile.geometry) {
+    config.maxPlausibleSpeedMps = 1.5 * profile.geometry->maxSpeed;
+  }
+  return config;
+}
+
 std::string assistedRefusal(const Profile::RigProfile &profile) {
   std::string missing;
   const auto need = [&missing](bool present, const char *section) {
@@ -140,6 +161,18 @@ std::string assistedRefusal(const Profile::RigProfile &profile) {
   if (!missing.empty()) {
     return profile.source + " has no " + missing;
   }
+  // A chosen floor with no table is refused, never another floor's (P18).
+  if (!profile.activeSurface.empty()) {
+    const Profile::SurfaceProfile *surface = Profile::findSurface(profile, profile.activeSurface);
+    if (surface == nullptr || surface->points.empty()) {
+      return "surface " + profile.activeSurface + " has no motion table";
+    }
+    try {
+      (void)toMotionTable(profile);
+    } catch (const std::invalid_argument &e) {
+      return "surface " + profile.activeSurface + ": " + e.what();
+    }
+  }
   return Limiter::checkBlindSpot(toLimiterConfig(profile));
 }
 
@@ -153,6 +186,8 @@ const char *toString(Why why) noexcept {
       return "LIMITED";
     case Why::AssistedUnavailable:
       return "ASSISTED_UNAVAILABLE";
+    case Why::PoseNotFresh:
+      return "POSE_NOT_FRESH";
     case Why::NavigateNotBuilt:
       return "NAVIGATE_NOT_BUILT";
   }
@@ -176,16 +211,59 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
         decision.why = Why::AssistedUnavailable;
         return decision;
       }
+      if (!assisted->limit.poseFresh) {
+        decision.why = Why::PoseNotFresh;  // P16: a nonsense speed is not trusted
+        return decision;
+      }
       Limiter::LimitInput input = assisted->limit;
-      input.command = toTwist(stick, assisted->geometry);
+      if (assisted->motion == nullptr) {
+        input.command = toTwist(stick, assisted->geometry);
+        const Limiter::LimitResult limited = assisted->limiter->limit(input);
+        // Under min_speed: up to it if only the slow zone lowered it (the
+        // sweep found the faster command clear for T, so the slower one is
+        // too); otherwise stop. Header, "Units".
+        decision.body = toBodyVelocity(limited.command, assisted->geometry,
+                                       limited.reason == Limiter::Reason::Slowed);
+        decision.why = Why::Limited;
+        decision.limited = limited;
+        break;
+      }
+      // With the floor's table (design §19.2): the limiter is told what
+      // the command really makes, kTableMargin faster, drift included.
+      const Motion::MotionTable &table = *assisted->motion;
+      const double turnRate = toTwist(Drive::BodyVelocity{0.0, 0.0, stick.wz}, assisted->geometry).wz;
+      const auto told = [&](double vx, double vy, double turn) {
+        const Geometry::Twist made = table.predict(vx, vy);
+        return Geometry::Twist{made.vx * kTableMargin, made.vy * kTableMargin, turn + made.wz};
+      };
+      input.command = told(stick.vx, stick.vy, turnRate);
       const Limiter::LimitResult limited = assisted->limiter->limit(input);
-      // Under min_speed: up to it if only the slow zone lowered it (the
-      // sweep found the faster command clear for T, so the slower one is
-      // too); otherwise stop. Header, "Units".
-      decision.body = toBodyVelocity(limited.command, assisted->geometry,
-                                     limited.reason == Limiter::Reason::Slowed);
       decision.why = Why::Limited;
       decision.limited = limited;
+      if (limited.reason == Limiter::Reason::Clear) {
+        decision.body = stick;
+        break;
+      }
+      // Limited: the turn by its scale; the translation the command nearest
+      // what was allowed without exceeding it on either axis, checked once
+      // more, or none. The limiter cuts by axis, so the allowed motion's
+      // direction is not the stick's; a strafe that creeps forward into a
+      // wall is refused rather than slid (§7.4 as built).
+      decision.body.wz = stick.wz * limited.scale.wz;
+      const auto command = table.nearestCommand(
+          Geometry::Vec2{limited.command.vx / kTableMargin, limited.command.vy / kTableMargin});
+      if (command) {
+        Limiter::LimitInput again = assisted->limit;
+        again.command = told(command->first, command->second, turnRate * limited.scale.wz);
+        // Clear, or Slowed: the slow zone scales every command near
+        // something, so nothing there is Clear; Slowed means the sweep found
+        // this one clear for T, as the min_speed rule reasons.
+        const Limiter::Reason recheck = assisted->limiter->limit(again).reason;
+        if (recheck == Limiter::Reason::Clear || recheck == Limiter::Reason::Slowed) {
+          decision.body.vx = command->first;
+          decision.body.vy = command->second;
+        }
+      }
       break;
     }
     case Mode::Navigate:
