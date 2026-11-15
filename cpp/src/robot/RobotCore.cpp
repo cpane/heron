@@ -217,6 +217,37 @@ double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
   return std::clamp(turnRadps / perUnit, -slowest / 2.0, slowest / 2.0);
 }
 
+MotionWatch::MotionWatch() noexcept : MotionWatch(Config{}) {}
+
+MotionWatch::MotionWatch(Config config) noexcept : m_config(config) {}
+
+bool MotionWatch::update(double expectedMps, double measuredMps, bool translating,
+                         std::chrono::steady_clock::time_point now) noexcept {
+  if (m_tripped) {
+    if (!translating) {
+      m_tripped = false;  // the stick centred: the driver has seen it
+      m_since.reset();
+    }
+    return m_tripped;
+  }
+  if (expectedMps >= m_config.expectMps && measuredMps < m_config.stillMps) {
+    if (!m_since) {
+      m_since = now;
+    }
+    if (now - *m_since >= m_config.window) {
+      m_tripped = true;
+    }
+  } else {
+    m_since.reset();
+  }
+  return m_tripped;
+}
+
+void MotionWatch::reset() noexcept {
+  m_tripped = false;
+  m_since.reset();
+}
+
 const char *toString(Why why) noexcept {
   switch (why) {
     case Why::Disarmed:
@@ -229,6 +260,8 @@ const char *toString(Why why) noexcept {
       return "ASSISTED_UNAVAILABLE";
     case Why::PoseNotFresh:
       return "POSE_NOT_FRESH";
+    case Why::NotMoving:
+      return "NOT_MOVING";
     case Why::NavigateNotBuilt:
       return "NAVIGATE_NOT_BUILT";
   }
@@ -254,6 +287,10 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       }
       if (!assisted->limit.poseFresh) {
         decision.why = Why::PoseNotFresh;  // P16: a nonsense speed is not trusted
+        return decision;
+      }
+      if (assisted->notMoving) {
+        decision.why = Why::NotMoving;  // lifted, or stuck: told to move, nothing moved
         return decision;
       }
       Limiter::LimitInput input = assisted->limit;

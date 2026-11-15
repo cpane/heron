@@ -21,7 +21,9 @@
 //             outline is slowed, cut or stopped, axis by axis, so sliding
 //             along a wall and backing away still work. With the turn
 //             stick centred, heading hold keeps the heading while it
-//             moves (P14).
+//             moves (P14). Told to move while the OTOS sees nothing for
+//             half a second (lifted, or stuck), it stops (NOT_MOVING)
+//             until the stick is centred.
 //   Navigate  not built yet (step 2): stops.
 //
 // Its decisions are in src/robot/RobotCore.h, tested by robot_test; this
@@ -75,6 +77,7 @@
 
 #include <chrono>
 #include <cinttypes>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -257,6 +260,8 @@ int main(int argc, char **argv) {
   const Heron::Profile::GeometryProfile geometry =
       profile.geometry.value_or(Heron::Profile::GeometryProfile{});
   Heron::Robot::HeadingHold hold;
+  Heron::Robot::MotionWatch watch;
+  Heron::Drive::BodyVelocity lastBody;  // what the wheels were told last cycle
   Mode shownMode = Mode::Manual;
   Why shownWhy = Why::Disarmed;
   bool first = true;
@@ -303,13 +308,22 @@ int main(int argc, char **argv) {
         if (armed && hold.holding()) {
           assisted.holdRadps = rate;
         }
+        // Commanded but not moving: last cycle's command, from rest,
+        // against what the OTOS reads now (design §19.4 step 4).
+        const Heron::Geometry::Twist expected =
+            motion ? motion->predictFromRest(lastBody.vx, lastBody.vy) : Heron::Geometry::Twist{};
+        assisted.notMoving = watch.update(std::hypot(expected.vx, expected.vy),
+                                          std::hypot(p.newest.velocity.vx, p.newest.velocity.vy),
+                                          translating, now);
       }
       if (!armed || mode != Mode::Assisted || !ready) {
         hold.reset();
+        watch.reset();
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
 
+      lastBody = armed && d.why == Why::Limited ? d.body : Heron::Drive::BodyVelocity{};
       if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {
         ++driving;
         if (motors) {

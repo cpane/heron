@@ -70,6 +70,7 @@
 #ifndef HERON_ROBOT_ROBOT_CORE_H
 #define HERON_ROBOT_ROBOT_CORE_H
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -242,6 +243,64 @@ class HeadingHold {
 [[nodiscard]] double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
                                   const Profile::GeometryProfile &g) noexcept;
 
+/**
+ * "Commanded but not moving" (design §19.4 step 4, accepted 2026-11-15):
+ * the wheels driven with a command that, from rest, should move the robot
+ * at expectMps or more, while the OTOS reads under stillMps, for a whole
+ * window, trips it. It catches the robot lifted (floor check 4: a gentle
+ * lift raised TILT only and read exactly 0, so the pose stayed fresh and
+ * the wheels turned in the air) and wheels spinning while stuck.
+ *
+ * "From rest" is MotionTable::predictFromRest(), the points as measured:
+ * a command in the dead band, which cannot start a still robot, expects
+ * almost nothing and never trips it. The numbers are from the floor
+ * checks of 2026-11-14: from rest the bench rig reached 0.15 m/s within
+ * 0.2 s; standing on the hardwood the OTOS read within 0.01 m/s; lifted,
+ * exactly 0.
+ *
+ * Once tripped it stays tripped until the translation stick is centred,
+ * so a lifted robot does not pulse its wheels every window. Assisted
+ * stops while it is (Why::NotMoving). It is not the pose's freshness: the
+ * pose tracker cannot see what the wheels were told (I21).
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class MotionWatch {
+  public:
+    struct Config {
+      double expectMps{0.10};                    // the command should make at least this
+      double stillMps{0.01};                     // the OTOS reads under this
+      std::chrono::milliseconds window{500};     // both, this long
+    };
+
+    MotionWatch() noexcept;  // Config's defaults
+    explicit MotionWatch(Config config) noexcept;
+
+    /**
+     * One cycle.
+     *
+     * @param expectedMps what last cycle's driven command makes from rest
+     *        (predictFromRest()), speed over the floor; 0 without a table
+     * @param measuredMps the OTOS's speed over the floor
+     * @param translating whether the stick asks for any translation; once
+     *        tripped, false clears it
+     * @param now this cycle's time
+     * @return whether it is tripped
+     */
+    bool update(double expectedMps, double measuredMps, bool translating,
+                std::chrono::steady_clock::time_point now) noexcept;
+
+    /** Clears it: on leaving Assisted or Navigate, and on disarming. */
+    void reset() noexcept;
+
+    [[nodiscard]] bool tripped() const noexcept { return m_tripped; }
+
+  private:
+    Config m_config;
+    bool m_tripped{false};
+    std::optional<std::chrono::steady_clock::time_point> m_since;
+};
+
 /** What Assisted needs each cycle. Pointers are borrowed for the call. */
 struct AssistedInput {
   const Limiter::Limiter *limiter{nullptr};
@@ -256,6 +315,8 @@ struct AssistedInput {
    *  asked for. The limiter is told it; the wheels get holdFraction() of
    *  it for the translation driven. */
   std::optional<double> holdRadps;
+  /** MotionWatch tripped: the wheels were told to move and nothing moved. */
+  bool notMoving{false};
 };
 
 /** Why the wheels are what they are this cycle. */
@@ -265,11 +326,12 @@ enum class Why : std::uint8_t {
   Limited,             // Assisted: the limiter's answer; see Decision::limited
   AssistedUnavailable, // Assisted but not ready: stopped
   PoseNotFresh,        // Assisted with the pose not fresh (P16): stopped
+  NotMoving,           // Assisted, told to move and nothing moved (MotionWatch): stopped
   NavigateNotBuilt     // Navigate, step 2: stopped
 };
 
-/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH" or
- *          "NAVIGATE_NOT_BUILT" */
+/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH",
+ *          "NOT_MOVING" or "NAVIGATE_NOT_BUILT" */
 [[nodiscard]] const char *toString(Why why) noexcept;
 
 /** One cycle's choice. */

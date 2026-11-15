@@ -469,6 +469,46 @@ int main() {
             near(d.body.wz, holdFraction(0.3, d.body, heldBare.geometry), 1e-12) && d.body.wz > 0.0);
     }
 
+    std::printf("Commanded but not moving (design §19.4 step 4)\n");
+    {
+      MotionWatch watch;
+      const TimePoint t = t0;
+      bool tripped = watch.update(0.27, 0.0, true, t);
+      tripped = tripped || watch.update(0.27, 0.0, true, t + 480ms);
+      check("full strafe expected, the OTOS reads 0: not tripped before 0.5 s", !tripped);
+      check("  tripped at 0.5 s", watch.update(0.27, 0.0, true, t + 500ms));
+      check("  stays tripped while the stick still asks", watch.update(0.0, 0.0, true, t + 2s));
+      check("  the stick centred: cleared", !watch.update(0.0, 0.0, false, t + 2100ms));
+      MotionWatch moving;
+      bool everTripped = false;
+      for (int i = 0; i <= 50; ++i) {
+        const double measured = std::min(0.27, 0.75 * 0.02 * i);  // 0.15 m/s within 0.2 s, as measured
+        everTripped = moving.update(0.27, measured, true, t + i * 20ms) || everTripped;
+      }
+      check("starting from rest as the robot did (0.15 m/s in 0.2 s): never trips", !everTripped);
+      MotionWatch deadBand;
+      for (int i = 0; i <= 100; ++i) {
+        everTripped = deadBand.update(0.01, 0.0, true, t + i * 20ms) || everTripped;
+      }
+      check("a dead-band command (expects 0.01 from rest) that moves nothing: never trips", !everTripped);
+      MotionWatch onFloor;
+      for (int i = 0; i <= 100; ++i) {
+        everTripped = onFloor.update(0.27, (i % 2 == 0) ? 0.012 : 0.0, true, t + i * 20ms) || everTripped;
+      }
+      check("readings of 0.01 m/s or more break the window: not tripped", !everTripped);
+      MotionWatch reset;
+      (void)reset.update(0.27, 0.0, true, t);
+      (void)reset.update(0.27, 0.0, true, t + 600ms);
+      reset.reset();
+      check("reset: cleared", !reset.tripped());
+
+      AssistedInput lifted = through(&far, true);
+      lifted.notMoving = true;
+      d = decide(Mode::Assisted, true, BodyVelocity{0.0, -1.0, 0.0}, &lifted);
+      check("tripped: Assisted stops, NOT_MOVING", stopped(d.wheels) && d.why == Why::NotMoving);
+      check("  NOT_MOVING as text", std::string(toString(Why::NotMoving)) == "NOT_MOVING");
+    }
+
     const AssistedInput stale = through(&far, false);
     d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &stale);
     check("the pose not fresh: stopped, POSE_NOT_FRESH (P16)",
