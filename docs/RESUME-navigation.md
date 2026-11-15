@@ -421,21 +421,24 @@ navigation, so SwC to Manual always takes over.
    "commanded but not moving" check to step 4 (design §19.4); TILT as
    not fresh rejected for now.
 
-   **Next: step 1's floor checks again, through the table** (design
-   §19.4 step 3's end): Assisted at a box straight on at 0.6 and full
-   (expect it to stop short as before, a little earlier at full since
-   the table says it goes 0.39, not 0.42); a strafe right toward a box on
-   the right (it should stop short; toward a wall ahead it now refuses a
-   strafe, `navigation-cpp-design.md` §7.5 as built); a lift, then
-   Assisted: caught (`POSE_NOT_FRESH`) only if the OTOS raises TRACKING
-   or reads an implausible speed; a gentle lift that raises TILT alone
-   stays fresh (check 4, the known limit). `heron_teleop` off, `ssh
-   -t <user>@<pi> '~/heron/bin/heron_robot --lines 10'`, the start-up
-   should print `Surface: hardwood-1` and "Assisted: ready, through the
-   surface's motion table". Then design §19.4 step 4: heading hold, and
-   with it "commanded but not moving" (wheels commanded, the OTOS
-   exactly zero for about 0.5 s: pose not fresh, a threshold that does
-   not trip at the dead band; heading hold uses the same signal).
+   **Floor checks 1 to 3 after the fix, 2026-11-14:** straight at a box
+   at 0.58 (throttle 0.6, full stick), **14 cm** short; at full
+   (throttle 1.0), **14.5 cm**; full strafe right toward a box on the
+   right, **10 cm** at the front wheels, 12 at the back. Both straight
+   runs stopped with the box at 0.23 to 0.24 m on the LiDAR, so the stop
+   no longer depends on speed. No swerve. The strafe turned the robot
+   19° clockwise. Open: the output flickered while cut at full speed
+   (`navigation-cpp-design.md` §7.5 as built). Note for checks: the
+   throttle scales the stick, so `stick +0.58` at throttle 0.6 is full
+   stick. **Step 3 is done.**
+
+   **Next: design §19.4 step 4,** heading hold (P14), and with it:
+   "commanded but not moving" (wheels commanded, the OTOS exactly zero
+   for about 0.5 s: pose not fresh, a threshold that does not trip at the
+   dead band; heading hold uses the same signal); the strafe's 19° turn
+   (check 3) is what it should remove; and look at the output flicker
+   while cut at full speed. To drive: `heron_teleop` off, `ssh -t
+   <user>@<pi> '~/heron/bin/heron_robot --lines 10'`.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the

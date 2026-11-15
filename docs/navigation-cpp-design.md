@@ -1212,6 +1212,19 @@ from the interfaces above:
   (`kSubstituteWidthRad`) of the direction given, the stick's, so a
   substitute never swerves the robot. Near the box nothing fits and
   Assisted stops; at 0.58 from 0.36 m it would coast about 5 cm.
+- **Floor checks after the fix (2026-11-14), measured:** straight at a
+  box at 0.58, 14 cm short; at full, 14.5 cm (cut from 0.49 m, let go at
+  0.30 m doing 0.29 m/s, the LiDAR read the box at 0.23 and 0.24 m both
+  times, so the stop no longer depends on speed); a full strafe right
+  toward a box on the right, 10 cm at the front wheels and 12 at the
+  back. No swerve: the largest sideways substitute going forward was
+  −0.08; going right, the substitutes leaned up to 15° backward
+  (`out −0.16 −0.58`). The strafe turned the robot 19° clockwise, half of
+  it while slowing, which brought the front wheels closer; heading hold
+  (step 4) is for that. **Open:** while cut at full speed the output
+  jumped between nothing and a command (`0.00, 0.80, 0.00, 0.45, 0.30,
+  0.00`) as the allowance changed scan to scan; the stop was where it
+  should be.
 
 ## 8. `heron_planner`: the local planner (N5)
 
