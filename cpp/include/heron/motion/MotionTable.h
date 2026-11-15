@@ -29,10 +29,23 @@
 // largest as the largest), and then linear in angle between them. A column
 // of one point gives that point at every size.
 //
+// A point that made almost nothing (under kStallMps) is a stall: the
+// command could not start a still robot, as the table session measured
+// each point from rest. A rolling robot does not stall there: on check 1
+// (2026-11-14), commands the table put at 0.02 to 0.05 m/s kept the robot,
+// already moving, at 0.20 to 0.25 m/s, and it stopped 8 cm from the box.
+// So for every reading, a size at or below a column's last stall reads as
+// the first point above it that moved: a small command is taken to move
+// the robot, which is the safe side for the limiter. A column where
+// nothing moved is read as measured.
+//
 // The other way round, two questions: which command makes this speed
 // along a direction (commandFor()), and which command comes nearest to a
 // given motion without exceeding it on either axis (nearestCommand()),
 // which is how heron_robot turns the limiter's answer back into wheels.
+// nearestCommand() looks only within kSubstituteWidthRad of the direction
+// it is given, the stick's, so a substitute never swerves the robot (on
+// check 1 a diagonal stood in for forward and drove it to the right).
 //
 // Pure: no clock, no thread, no files. heron_robot builds one from the
 // profile's surface (heron_profile's onSurface(), I22).
@@ -41,7 +54,7 @@
 // -----
 //   Heron::Motion::MotionTable table(points, false);
 //   const Twist made = table.predict(0.0, -0.6);       // strafe right at 0.6
-//   if (const auto c = table.nearestCommand(Vec2{0.0, -0.10})) {
+//   if (const auto c = table.nearestCommand(Vec2{0.0, -0.10}, -std::numbers::pi / 2.0)) {
 //     // c->first, c->second: the fractions to drive
 //   }
 
@@ -66,6 +79,12 @@ struct MotionPoint {
 /** Points each within this of the next, in direction, form one column (I18). */
 inline constexpr double kColumnWidthRad = 10.0 * Geometry::kDegToRad;
 
+/** A point that made less than this, m/s, is a stall: measured from rest. */
+inline constexpr double kStallMps = 0.02;
+
+/** nearestCommand() looks this far either side of the direction it is given. */
+inline constexpr double kSubstituteWidthRad = 15.0 * Geometry::kDegToRad;
+
 /**
  * The measured motion table for one floor.
  *
@@ -83,7 +102,8 @@ class MotionTable {
      */
     MotionTable(std::vector<MotionPoint> points, bool mirror);
 
-    /** What a translation command makes; zero at zero. */
+    /** What a translation command makes; zero at zero. Stalls read as the
+     *  first point above them that moved (header). */
     [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
 
     /**
@@ -99,16 +119,19 @@ class MotionTable {
     /**
      * The command whose predicted motion comes nearest to want without
      * exceeding it: on each axis the same sign as want (or zero) and no
-     * larger. Searched over directions every 5 degrees and sizes every
-     * 0.05 of full.
+     * larger. Searched over directions every 5 degrees within withinRad of
+     * aroundRad, and sizes every 0.05 of full.
      *
-     * @return the vx and vy fractions; no value when no command moves the
-     *         robot within want (the caller stops)
+     * @param aroundRad the direction to stay near, command space: the stick's
+     * @param withinRad how far either side of it to look
+     * @return the vx and vy fractions; no value when no command near
+     *         aroundRad moves the robot within want (the caller stops)
      */
-    [[nodiscard]] std::optional<std::pair<double, double>> nearestCommand(Geometry::Vec2 want) const;
+    [[nodiscard]] std::optional<std::pair<double, double>> nearestCommand(
+        Geometry::Vec2 want, double aroundRad, double withinRad = kSubstituteWidthRad) const;
 
-    /** The least speed a command along directionRad moves the robot at; 0
-     *  if its smallest point made nothing. */
+    /** The least speed a command along directionRad moves the robot at,
+     *  stalls lifted; 0 where no point either side moved. */
     [[nodiscard]] double leastSpeed(double directionRad) const;
 
     /** How many columns the points formed, mirrors included. */
@@ -118,6 +141,7 @@ class MotionTable {
     struct Column {
       double directionRad{0.0};
       std::vector<MotionPoint> points;  // by size, rising
+      std::size_t firstRead{0};         // the first point read, stalls lifted
     };
 
     [[nodiscard]] Geometry::Twist inColumn(const Column &column, double size) const;

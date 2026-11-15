@@ -46,6 +46,22 @@ double ccwFrom(double a, double b) {
   return d < 0.0 ? d + kTwoPi : d;
 }
 
+// Stalls lifted (header): the point after a column's last stall, if one
+// follows it; otherwise the first, and the column reads as measured.
+bool isStall(const MotionPoint &p) {
+  return std::hypot(p.made.vx, p.made.vy) < kStallMps;
+}
+
+std::size_t pointAfterStalls(const std::vector<MotionPoint> &points) {
+  std::size_t first = 0;
+  for (std::size_t i = 0; i + 1 < points.size(); ++i) {
+    if (isStall(points[i])) {
+      first = i + 1;
+    }
+  }
+  return isStall(points[first]) ? 0 : first;
+}
+
 bool within(double v, double want) {
   return v >= std::min(0.0, want) - kAxisToleranceMps && v <= std::max(0.0, want) + kAxisToleranceMps;
 }
@@ -91,6 +107,7 @@ MotionTable::MotionTable(std::vector<MotionPoint> points, bool mirror) {
         column.points.push_back(p);
       }
     }
+    column.firstRead = pointAfterStalls(column.points);
     m_columns.push_back(std::move(column));
   }
 
@@ -113,6 +130,7 @@ MotionTable::MotionTable(std::vector<MotionPoint> points, bool mirror) {
         p.made.wz = -p.made.wz;
         m.points.push_back(p);
       }
+      m.firstRead = c.firstRead;
       m_columns.push_back(std::move(m));
     }
   }
@@ -126,13 +144,14 @@ MotionTable::MotionTable(std::vector<MotionPoint> points, bool mirror) {
 
 Geometry::Twist MotionTable::inColumn(const Column &column, double size) const {
   const std::vector<MotionPoint> &p = column.points;
-  if (size <= p.front().size) {
-    return p.front().made;  // the dead band lifts any command to the smallest
+  const std::size_t first = column.firstRead;
+  if (size <= p[first].size) {
+    return p[first].made;  // the dead band, or a stall, lifts any command to it
   }
   if (size >= p.back().size) {
     return p.back().made;
   }
-  for (std::size_t i = 1; i < p.size(); ++i) {
+  for (std::size_t i = first + 1; i < p.size(); ++i) {
     if (size <= p[i].size) {
       return blend(p[i - 1].made, p[i].made, (size - p[i - 1].size) / (p[i].size - p[i - 1].size));
     }
@@ -178,14 +197,17 @@ std::optional<std::pair<double, double>> MotionTable::commandFor(double directio
   return std::make_pair(cx * *best, cy * *best);
 }
 
-std::optional<std::pair<double, double>> MotionTable::nearestCommand(Geometry::Vec2 want) const {
+std::optional<std::pair<double, double>> MotionTable::nearestCommand(Geometry::Vec2 want, double aroundRad,
+                                                                     double withinRad) const {
   if (std::hypot(want.x, want.y) < 1e-3) {
     return std::nullopt;
   }
+  constexpr double kStepRad = 5.0 * Geometry::kDegToRad;
+  const int steps = static_cast<int>(std::floor(withinRad / kStepRad + 1e-9));
   std::optional<std::pair<double, double>> best;
   double bestMiss = 0.0;
-  for (int d = -36; d < 36; ++d) {
-    const double direction = d * 5.0 * Geometry::kDegToRad;
+  for (int d = -steps; d <= steps; ++d) {
+    const double direction = aroundRad + d * kStepRad;
     for (int k = 1; k <= 20; ++k) {
       const double s = 0.05 * k;
       const double cx = std::cos(direction) * s;

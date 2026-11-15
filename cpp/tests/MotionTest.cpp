@@ -10,9 +10,10 @@
 // The motion_test row of docs/navigation-cpp-design.md §7.5: columns from
 // points within 10 degrees, across +-180 included; linear in size within a
 // column, the smallest below it and the largest above; linear in angle
-// between columns; the mirror; refused tables; commandFor() never faster
-// than asked; nearestCommand() never past what it is asked for on either
-// axis. Last, the bench rig's hardwood points (design §19.2's example),
+// between columns; the mirror; refused tables; stalls lifted;
+// commandFor() never faster than asked; nearestCommand() never past what it
+// is asked for on either axis, and never more than 15 degrees off the
+// direction it is given. Last, the bench rig's hardwood points (design §19.2's example),
 // read back. Same style as the other tests: no framework.
 
 #include <cmath>
@@ -138,6 +139,22 @@ int main() {
                                                                  same(own.predict(0.0, 1.0), Twist{0.0, 0.05, 0.0}));
   }
 
+  std::printf("Stalls lifted (check 1, 2026-11-14)\n");
+  {
+    // Right: nothing at 0.3, then 0.1 and 0.3 m/s at 0.5 and 1.0.
+    const MotionTable t({point(0, 1.0, 0.4, 0.0), point(-90, 0.3, 0.0, -0.005), point(-90, 0.5, 0.0, -0.1, -0.2),
+                         point(-90, 1.0, 0.0, -0.3, -0.2)},
+                        false);
+    check("right at 0.3, a stall: read as 0.5's point", same(t.predict(0.0, -0.3), Twist{0.0, -0.1, -0.2}));
+    check("right at 0.4, between the stall and 0.5: 0.5's point", same(t.predict(0.0, -0.4), Twist{0.0, -0.1, -0.2}));
+    check("right at 0.75: linear as before", same(t.predict(0.0, -0.75), Twist{0.0, -0.2, -0.2}));
+    check("least speed right: 0.1, not the stall's", near(t.leastSpeed(-90.0 * kDegToRad), 0.1));
+    const MotionTable dead({point(0, 1.0, 0.4, 0.0), point(-90, 0.5, 0.0, -0.005), point(-90, 1.0, 0.0, -0.01)},
+                           false);
+    check("a column where nothing moved: read as measured",
+          same(dead.predict(0.0, -0.75), Twist{0.0, -0.0075, 0.0}, 1e-9));
+  }
+
   std::printf("commandFor() and leastSpeed()\n");
   {
     const MotionTable t(forwardAndRight(), false);
@@ -156,27 +173,56 @@ int main() {
   std::printf("nearestCommand()\n");
   {
     const MotionTable t(forwardAndRight(), false);
-    const auto c = t.nearestCommand(Vec2{0.0, -0.2});
+    const double right = -90.0 * kDegToRad;
+    const auto c = t.nearestCommand(Vec2{0.0, -0.2}, right);
     const Twist made = c ? t.predict(c->first, c->second) : Twist{};
     std::printf("        want right 0.2: command (%.3f, %.3f) makes (%.3f, %.3f)\n", c ? c->first : 0.0,
                 c ? c->second : 0.0, made.vx, made.vy);
     check("want right 0.2: a strafe that makes it, nothing forward", c && near(made.vy, -0.2, 0.011) &&
                                                                         std::abs(made.vx) <= 0.005);
-    check("want nothing: none (stop)", !t.nearestCommand(Vec2{0.0, 0.0}));
-    check("want 0.05 forward, under the least (0.2): none", !t.nearestCommand(Vec2{0.05, 0.0}));
+    check("want nothing: none (stop)", !t.nearestCommand(Vec2{0.0, 0.0}, 0.0));
+    check("want 0.05 forward, under the least (0.2): none", !t.nearestCommand(Vec2{0.05, 0.0}, 0.0));
+    check("want right 0.2, the stick forward: none, nothing near forward makes it",
+          !t.nearestCommand(Vec2{0.0, -0.2}, 0.0));
 
     const MotionTable hw(hardwood(), false);
+    const auto pureRight = hw.nearestCommand(Vec2{0.0, -0.15}, right);
     check("hardwood: pure right is not on offer (its strafe creeps forward 0.04)",
-          !hw.nearestCommand(Vec2{0.0, -0.15}) ||
-              std::abs(hw.predict(hw.nearestCommand(Vec2{0.0, -0.15})->first,
-                                  hw.nearestCommand(Vec2{0.0, -0.15})->second).vx) <= 0.005);
-    const auto fr = hw.nearestCommand(Vec2{0.2, -0.15});
+          !pureRight || std::abs(hw.predict(pureRight->first, pureRight->second).vx) <= 0.005);
+    const auto fr = hw.nearestCommand(Vec2{0.2, -0.15}, std::atan2(-0.15, 0.2));
     const Twist frMade = fr ? hw.predict(fr->first, fr->second) : Twist{};
     std::printf("        hardwood, want (0.20, -0.15): command (%.3f, %.3f) makes (%.3f, %.3f)\n",
                 fr ? fr->first : 0.0, fr ? fr->second : 0.0, frMade.vx, frMade.vy);
     check("hardwood, want forward-right: within it on both axes", fr && frMade.vx <= 0.205 &&
                                                                      frMade.vx >= -0.005 && frMade.vy >= -0.155 &&
                                                                      frMade.vy <= 0.005);
+
+    // Check 1: forward at 0.58 toward a box, cut below forward's floor.
+    // Before, a diagonal the table put at 0.02 to 0.05 m/s stood in, and
+    // the rolling robot kept 0.20 to 0.25 m/s.
+    check("hardwood, want 0.15 forward, the stick forward: none (stop), under forward's 0.19",
+          !hw.nearestCommand(Vec2{0.15, 0.0}, 0.0));
+    bool near15 = true;
+    bool neverStalls = true;
+    for (double want = 0.05; want <= 0.40; want += 0.01) {
+      const auto f = hw.nearestCommand(Vec2{want, 0.0}, 0.0);
+      if (!f) {
+        continue;
+      }
+      const double direction = std::atan2(f->second, f->first);
+      near15 = near15 && std::abs(direction) <= 15.0 * kDegToRad + 1e-9;
+      const Twist m = hw.predict(f->first, f->second);
+      neverStalls = neverStalls && std::hypot(m.vx, m.vy) >= hw.leastSpeed(direction) - 1e-9 &&
+                    std::hypot(m.vx, m.vy) >= 0.15;
+    }
+    check("hardwood, forward 0.05 to 0.40 m/s: every substitute within 15 degrees of forward", near15);
+    check("  and none the table thinks stalls", neverStalls);
+    bool rightNear15 = true;
+    for (double want = 0.05; want <= 0.30; want += 0.01) {
+      const auto r = hw.nearestCommand(Vec2{0.05, -want}, right);
+      rightNear15 = rightNear15 && (!r || std::abs(std::atan2(r->second, r->first) - right) <= 15.0 * kDegToRad + 1e-9);
+    }
+    check("hardwood, right: every substitute within 15 degrees of right", rightNear15);
   }
 
   std::printf("The bench rig's hardwood (design §19.2)\n");
@@ -190,7 +236,9 @@ int main() {
     std::printf("        strafe right 0.6: (%.3f, %.3f, %.3f)\n", right.vx, right.vy, right.wz);
     check("strafe right at 0.6: about 0.15 right, turning right", right.vy < -0.12 && right.vy > -0.18 &&
                                                                      right.wz < -0.1);
-    check("strafe right at 0.2: nothing", std::hypot(hw.predict(0.0, -0.2).vx, hw.predict(0.0, -0.2).vy) < 0.02);
+    const Twist small = hw.predict(0.0, -0.2);
+    std::printf("        strafe right 0.2: (%.3f, %.3f, %.3f)\n", small.vx, small.vy, small.wz);
+    check("strafe right at 0.2, a stall: lifted to near 0.4's point, moving right", small.vy < -0.04);
     check("left at 0.6: 0.04, not right's mirror", near(hw.predict(0.0, 0.6).vy, 0.04, 1e-9));
   }
 
