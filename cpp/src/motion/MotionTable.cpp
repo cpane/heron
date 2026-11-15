@@ -142,9 +142,9 @@ MotionTable::MotionTable(std::vector<MotionPoint> points, bool mirror) {
   }
 }
 
-Geometry::Twist MotionTable::inColumn(const Column &column, double size) const {
+Geometry::Twist MotionTable::inColumn(const Column &column, double size, bool liftStalls) const {
   const std::vector<MotionPoint> &p = column.points;
-  const std::size_t first = column.firstRead;
+  const std::size_t first = liftStalls ? column.firstRead : 0;
   if (size <= p[first].size) {
     return p[first].made;  // the dead band, or a stall, lifts any command to it
   }
@@ -160,6 +160,14 @@ Geometry::Twist MotionTable::inColumn(const Column &column, double size) const {
 }
 
 Geometry::Twist MotionTable::predict(double vxFraction, double vyFraction) const {
+  return read(vxFraction, vyFraction, true);
+}
+
+Geometry::Twist MotionTable::predictFromRest(double vxFraction, double vyFraction) const {
+  return read(vxFraction, vyFraction, false);
+}
+
+Geometry::Twist MotionTable::read(double vxFraction, double vyFraction, bool liftStalls) const {
   const double size = std::hypot(vxFraction, vyFraction);
   if (size < 1e-9) {
     return Geometry::Twist{};
@@ -175,7 +183,8 @@ Geometry::Twist MotionTable::predict(double vxFraction, double vyFraction) const
   const std::size_t hi = (lo + 1) % m_columns.size();
   const double span = ccwFrom(m_columns[lo].directionRad, m_columns[hi].directionRad);
   const double t = span > 1e-12 ? ccwFrom(m_columns[lo].directionRad, direction) / span : 0.0;
-  return blend(inColumn(m_columns[lo], size), inColumn(m_columns[hi], size), std::clamp(t, 0.0, 1.0));
+  return blend(inColumn(m_columns[lo], size, liftStalls), inColumn(m_columns[hi], size, liftStalls),
+               std::clamp(t, 0.0, 1.0));
 }
 
 std::optional<std::pair<double, double>> MotionTable::commandFor(double directionRad,

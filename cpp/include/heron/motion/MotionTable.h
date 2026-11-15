@@ -106,6 +106,13 @@ class MotionTable {
      *  first point above them that moved (header). */
     [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
 
+    /** What a translation command makes from rest: the points as measured,
+     *  stalls included, so a command the table could not start the robot
+     *  with predicts (almost) nothing. For "commanded but not moving"
+     *  (design §19.4 step 4), which must not trip at the dead band; never
+     *  for the limiter, which wants predict(). */
+    [[nodiscard]] Geometry::Twist predictFromRest(double vxFraction, double vyFraction) const;
+
     /**
      * The command along directionRad (command space) whose predicted speed
      * is as near speedMps as it can be without going over it.
@@ -144,7 +151,8 @@ class MotionTable {
       std::size_t firstRead{0};         // the first point read, stalls lifted
     };
 
-    [[nodiscard]] Geometry::Twist inColumn(const Column &column, double size) const;
+    [[nodiscard]] Geometry::Twist inColumn(const Column &column, double size, bool liftStalls) const;
+    [[nodiscard]] Geometry::Twist read(double vxFraction, double vyFraction, bool liftStalls) const;
 
     std::vector<Column> m_columns;  // by direction, rising, in (-pi, pi]
 };
