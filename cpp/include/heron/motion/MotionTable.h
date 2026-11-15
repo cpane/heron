@@ -1,0 +1,130 @@
+// File        : MotionTable.h
+// Author      : Chris Pane
+// Description : What each drive command really does on one floor: a table
+//               of measured points, read both ways.
+//
+// Copyright (c) 2026 Chris Pane
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License; see LICENSE in the repository root.
+
+// What this is
+// ------------
+// On the bench rig's hardwood, a command does not make the motion its
+// numbers suggest: forward has a floor, a strafe needs 0.4 of full before
+// it moves at all, goes half as fast as forward and turns the robot as it
+// goes, and left is not right mirrored (docs/navigation-design.md §19.1).
+// Formulas cannot describe that, so the table stores what was measured:
+// for each command, given as fractions of full drive, the twist the robot
+// made (design §19, P13; docs/navigation-cpp-design.md §7.5, I17, I18).
+//
+//   command (fractions)          what the robot made (robot frame)
+//   direction 0 deg, size 0.6 -> vx 0.31 m/s, vy 0,     wz +0.05 rad/s
+//   direction -80,   size 0.6 -> vx 0.04,     vy -0.15, wz -0.20
+//
+// Points are kept as measured; the stick does not send the angles aimed
+// for, so no even grid is required (I18). Points each within 10 degrees
+// of the next, in direction, form one column, at their mean direction. A command is read in the two columns either side of its
+// direction, each linear in size (below the smallest size as the
+// smallest, since the motors' dead band lifts any command to it; above the
+// largest as the largest), and then linear in angle between them. A column
+// of one point gives that point at every size.
+//
+// The other way round, two questions: which command makes this speed
+// along a direction (commandFor()), and which command comes nearest to a
+// given motion without exceeding it on either axis (nearestCommand()),
+// which is how heron_robot turns the limiter's answer back into wheels.
+//
+// Pure: no clock, no thread, no files. heron_robot builds one from the
+// profile's surface (heron_profile's onSurface(), I22).
+//
+// Usage
+// -----
+//   Heron::Motion::MotionTable table(points, false);
+//   const Twist made = table.predict(0.0, -0.6);       // strafe right at 0.6
+//   if (const auto c = table.nearestCommand(Vec2{0.0, -0.10})) {
+//     // c->first, c->second: the fractions to drive
+//   }
+
+#ifndef HERON_MOTION_MOTION_TABLE_H
+#define HERON_MOTION_MOTION_TABLE_H
+
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include "heron/geometry/Pose2.h"
+
+namespace Heron::Motion {
+
+/** One measured command and what the robot made of it. */
+struct MotionPoint {
+  double directionRad{0.0};  // the command's, robot frame: 0 forward, -pi/2 right
+  double size{0.0};          // its length, hypot of the vx and vy fractions, > 0
+  Geometry::Twist made{};    // vx, vy in m/s, wz in rad/s: what it did
+};
+
+/** Points each within this of the next, in direction, form one column (I18). */
+inline constexpr double kColumnWidthRad = 10.0 * Geometry::kDegToRad;
+
+/**
+ * The measured motion table for one floor.
+ *
+ * Thread Safety: a plain value; const methods may be called from any thread.
+ */
+class MotionTable {
+  public:
+    /**
+     * @param points what was measured, in any order
+     * @param mirror a column with no counterpart on the other side (within
+     *        kColumnWidthRad of its mirror direction) is copied there, vy
+     *        and wz negated
+     * @throws std::invalid_argument for fewer than 2 columns, or a point
+     *         with a size not above 0
+     */
+    MotionTable(std::vector<MotionPoint> points, bool mirror);
+
+    /** What a translation command makes; zero at zero. */
+    [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
+
+    /**
+     * The command along directionRad (command space) whose predicted speed
+     * is as near speedMps as it can be without going over it.
+     *
+     * @return the vx and vy fractions; no value when even the smallest
+     *         command along it is faster than speedMps
+     */
+    [[nodiscard]] std::optional<std::pair<double, double>> commandFor(double directionRad,
+                                                                      double speedMps) const;
+
+    /**
+     * The command whose predicted motion comes nearest to want without
+     * exceeding it: on each axis the same sign as want (or zero) and no
+     * larger. Searched over directions every 5 degrees and sizes every
+     * 0.05 of full.
+     *
+     * @return the vx and vy fractions; no value when no command moves the
+     *         robot within want (the caller stops)
+     */
+    [[nodiscard]] std::optional<std::pair<double, double>> nearestCommand(Geometry::Vec2 want) const;
+
+    /** The least speed a command along directionRad moves the robot at; 0
+     *  if its smallest point made nothing. */
+    [[nodiscard]] double leastSpeed(double directionRad) const;
+
+    /** How many columns the points formed, mirrors included. */
+    [[nodiscard]] std::size_t columns() const noexcept { return m_columns.size(); }
+
+  private:
+    struct Column {
+      double directionRad{0.0};
+      std::vector<MotionPoint> points;  // by size, rising
+    };
+
+    [[nodiscard]] Geometry::Twist inColumn(const Column &column, double size) const;
+
+    std::vector<Column> m_columns;  // by direction, rising, in (-pi, pi]
+};
+
+}  // namespace Heron::Motion
+
+#endif  // HERON_MOTION_MOTION_TABLE_H

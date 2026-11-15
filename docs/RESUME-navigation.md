@@ -119,8 +119,8 @@ navigation, so SwC to Manual always takes over.
 - **Design §19, P13 to P18 accepted** (Chris): a measured motion table
   per floor, heading hold, the planner on commands, plausibility, the
   simulator by the table, surface profiles sorted by drive with a
-  library of known surfaces. I17 to I22 (the interfaces) still to be
-  reviewed. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
+  library of known surfaces. I17 to I22 (the interfaces) accepted the
+  same day, I18 revised to points as measured. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
 
 ## Picking up
 
