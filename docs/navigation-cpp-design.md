@@ -1024,7 +1024,7 @@ Nothing here is built.
 | # | Decision | Why |
 |---|---|---|
 | I17 | **`heron_motion`, a new pure library, holds the motion table** and nothing else; `heron_robot`, `heron_planner` and `heron_nav_sim` link it | One model, three users; tested alone with hand-made tables, as the other cores are |
-| I18 | **The table is indexed by the command's direction and size,** fractions of full drive, and holds what the robot made, a `Twist` | That is what is measured (§19.3), so the table stores observations, not fitted constants |
+| I18 | **The table holds points as measured,** each a command (direction and size, fractions of full drive) and what the robot made, a `Twist`; no even grid is required. Points whose directions lie within 10° of each other form one column, at their mean direction; within a column it is linear in size, below the smallest size as the smallest and above the largest as the largest; between the two columns either side of a direction, linear in angle | That is what is measured (§19.3), so the table stores observations, not fitted constants. The stick does not send the angles aimed for (1 o'clock came out at 15°, 2 o'clock at 45°, "right" at −75° to −90°), so a grid would mean throwing measurements away or faking their directions (revised 2026-11-14, after the first table) |
 | I19 | **A plan carries the command as well as the twist** (`Plan::command`), and Navigate drives the command | The twist is the prediction; driving it back through an inverse would lose what the planner chose |
 | I20 | **Heading hold is a pure class in `RobotCore`,** fed the heading, the turn stick and the table's drift each cycle | The loop stays reading and driving; the hold is tested on the Mac like `decide()` |
 | I21 | **Plausibility is `PoseTracker`'s,** by config: it already judges freshness, and every user of the pose then sees the same verdict | The limiter, perception, the planner and the status line cannot disagree about a nonsense speed |
@@ -1042,14 +1042,17 @@ struct MotionPoint {
 
 class MotionTable {
   public:
-    /** @param mirror the left half is the right's, vy and wz negated
-     *  @throws std::invalid_argument unless the points form a grid of
-     *          directions x sizes, sizes rising, at least 2 of each */
+    /** @param mirror a direction with no column on the left is taken from
+     *         its mirror on the right, vy and wz negated
+     *  @throws std::invalid_argument for fewer than 2 columns, or a
+     *          column of 1 point that is not a dead one (made nothing) */
     MotionTable(std::vector<MotionPoint> points, bool mirror);
 
-    /** What a translation command makes: interpolated between the four
-     *  nearest points; below the smallest size, as the smallest (the dead
-     *  band lifts any command to it); zero at zero. */
+    /** What a translation command makes (I18): in each of the two columns
+     *  either side of its direction, linear in size (below the smallest as
+     *  the smallest: the dead band lifts any command to it; above the
+     *  largest as the largest); then linear in angle between them. Zero at
+     *  zero. */
     [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
 
     /** The command along directionRad whose predicted speed is speedMps:
