@@ -254,7 +254,7 @@ add_library(heron_planner STATIC
     src/planner/LocalPlanner.cpp)
 target_include_directories(heron_planner PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(heron_planner
-    PUBLIC heron_geometry heron_perception heron_pose
+    PUBLIC heron_geometry heron_motion heron_perception heron_pose
     PRIVATE Threads::Threads heron_warnings)
 
 # The simulator: a world of segments, a mecanum base, an A1M8 that turns
@@ -269,7 +269,7 @@ add_library(heron_nav_sim STATIC
     src/nav_sim/Otos.cpp)
 target_include_directories(heron_nav_sim PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(heron_nav_sim
-    PUBLIC heron_geometry heron_pose heron_scan_builder
+    PUBLIC heron_geometry heron_motion heron_pose heron_scan_builder
     PRIVATE heron_warnings)
 
 # heron_robot's decisions: SwC as a mode, fractions of full drive to m/s and
@@ -368,7 +368,8 @@ target_link_libraries(geometry_test PRIVATE heron_geometry heron_warnings)
 add_test(NAME geometry_test COMMAND geometry_test)
 
 add_executable(nav_sim_test tests/NavSimTest.cpp)
-target_link_libraries(nav_sim_test PRIVATE heron_nav_sim heron_warnings)
+target_compile_definitions(nav_sim_test PRIVATE HERON_PROFILE_DIR="${PROJECT_SOURCE_DIR}/profiles")
+target_link_libraries(nav_sim_test PRIVATE heron_nav_sim heron_profile heron_warnings)
 add_test(NAME nav_sim_test COMMAND nav_sim_test)
 
 # PoseFeed.h is private to heron_pose, so the test is given its path; the
@@ -395,13 +396,16 @@ add_test(NAME limiter_test COMMAND limiter_test)
 
 add_executable(planner_test tests/PlannerTest.cpp)
 target_include_directories(planner_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(planner_test PRIVATE heron_planner heron_warnings)
+target_compile_definitions(planner_test PRIVATE HERON_PROFILE_DIR="${PROJECT_SOURCE_DIR}/profiles")
+target_link_libraries(planner_test PRIVATE heron_planner heron_profile heron_warnings)
 add_test(NAME planner_test COMMAND planner_test)
 
 add_executable(nav_scenario_test tests/NavScenarioTest.cpp)
+target_include_directories(nav_scenario_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_definitions(nav_scenario_test PRIVATE HERON_PROFILE_DIR="${PROJECT_SOURCE_DIR}/profiles")
 target_link_libraries(nav_scenario_test
-    PRIVATE heron_limiter heron_planner heron_perception heron_nav_sim Threads::Threads
-            heron_warnings)
+    PRIVATE heron_planner heron_perception heron_nav_sim heron_robot_core
+            Threads::Threads heron_warnings)
 add_test(NAME nav_scenario_test COMMAND nav_scenario_test)
 
 # The bench profile from the repository on the Mac; on a Pi the test falls

@@ -30,8 +30,10 @@
 #include <cstdio>
 #include <numbers>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
+#include "BenchTable.h"
 #include "heron/geometry/Pose2.h"
 #include "nav_sim/Base.h"
 #include "nav_sim/Lidar.h"
@@ -199,6 +201,46 @@ int main() {
       spinner.advance(t2 - 1s);
       return spinner.truePose().heading == before.heading;
     }());
+  }
+
+  std::printf("The base, moving by the bench rig's hardwood table (P17)\n");
+  {
+    const Heron::Test::BenchTable bench = Heron::Test::benchHardwood();
+    BaseConfig onFloor;
+    onFloor.motion = bench.motion;
+    onFloor.maxTurnRateRadps = bench.geometry.maxTurnRate;
+    onFloor.turnFloorRadps = bench.geometry.maxTurnRate * bench.geometry.minSpeed / bench.geometry.maxSpeed;
+    TimePoint now{};
+    Base robot(onFloor, Pose2{}, now);
+    const Twist right = bench.motion->predict(0.0, -1.0);
+    robot.commandFractions(0.0, -1.0, 0.0, now);
+    now += 2s;
+    robot.advance(now);
+    const Twist v = robot.trueVelocity();
+    std::printf("        full strafe right: (%.3f, %.3f, %.3f), the table (%.3f, %.3f, %.3f)\n", v.vx, v.vy,
+                v.wz, right.vx, right.vy, right.wz);
+    check("full strafe right, settled: what the table says, drift included",
+          near(v.vx, right.vx, 1e-9) && near(v.vy, right.vy, 1e-9) && near(v.wz, right.wz, 1e-9) &&
+              v.vy < -0.25);
+    const Twist diag = robot.fractionsToTwist(0.5, -0.5, 0.0);
+    check("a diagonal right at 0.71: about half as far sideways as forward-and-right says",
+          diag.vy > -0.12 && diag.vx > 0.10);
+    const double perUnit = onFloor.maxTurnRateRadps - onFloor.turnFloorRadps;
+    check("turn stick while translating: wz x (max_turn_rate - floor) added to the drift",
+          near(robot.fractionsToTwist(0.6, 0.0, 0.1).wz, bench.motion->predict(0.6, 0.0).wz + 0.1 * perUnit,
+               1e-12));
+    check("turn stick on the spot: lifted to the floor first",
+          near(robot.fractionsToTwist(0.0, 0.0, 0.1).wz, onFloor.turnFloorRadps + 0.1 * perUnit, 1e-12));
+    check("nothing asked: nothing", robot.fractionsToTwist(0.0, 0.0, 0.0).vx == 0.0 &&
+                                        robot.fractionsToTwist(0.0, 0.0, 0.0).wz == 0.0);
+    bool threw = false;
+    try {
+      Base bare(BaseConfig{}, Pose2{}, now);
+      bare.commandFractions(0.5, 0.0, 0.0, now);
+    } catch (const std::logic_error &) {
+      threw = true;
+    }
+    check("no table: commandFractions() refused", threw);
   }
 
   std::printf("The LiDAR, against the measured A1M8\n");
@@ -380,7 +422,11 @@ int main() {
     // believed heading ends 0.8 deg out, and the path bends to the left by
     // about the mean angle times the distance, 0.4 deg x 2 m = 14 mm.
     now = TimePoint{};
-    Base driver(BaseConfig{1000.0, 1000.0, Duration::zero()}, Pose2{}, now);
+    BaseConfig quick;
+    quick.accel = 1000.0;
+    quick.turnAccel = 1000.0;
+    quick.lag = Duration::zero();
+    Base driver(quick, Pose2{}, now);
     Otos drifting(OtosConfig{6.0, 0.0, 1}, now);
     (void)drifting.read(now, driver);
     driver.command(Twist{0.25, 0.0, 0.0}, now);

@@ -9,6 +9,8 @@
 #include "nav_sim/Base.h"
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 
 namespace Heron::NavSim {
 
@@ -32,6 +34,26 @@ Base::Base(BaseConfig config, Geometry::Pose2 start, TimePoint startTime)
 
 void Base::command(const Geometry::Twist &twist, TimePoint now) {
   m_pending.push_back(Pending{now + m_config.lag, twist});
+}
+
+Geometry::Twist Base::fractionsToTwist(double vx, double vy, double wz) const {
+  if (!m_config.motion) {
+    throw std::logic_error("Heron::NavSim::Base::fractionsToTwist() : the config has no motion table");
+  }
+  Geometry::Twist t = m_config.motion->predict(vx, vy);
+  if (wz != 0.0) {
+    const double full = m_config.maxTurnRateRadps;
+    const double floor = m_config.turnFloorRadps;
+    const bool translating = vx != 0.0 || vy != 0.0;
+    // Translating, the wheels are past the dead band: wz shifts them in
+    // proportion. On the spot, the dead band lifts it to the floor first.
+    t.wz += translating ? wz * (full - floor) : std::copysign(floor + (full - floor) * std::abs(wz), wz);
+  }
+  return t;
+}
+
+void Base::commandFractions(double vx, double vy, double wz, TimePoint now) {
+  command(fractionsToTwist(vx, vy, wz), now);
 }
 
 void Base::advance(TimePoint now) {

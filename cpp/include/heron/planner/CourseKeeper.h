@@ -19,9 +19,16 @@
 //     frame by Heron's heading, is the course heading, and the line runs
 //     through Heron's position at that moment.
 //   - Held: the speed and turn rate follow the stick on every call, the
-//     line stays put. Only when the stick's odom-frame direction drifts
-//     more than 10 degrees from the heading (you moved the stick, or Heron
-//     turned under it) is the line re-anchored where Heron is.
+//     line stays put. It is re-anchored where Heron is only when you
+//     change it: the right stick moved more than 10 degrees from where it
+//     pointed, or, after you used the turn stick, the course direction
+//     (heading plus stick) more than 10 degrees from the line's. Heron
+//     turning on its own, with the turn stick centred, never moves the
+//     line: on a 45 degree diagonal heading hold can do nothing and the
+//     floor's drift turned Heron past 10 degrees, so the line was lost
+//     (nav_scenario_test, scenario 1); held, heading hold turns Heron back
+//     once it can, and the line is still there (design §19.4 step 5,
+//     question 1, decided 2026-11-16).
 //   - Let go: no course. The control loop stops Heron at once.
 //   - A new epoch (odometry restarted): re-anchored, since the old anchor
 //     is in a frame that no longer exists.
@@ -90,6 +97,8 @@ class CourseKeeper {
     CourseConfig m_config;
     std::optional<Course> m_course;
     std::uint64_t m_seq{0};
+    double m_stickRad{0.0};  // the right stick's direction, robot frame, at anchoring
+    bool m_turned{false};    // the turn stick used since anchoring
 };
 
 }  // namespace Heron::Planner

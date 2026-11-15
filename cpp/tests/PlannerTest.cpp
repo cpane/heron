@@ -24,6 +24,7 @@
 #include <random>
 #include <vector>
 
+#include "BenchTable.h"
 #include "heron/planner/CourseKeeper.h"
 #include "heron/planner/Planner.h"
 #include "planner/DistanceField.h"
@@ -188,15 +189,26 @@ int main() {
     c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, moved, 1);
     check("11 deg round: re-anchored where Heron is", c && c->seq == 2 && c->anchor.x == 1.5 &&
                                                           near(c->headingRad, 0.5 + 11 * kDeg, 1e-12));
+    const Pose2 drifted{1.6, 2.1, 0.5 - 12 * kDeg};
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, drifted, 1);
+    check("Heron drifted 12 deg by itself, the turn stick centred: the same line",
+          c && c->seq == 2 && c->anchor.x == 1.5 && near(c->headingRad, 0.5 + 11 * kDeg, 1e-12));
     const Pose2 turned{1.5, 2.1, 0.5 + 11 * kDeg + 12 * kDeg};
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.4}, moved, 1);
+    check("  the turn stick used, not yet 10 deg turned: the same line", c && c->seq == 2);
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, turned, 1);
+    check("  12 deg turned since, the turn stick let go: re-anchored", c && c->seq == 3);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 1);
-    check("Heron turned 12 deg under a held stick: re-anchored", c && c->seq == 3);
+    check("  the right stick 11 deg round from there: re-anchored", c && c->seq == 4);
+    const Pose2 later{1.7, 2.1, 0.5 + 11 * kDeg + 12 * kDeg - 15 * kDeg};
+    c = keeper.update(Twist{0.3, 0.0, 0.0}, later, 1);
+    check("  then a drift of 15 deg, no turn stick since: the same line", c && c->seq == 4);
     c = keeper.update(Twist{0.0, 0.0, 0.4}, turned, 1);
     check("let go (turning only): no course", !c);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 1);
-    check("pushed again: engaged afresh", c && c->seq == 4);
+    check("pushed again: engaged afresh", c && c->seq == 5);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 2);
-    check("a new epoch: re-anchored in it", c && c->seq == 5 && c->epoch == 2);
+    check("a new epoch: re-anchored in it", c && c->seq == 6 && c->epoch == 2);
   }
 
   std::printf("The distance field (§8.4)\n");
@@ -428,6 +440,50 @@ int main() {
     check("never farther than 1 m off the line: round the right", plan.state == State::Avoiding &&
                                                                        plan.twist.vy < 0.0);
     check("the path ends no farther off", plan.path.back().y <= 1e-9);
+  }
+
+  std::printf("With the bench rig's hardwood table: commands (P15)\n");
+  {
+    const Heron::Test::BenchTable bench = Heron::Test::benchHardwood();
+    PlannerConfig tableConfig = config;
+    tableConfig.motion = bench.motion;
+    tableConfig.maxSpeedMps = bench.geometry.maxSpeed;
+    ObstacleMap map = emptyMap();
+    seeFree(map);
+    Planner planner(tableConfig);
+    Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3)));
+    print("from rest, table", plan);
+    const Twist made = bench.motion->predict(plan.commandVx, plan.commandVy);
+    check("from rest: a command chosen, though the dead band's least (0.19 m/s) is past the window",
+          plan.state == State::Following && (plan.commandVx != 0.0 || plan.commandVy != 0.0));
+    check("  the twist is the table's prediction of the command, drift included",
+          near(plan.twist.vx, made.vx, 1e-12) && near(plan.twist.vy, made.vy, 1e-12) &&
+              near(plan.twist.wz, made.wz, 1e-12));
+    check("  no faster than the course asks (I13)", std::hypot(made.vx, made.vy) <= 0.3 + 1e-9);
+
+    plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3), Twist{0.27, 0.0, 0.0}));
+    print("at 0.27 m/s, table", plan);
+    check("at speed: Following, a forward command", plan.state == State::Following && plan.commandVx > 0.3 &&
+                                                        std::abs(plan.commandVy) < 0.1 * plan.commandVx);
+
+    plan = planner.plan(inputFor(map, courseAlong(-kPi / 2.0, 0.3), Twist{0.0, -0.2, 0.0}));
+    print("a course to the right, table", plan);
+    const Twist sideways = bench.motion->predict(plan.commandVx, plan.commandVy);
+    check("a course to the right: a strafe command of at least 0.4 (the strafe's dead band)",
+          plan.commandVy <= -0.4 && sideways.vy < -0.1);
+
+    const Vec2 centre{0.75, 0.03};
+    ObstacleMap boxed = emptyMap();
+    seeFree(boxed);
+    seeBox(boxed, centre, 0.3, 0.3);
+    Planner round(tableConfig);
+    plan = round.plan(inputFor(boxed, courseAlong(0.0, 0.3), Twist{0.27, 0.0, 0.0}));
+    print("box ahead, table", plan);
+    const double truth = trueClearance(plan, body, boxPoints(centre, 0.3, 0.3));
+    std::printf("        the chosen path's true clearance: %.3f m; command (%.2f, %.2f)\n", truth,
+                plan.commandVx, plan.commandVy);
+    check("box ahead: Avoiding by a command whose predicted motion goes round it, margin kept",
+          plan.state == State::Avoiding && truth >= tableConfig.stopMarginM);
   }
 
   std::printf("Time\n");

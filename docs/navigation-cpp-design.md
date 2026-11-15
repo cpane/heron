@@ -1294,6 +1294,106 @@ from the interfaces above:
 | I23 | **"Commanded but not moving" is a pure class in `RobotCore`,** fed the table's from-rest prediction of the command driven and the OTOS's speed; tripped, Assisted stops (`NOT_MOVING`) until the stick is centred | A gentle lift reads as still and stays fresh (floor check 4); only the loop knows what the wheels were told. From rest, so the dead band never trips it; latched, so a lifted robot does not pulse its wheels every half second |
 | I24 | **While the limiter cuts, the command only falls (`CutHold`),** released by 0.1 s of Clear, the stick centred, or turned more than 15°; the limiter is unchanged | The OTOS's noise at speed flips the limiter's answer cycle to cycle; smoothing the speed instead would delay the safety check. A lower command than allowed is always safe; the cost, measured, is a stop about 9 cm earlier at full speed and none at 0.29 m/s |
 
+**As built, §19.4 step 5 (2026-11-15), on the host only:** the simulator
+by the table (P17) and the planner on commands (P15), the scenarios run
+against the bench rig's hardwood (`tests/BenchTable.h` reads
+`profiles/bench.conf` and `hardwood-1` as `heron_robot` does). Changes
+from the interfaces above:
+
+- **`Base::commandFractions()` and the turn:** the table has no turn, so
+  `BaseConfig` gains `maxTurnRateRadps` and `turnFloorRadps`: while
+  translating a unit of wz adds `max − floor` rad/s, on the spot it is
+  lifted to the floor first (RobotCore's "Units"); `fractionsToTwist()`
+  shows the aim. The table's stalls read as moving (`predict()`), so the
+  simulated base starts small commands the real one cannot from rest.
+  A full strafe right reads 0.25 m/s at −90° (the right column sits at
+  −85°; 0.27 was measured at −90°).
+- **The planner's window and the dead band:** kept only within
+  `accelMps2 × windowS` of the measured speed, nothing could start: from
+  rest forward's least is 0.19 m/s against a 0.18 m/s window. So **each
+  direction's smallest command that moves is kept whatever the window
+  says.** "As large as the course's size" is read as I13: a command
+  predicted faster than the course asks is dropped. "Straight" is any
+  candidate whose predicted motion runs within 5° of the course. The plan's
+  twist is the prediction, drift added to the course's turn;
+  `commandVx`, `commandVy` the command (0 without a table). With a box
+  ahead, 87 candidates, 5.6 ms a call on the Mac.
+- **Navigate drives the command through `decide()`'s Assisted path** in
+  the scenarios (Clear as it is, otherwise the nearest allowed command
+  within 15°), not "anything but Clear stops the translation": the
+  scenarios stand in for `heron_robot`, whose Navigate is step 6.
+- **The scenarios run `decide()` itself** for Assisted (2, 3, 5), the
+  stick in fractions; scenario 2 draws forward 0.4 to 1.0 with a sideways
+  part up to ±0.35, scenario 3 holds (0.9, 0.4), scenario 5 0.8.
+
+**Results** (`nav_scenario_test`; an expectation the robot as measured
+does not meet is reported OPEN at the same threshold and not counted, but
+each has a limit a little worse than its result here, and past the limit
+it fails, so a change that makes it clearly worse is caught: closest pass
+at least 10 cm; within 0.5 m of the line 2 m past the box (1.25 m
+before heading hold, 0.6 m before the line was kept, 0.35 m with the
+left diagonal interpolated rather than measured); at the dead end Avoiding or Blocked, never
+Following or Stopped. The user chose OPEN with limits over failing,
+2026-11-15). **Rebased on step 4 (2026-11-16), every scenario drive has
+heading hold and `CutHold`,** fed as `heron_robot`'s loop feeds them
+(not `MotionWatch`: the simulated OTOS is never lifted). In brackets,
+the results without them:
+
+| Scenario | Result |
+|---|---|
+| 1, Navigate at a box | Every run reached 4.5 m, 17 to 19 s; the limiter cut none of the planner's choices. **Open:** closest 109 to 194 mm, three runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in the 4 runs that passed the box on its left (82 to 84 mm), the 6 that passed on its right 237 to 412 mm off (2 of 10, up to 1088). The left diagonal, measured 2026-11-16, makes almost no left (question 2); with it interpolated, the worst was 267 mm, and with the old re-anchor rule 474 |
+| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 123 mm, median at the end 206 mm (97, 147) |
+| 3, sliding along a wall | Never touched, and **kept sliding at 0.35 m/s**, 231 mm off it (stopped at 69 mm, 0.14 m/s): now a check, no longer open |
+| 4, dead end | Stopped 256 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
+| 5, LiDAR stops | Stopped 302 ms after the last scan (Stale), still 640 ms later |
+
+**Design questions from the open ones:**
+
+1. **Heading hold cannot act on the planner's 45° diagonals.**
+   **Decided 2026-11-16 (Chris): `CourseKeeper` re-anchors only on the
+   right stick moving more than 10°, or the heading more than 10° after
+   the turn stick was used, never for drift** (as design §8.1 first said:
+   "moving the stick"). Since then the worst run is 267 mm off, still
+   coming back, slowly: returning left, the best command makes 0.02 m/s
+   sideways (question 2). The history: without
+   the hold the table's drift turned Heron past 10° (a diagonal right
+   −0.07 rad/s; forward +0.02 to +0.05), CourseKeeper re-anchored the line
+   where Heron was (§8.1, "Heron turned under it"), and the original line
+   was lost, up to 1.1 m off. With it the worst is 474 mm, and the trace
+   shows why: to get round the box the planner picks exact 45° diagonals
+   (0.64, −0.64), where two wheels stand still and `holdFraction()` holds
+   nothing (step 4); the heading drifts to −12° and the line is
+   re-anchored. The choices: keep the planner's candidates off the exact
+   diagonals (35° or 55° hold), or have CourseKeeper not re-anchor while
+   avoiding.
+2. **Passing within 15 cm.** **Decided 2026-11-16 (Chris): measure the
+   left diagonals first, then weigh the clearance weight.** **Measured
+   the same day** (`hardwood-1.conf` p23 to p26): forward-left makes
+   forward at forward's speeds (0.19 to 0.31 m/s), only 0.03 m/s left,
+   and turns left 0.11 to 0.18 rad/s; Chris saw the robot turn about 45°
+   and curve left in each 4 s run. The right diagonal goes half sideways
+   and barely turns. Rerun: passing improved (closest 109 mm, most over
+   150), coming back left got worse (above). The clearance weight is
+   still to weigh, now on measured numbers. The planner's 15 cm is a preference
+   (`preferredClearanceM`), and on the table the sideways moves are weak:
+   a diagonal makes about half its sideways part, and the left side has no
+   measured diagonal (interpolated between forward and a weak left).
+   Measuring left diagonals, or raising the clearance weight, are the
+   choices.
+3. **Sliding along a wall pushed diagonally into it** (scenario 3):
+   settled by heading hold. Without it, the drift turned Heron toward the
+   wall, no command within 15° of the stick kept off it, and Assisted
+   stopped beside it; held straight, it slides at 0.28 m/s.
+4. **Planner and limiter disagree at a dead end** (scenario 4).
+   **Decided 2026-11-16 (Chris): `heron_robot`'s Navigate loop (step 6)
+   shows BLOCKED when the plan's command has been stopped by the limiter
+   for more than 0.5 s;** the planner and the limiter are unchanged. The
+   planner keeps a small command whose imagined path keeps the margin; the
+   limiter, told the table's speed × 1.2 and the brake, refuses it. Safe
+   (stopped), but the plan says Avoiding. The dead band leaves nothing slow
+   enough to creep on; the planner could check its choice against the
+   limiter's rule, or call such a stop Blocked.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9
@@ -1369,9 +1469,12 @@ Each call:
 - **Engage:** the stick's direction turned into the odom frame by Heron's
   heading is the heading; the line runs through Heron's position; `seq`
   rises.
-- **Held:** the speed and turn rate follow the stick every call. If its
-  odom-frame direction drifts more than 10° from the heading (the stick
-  moved, or Heron turned under it), re-anchor at the current position.
+- **Held:** the speed and turn rate follow the stick every call.
+  Re-anchor at the current position when the right stick's direction
+  moves more than 10° from where it pointed, or, once the turn stick has
+  been used, the odom-frame direction more than 10° from the heading.
+  Heron turning by itself never re-anchors (changed 2026-11-16, §7.5 "As
+  built, §19.4 step 5", question 1).
 - **A new epoch** (odometry restarted): re-anchor, since the old anchor
   is in a frame that no longer exists.
 

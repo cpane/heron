@@ -174,3 +174,17 @@ docs may want to say which frame it is. This also explains the earlier
 entry's "0.05 to 0.09 m/s sideways at full speed straight ahead": the
 robot had turned. Log `captures/table-hardwood-1-2026-11-14.log` (not in
 git). `RESUME-navigation.md`, "Picking up" 3.
+
+### From navigation, 2026-11-16: a failed start after boot, and TILT that stayed on
+
+[ours, causes unverified] Bench rig, hardwood. (1) About a minute after
+the Pi booted, `heron_robot` reported `OtosDevice::start() : scalars
+read back 0xA4 0x00, written 0xA4 0xF7` (the angular scalar did not take)
+and ran without odometry; started again a minute later, the OTOS came up
+normally. (2) In the same session, after the robot was lifted and set
+down flat, the status line kept `(not fresh) TRACKING TILT` for the rest
+of the run, three 4 s runs and the pauses between them, the robot flat
+on the floor throughout; the speeds read during it matched clean runs
+(forward 0.31 m/s against 0.31). Restarting `heron_robot` cleared it.
+Log `captures/left-diagonals-hardwood-1-2026-11-16.log` (not in git);
+navigation's `RESUME-navigation.md`, step 5.

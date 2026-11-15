@@ -23,6 +23,15 @@ namespace {
 // the cell slack.
 constexpr double kEdgeSpacingM = 0.025;
 
+constexpr double kPi = 3.14159265358979323846;
+
+// With a table: a command predicted slower than this does not move Heron.
+constexpr double kStillMps = 0.01;
+
+// With a table: a candidate whose motion runs within 5 degrees of the
+// course is the straight one (cos 5 degrees).
+constexpr double kStraightCos = 0.99619469809174553;
+
 // I12 lets a candidate through that brings nothing nearer; sliding along a
 // wall reads the same distance give or take rounding, so allow that much.
 constexpr double kSameM = 1e-9;
@@ -73,6 +82,8 @@ double clearanceAt(const DistanceField &field, const std::vector<Geometry::Vec2>
 /** One candidate, as imagined. */
 struct Candidate {
   Geometry::Twist twist{};
+  double commandVx{0.0};  // with a table: the command that makes twist
+  double commandVy{0.0};
   bool straight{false};
   double clearance{0.0};  // field's least over the steps, less the slack
   double progress{0.0};   // along the course heading, over the horizon
@@ -136,7 +147,38 @@ Plan Planner::plan(const PlanInput &input) {
   std::vector<Candidate> candidates;  // the straight one first: it wins a tie
   std::vector<Candidate> grid;
   const int n = std::max(2, cfg.samples);
-  for (int i = 0; i < n; ++i) {
+  if (cfg.motion) {
+    // Commands (P15): every direction and size, imagined as the table
+    // predicts; header.
+    const Motion::MotionTable &table = *cfg.motion;
+    const int directions = std::max(1, static_cast<int>(std::lround(2.0 * kPi / cfg.commandStepRad)));
+    const int sizes = std::max(1, static_cast<int>(std::lround(1.0 / cfg.commandSizeStep)));
+    for (int d = 0; d < directions; ++d) {
+      const double a = 2.0 * kPi * d / directions;
+      bool moved = false;
+      for (int k = 1; k <= sizes; ++k) {
+        const double size = static_cast<double>(k) / sizes;
+        const double cx = std::cos(a) * size;
+        const double cy = std::sin(a) * size;
+        const Geometry::Twist made = table.predict(cx, cy);
+        const double speed = std::hypot(made.vx, made.vy);
+        if (speed < kStillMps) {
+          continue;
+        }
+        const bool smallest = !moved;
+        moved = true;
+        const bool reachable = std::abs(made.vx - input.measured.vx) <= reach + 1e-9 &&
+                               std::abs(made.vy - input.measured.vy) <= reach + 1e-9;
+        if (speed > speedCap + 1e-9 || !(reachable || smallest)) {
+          continue;
+        }
+        Candidate c{Geometry::Twist{made.vx, made.vy, course.turnRateRadps + made.wz}, cx, cy};
+        c.straight = dot(Geometry::Vec2{made.vx, made.vy}, dir) >= speed * kStraightCos;
+        (c.straight ? candidates : grid).push_back(c);
+      }
+    }
+  }
+  for (int i = 0; i < n && !cfg.motion; ++i) {
     for (int j = 0; j < n; ++j) {
       const double vx = input.measured.vx - reach + 2.0 * reach * i / (n - 1);
       const double vy = input.measured.vy - reach + 2.0 * reach * j / (n - 1);
@@ -145,7 +187,7 @@ Plan Planner::plan(const PlanInput &input) {
       }
     }
   }
-  {
+  if (!cfg.motion) {
     // Along dir, as fast as the window reaches, up to the cap: the k with
     // |k dir - measured| <= reach on each axis.
     double lo = 0.0;
@@ -280,6 +322,8 @@ Plan Planner::plan(const PlanInput &input) {
   }
   m_last = best->twist;
   plan.twist = best->twist;
+  plan.commandVx = best->commandVx;
+  plan.commandVy = best->commandVy;
   plan.clearanceM = best->clearance;
   plan.state = best->straight && offNow <= cfg.onLineM ? State::Following : State::Avoiding;
   plan.reason = Reason::None;
