@@ -230,6 +230,16 @@ int main() {
     feed.update(tilted, t0 + milliseconds(80));
     check("warnings passed on, still fresh",
           feed.snapshot().fresh && feed.snapshot().tiltWarning && feed.snapshot().trackingWarning);
+
+    // The OTOS's velocity is in the odom frame: facing +y (heading 90 deg),
+    // moving along +y in the odom frame is forward for the robot.
+    Heron::Odometry::OdometrySnapshot turned = reading(5, 5.3);
+    turned.pose.h = 90.0 * kDegToRad;
+    turned.velocity = Heron::Odometry::Planar{0.0, 0.3, 0.1};
+    feed.update(turned, t0 + milliseconds(90));
+    const Twist v = feed.history().newest()->velocity;
+    check("velocity turned into the robot frame: odom +y facing +y is forward",
+          near(v.vx, 0.3) && near(v.vy, 0.0) && near(v.wz, 0.1));
   }
 
   std::printf("PoseTracker: the thread, on a fake OTOS\n");

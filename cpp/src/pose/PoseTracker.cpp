@@ -47,9 +47,14 @@ void PoseFeed::update(const Odometry::OdometrySnapshot &o, TimePoint now) {
     // A reading the sensor flags as an error goes no further; its pose is
     // not one to place points with.
     if (!o.sensorError()) {
-      m_history.add(PoseSample{now - o.age,
-                               Geometry::Pose2{o.pose.x, o.pose.y, o.pose.h},
-                               Geometry::Twist{o.velocity.x, o.velocity.y, o.velocity.h}});
+      // The OTOS gives its velocity in the odom frame, the frame its pose
+      // is in (measured 2026-11-14, design §18 item 5): turned by the
+      // heading into the robot frame PoseSample promises. The turn rate is
+      // the same in both.
+      const Geometry::Vec2 v =
+          Geometry::rotate(Geometry::Vec2{o.velocity.x, o.velocity.y}, -o.pose.h);
+      m_history.add(PoseSample{now - o.age, Geometry::Pose2{o.pose.x, o.pose.y, o.pose.h},
+                               Geometry::Twist{v.x, v.y, o.velocity.h}});
     }
   }
 
