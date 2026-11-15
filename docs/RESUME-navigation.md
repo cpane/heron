@@ -167,6 +167,16 @@ navigation, so SwC to Manual always takes over.
       and the pose tracker itself (a new epoch, I8, so the map and course
       start afresh), as the start-up retry does. Check: lift it, put it
       down, see Assisted come back without a restart.
+      **Built 2026-11-16** (`OtosRecovery`, `RobotCore.h`; the restart in
+      a `std::async` thread, the same `Odometry` instance stopped and
+      started): after 2 s not fresh with the sticks centred for 1 s, at
+      most every 5 s. `robot_test` checks the rule. **Forced on the Pi**
+      (`heron_robot --dry-run --test-otos-restart`, robot still): restart
+      done, the pose not fresh about 1 s, then fresh in epoch 2, the map
+      reset once, the loop never paused (1061 cycles in about 21 s). The
+      stuck state itself did not come back in four lifts that day (one of
+      them held 10 to 20 cm up for about 5 s): no TILT or TRACKING, the
+      pose fresh throughout [the real case still unseen].
    2. **The LiDAR that stopped answering** (2026-11-16): three start
       attempts failed (Express refused, once no answer to GET_INFO), then
       `lidar_info` got nothing, the head spinning; a replug of its USB
@@ -177,6 +187,20 @@ navigation, so SwC to Manual always takes over.
       small tool, and permission). If it recovers the LiDAR, `heron_robot`
       can do it on a failed start; if not, recovery is a replug, and the
       design says so (LiDAR's Inbox has the facts).
+      **Tried the same day, when it stuck again** (after a power cycle;
+      three starts with no answer to GET_INFO; `lidar_info` then answered
+      health but not the scan modes): `usbreset 001/005` (the CP2102,
+      re-enumerated cleanly; the head kept spinning) did not recover it;
+      RESET (`probes/lidar_01_port.py --reset`) got the full, correct
+      64-byte banner, then answers were hit and miss again (health on
+      some tries, never the scan modes). A replug, both ends of the
+      LiDAR's cable seated, recovered it at once, as before. A sensor that
+      answers RESET whole but loses later answers looks like a link losing
+      bytes, not a hung sensor [unverified]: a marginal plug or cable, the
+      LiDAR's thin 5 V (4.85 to 4.89 V on its wire), or the Pi 3's USB.
+      Next: if it sticks again, another USB cable; then the second unit,
+      if there is one; LiDAR's dedicated 5 V feed is its own plan. The
+      start-up retry recovered a refused Express twice that day.
    3. **Boot into `heron_robot`** in place of `heron_teleop`: a service
       like `heron-teleop@.service`, and the autostart script taking
       which program. Builder's and motor's scripts are involved; check

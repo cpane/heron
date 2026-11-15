@@ -451,6 +451,25 @@ void BlockedWatch::reset() noexcept {
   m_since.reset();
 }
 
+bool OtosRecovery::update(bool poseFresh, bool sticksCentred, std::chrono::steady_clock::time_point now) noexcept {
+  if (poseFresh) {
+    m_notFreshSince.reset();
+  } else if (!m_notFreshSince) {
+    m_notFreshSince = now;
+  }
+  if (!sticksCentred) {
+    m_centredSince.reset();
+  } else if (!m_centredSince) {
+    m_centredSince = now;
+  }
+  if (!m_notFreshSince || !m_centredSince || now - *m_notFreshSince < kNotFresh ||
+      now - *m_centredSince < kCentred || (m_lastRestart && now - *m_lastRestart < kBetween)) {
+    return false;
+  }
+  m_lastRestart = now;
+  return true;
+}
+
 bool CutHold::along(const Drive::BodyVelocity &stick) const noexcept {
   return (stick.vx != 0.0 || stick.vy != 0.0) &&
          std::abs(Geometry::wrapAngle(std::atan2(stick.vy, stick.vx) - m_directionRad)) <=

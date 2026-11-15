@@ -473,6 +473,41 @@ class BlockedWatch {
     std::optional<std::chrono::steady_clock::time_point> m_since;
 };
 
+/**
+ * When to restart the OTOS (2026-11-16): picked up while heron_robot ran,
+ * the bench rig's OTOS raised TRACKING and read about -3 m/s with the robot
+ * back on the floor and still, for over a minute, until the program ended;
+ * Assisted and Navigate stop while the pose is not fresh, so the robot was
+ * Manual only. Earlier lifts cleared in about 0.3 s. A restart of the
+ * odometry recovers it (and starts a new epoch, I8: the map, the course and
+ * heading hold start afresh).
+ *
+ * Restart when the pose has not been fresh for kNotFresh, the sticks have
+ * been centred for kCentred (the OTOS calibrates its gyro as it starts, so
+ * the robot should be still and no one driving it), and not within
+ * kBetween of the last restart.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class OtosRecovery {
+  public:
+    static constexpr std::chrono::milliseconds kNotFresh{2000};
+    static constexpr std::chrono::milliseconds kCentred{1000};
+    static constexpr std::chrono::milliseconds kBetween{5000};
+
+    /**
+     * @param poseFresh the pose's freshness this cycle
+     * @param sticksCentred every stick centred this cycle
+     * @return whether to restart the OTOS now; true starts kBetween
+     */
+    bool update(bool poseFresh, bool sticksCentred, std::chrono::steady_clock::time_point now) noexcept;
+
+  private:
+    std::optional<std::chrono::steady_clock::time_point> m_notFreshSince;
+    std::optional<std::chrono::steady_clock::time_point> m_centredSince;
+    std::optional<std::chrono::steady_clock::time_point> m_lastRestart;
+};
+
 }  // namespace Heron::Robot
 
 #endif  // HERON_ROBOT_ROBOT_CORE_H

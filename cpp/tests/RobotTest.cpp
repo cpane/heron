@@ -710,6 +710,47 @@ int main() {
     check("  cleared when the plan asks for nothing", !watch.update(false, false, t0 + 2000ms));
   }
 
+  std::printf("The OTOS restarted after a lift (2026-11-16)\n");
+  {
+    OtosRecovery r;
+    bool any = false;
+    for (int i = 0; i < 100; ++i) {  // 2 s: fresh throughout
+      any = r.update(true, true, t0 + i * 20ms) || any;
+    }
+    check("fresh: never", !any);
+    OtosRecovery lift;
+    any = false;
+    for (int i = 0; i <= 15; ++i) {  // not fresh 0.3 s, as earlier lifts cleared
+      any = lift.update(false, true, t0 + i * 20ms) || any;
+    }
+    for (int i = 16; i < 200; ++i) {
+      any = lift.update(true, true, t0 + i * 20ms) || any;
+    }
+    check("not fresh 0.3 s, then fresh: never", !any);
+    OtosRecovery stuck;
+    int firstAt = -1;
+    int count = 0;
+    for (int i = 0; i <= 600; ++i) {  // 12 s not fresh, sticks centred
+      if (stuck.update(false, true, t0 + i * 20ms)) {
+        firstAt = firstAt < 0 ? i : firstAt;
+        ++count;
+      }
+    }
+    check("not fresh 2 s, sticks centred: restarts at 2 s", firstAt == 100);
+    check("  then no more than one every 5 s (at 2, 7, 12 s)", count == 3);
+    OtosRecovery driving;
+    any = false;
+    for (int i = 0; i <= 300; ++i) {  // 6 s not fresh, a stick held
+      any = driving.update(false, false, t0 + i * 20ms) || any;
+    }
+    check("a stick held: never", !any);
+    int at = -1;
+    for (int i = 301; i <= 400 && at < 0; ++i) {
+      at = driving.update(false, true, t0 + i * 20ms) ? i : -1;
+    }
+    check("  centred: after 1 s of it", at == 351);
+  }
+
   std::printf("Disarmed\n");
   {
     const AssistedInput open = assistedWith(&far);
