@@ -188,3 +188,17 @@ on the floor throughout; the speeds read during it matched clean runs
 (forward 0.31 m/s against 0.31). Restarting `heron_robot` cleared it.
 Log `captures/left-diagonals-hardwood-1-2026-11-16.log` (not in git);
 navigation's `RESUME-navigation.md`, step 5.
+
+### From navigation, 2026-11-16: a lift left TRACKING on and nonsense speeds for over a minute
+
+[ours] Bench rig, hardwood, `heron_robot --dry-run`. The robot picked up
+and turned by hand (Chris): the heading swung from −1° to −51° and back
+with TILT, then TRACKING came on with the pose not fresh and speeds about
+−3.0 m/s forward and −1.1 to −2.2 m/s sideways, drifting slowly, for the
+rest of the run (over a minute) with the robot back on the floor and
+still. The odometry library never recovered by itself; a restart of the
+program did. Earlier lifts (2026-11-14, in this Inbox) cleared in about
+0.3 s. Also the same day, a second failed start shortly after power-on:
+the scalars read back 0x00 0x00 for 0xA4 0xF7 (the first, 2026-11-14,
+read 0xA4 0x00); `heron_robot` now retries the start. Write-up:
+`RESUME-navigation.md`, "Picking up" 0.
