@@ -248,10 +248,13 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       // what was allowed without exceeding it on either axis, checked once
       // more, or none. The limiter cuts by axis, so the allowed motion's
       // direction is not the stick's; a strafe that creeps forward into a
-      // wall is refused rather than slid (§7.4 as built).
+      // wall is refused rather than slid (§7.4 as built). Only commands
+      // near the stick's direction stand in, so none swerves the robot
+      // (check 1, 2026-11-14).
       decision.body.wz = stick.wz * limited.scale.wz;
       const auto command = table.nearestCommand(
-          Geometry::Vec2{limited.command.vx / kTableMargin, limited.command.vy / kTableMargin});
+          Geometry::Vec2{limited.command.vx / kTableMargin, limited.command.vy / kTableMargin},
+          std::atan2(stick.vy, stick.vx));
       if (command) {
         Limiter::LimitInput again = assisted->limit;
         again.command = told(command->first, command->second, turnRate * limited.scale.wz);

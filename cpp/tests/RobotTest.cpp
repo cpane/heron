@@ -391,6 +391,28 @@ int main() {
                 d.body.vx, d.body.vy, made.vx);
     check("wall at 0.30 m, full forward: a smaller command, still moving, making no more than allowed",
           d.body.vx > 0.0 && d.body.vx < 1.0 && made.vx <= d.limited->command.vx / kTableMargin + 0.005);
+    // Check 1 (2026-11-14): stick 0.58 forward toward a box, the limiter
+    // cutting. A diagonal stood in for forward (vy -0.19 of full) and the
+    // rolling robot stopped 8 cm short. Now: forward-ish or stopped.
+    bool forwardOrStopped = true;
+    bool someStopped = false;
+    for (double at = 0.20; at <= 0.60; at += 0.01) {
+      const Scan box = wallAhead(at, lidarAt, t0);
+      const AssistedInput toBox = through(&box, true);
+      d = decide(Mode::Assisted, true, BodyVelocity{0.58, 0.0, 0.0}, &toBox);
+      const bool zero = d.body.vx == 0.0 && d.body.vy == 0.0;
+      someStopped = someStopped || zero;
+      forwardOrStopped = forwardOrStopped &&
+                         (zero || (d.body.vx > 0.0 && std::abs(std::atan2(d.body.vy, d.body.vx)) <=
+                                                         15.0 * Heron::Geometry::kDegToRad + 1e-9));
+      if (!zero && std::abs(d.body.vy) > 0.05) {
+        std::printf("        box at %.2f m: command (%.3f, %.3f), %s\n", at, d.body.vx, d.body.vy,
+                    Heron::Limiter::toString(d.limited->reason));
+      }
+    }
+    check("check 1, box 0.20 to 0.60 m ahead, stick 0.58: forward within 15 degrees, or stopped",
+          forwardOrStopped);
+    check("  and near the box, stopped", someStopped);
     const AssistedInput stale = through(&far, false);
     d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &stale);
     check("the pose not fresh: stopped, POSE_NOT_FRESH (P16)",
