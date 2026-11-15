@@ -189,15 +189,26 @@ int main() {
     c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, moved, 1);
     check("11 deg round: re-anchored where Heron is", c && c->seq == 2 && c->anchor.x == 1.5 &&
                                                           near(c->headingRad, 0.5 + 11 * kDeg, 1e-12));
+    const Pose2 drifted{1.6, 2.1, 0.5 - 12 * kDeg};
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, drifted, 1);
+    check("Heron drifted 12 deg by itself, the turn stick centred: the same line",
+          c && c->seq == 2 && c->anchor.x == 1.5 && near(c->headingRad, 0.5 + 11 * kDeg, 1e-12));
     const Pose2 turned{1.5, 2.1, 0.5 + 11 * kDeg + 12 * kDeg};
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.4}, moved, 1);
+    check("  the turn stick used, not yet 10 deg turned: the same line", c && c->seq == 2);
+    c = keeper.update(Twist{0.3 * std::cos(11 * kDeg), 0.3 * std::sin(11 * kDeg), 0.0}, turned, 1);
+    check("  12 deg turned since, the turn stick let go: re-anchored", c && c->seq == 3);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 1);
-    check("Heron turned 12 deg under a held stick: re-anchored", c && c->seq == 3);
+    check("  the right stick 11 deg round from there: re-anchored", c && c->seq == 4);
+    const Pose2 later{1.7, 2.1, 0.5 + 11 * kDeg + 12 * kDeg - 15 * kDeg};
+    c = keeper.update(Twist{0.3, 0.0, 0.0}, later, 1);
+    check("  then a drift of 15 deg, no turn stick since: the same line", c && c->seq == 4);
     c = keeper.update(Twist{0.0, 0.0, 0.4}, turned, 1);
     check("let go (turning only): no course", !c);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 1);
-    check("pushed again: engaged afresh", c && c->seq == 4);
+    check("pushed again: engaged afresh", c && c->seq == 5);
     c = keeper.update(Twist{0.3, 0.0, 0.0}, turned, 2);
-    check("a new epoch: re-anchored in it", c && c->seq == 5 && c->epoch == 2);
+    check("a new epoch: re-anchored in it", c && c->seq == 6 && c->epoch == 2);
   }
 
   std::printf("The distance field (§8.4)\n");

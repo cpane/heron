@@ -1330,8 +1330,8 @@ from the interfaces above:
 does not meet is reported OPEN at the same threshold and not counted, but
 each has a limit a little worse than its result here, and past the limit
 it fails, so a change that makes it clearly worse is caught: closest pass
-at least 10 cm; within 0.6 m of the line 2 m past the box (1.25 m
-before heading hold); at the dead end Avoiding or Blocked, never
+at least 10 cm; within 0.35 m of the line 2 m past the box (1.25 m
+before heading hold, 0.6 m before the line was kept); at the dead end Avoiding or Blocked, never
 Following or Stopped. The user chose OPEN with limits over failing,
 2026-11-15). **Rebased on step 4 (2026-11-16), every scenario drive has
 heading hold and `CutHold`,** fed as `heron_robot`'s loop feeds them
@@ -1340,7 +1340,7 @@ the results without them:
 
 | Scenario | Result |
 |---|---|
-| 1, Navigate at a box | Every run reached 4.5 m, 18 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 110 to 164 mm, five runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in 5 of 10, the rest 115 to 474 mm off (2 of 10, up to 1088) |
+| 1, Navigate at a box | Every run reached 4.5 m, 18 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 110 to 164 mm, four runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in 5 of 10, four more 98 to 118 mm off, one 267 mm (2 of 10, up to 1088). With heading hold but the old re-anchor rule: up to 474 mm |
 | 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 107 mm, median at the end 195 mm (97, 147) |
 | 3, sliding along a wall | Closed to 97 mm, never touched, and **kept sliding at 0.28 m/s** (stopped at 69 mm, 0.14 m/s): now a check, no longer open |
 | 4, dead end | Stopped 245 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
@@ -1348,7 +1348,13 @@ the results without them:
 
 **Design questions from the open ones:**
 
-1. **Heading hold cannot act on the planner's 45° diagonals.** Without
+1. **Heading hold cannot act on the planner's 45° diagonals.**
+   **Decided 2026-11-16 (Chris): `CourseKeeper` re-anchors only on the
+   right stick moving more than 10°, or the heading more than 10° after
+   the turn stick was used, never for drift** (as design §8.1 first said:
+   "moving the stick"). Since then the worst run is 267 mm off, still
+   coming back, slowly: returning left, the best command makes 0.02 m/s
+   sideways (question 2). The history: without
    the hold the table's drift turned Heron past 10° (a diagonal right
    −0.07 rad/s; forward +0.02 to +0.05), CourseKeeper re-anchored the line
    where Heron was (§8.1, "Heron turned under it"), and the original line
@@ -1359,7 +1365,10 @@ the results without them:
    re-anchored. The choices: keep the planner's candidates off the exact
    diagonals (35° or 55° hold), or have CourseKeeper not re-anchor while
    avoiding.
-2. **Passing within 15 cm.** The planner's 15 cm is a preference
+2. **Passing within 15 cm.** **Decided 2026-11-16 (Chris): measure the
+   left diagonals first** (the next floor session, `heron_robot --lines
+   10` in Manual, each held 2 s, as the table was), rerun, and only then
+   weigh the clearance weight. The planner's 15 cm is a preference
    (`preferredClearanceM`), and on the table the sideways moves are weak:
    a diagonal makes about half its sideways part, and the left side has no
    measured diagonal (interpolated between forward and a weak left).
@@ -1369,7 +1378,10 @@ the results without them:
    settled by heading hold. Without it, the drift turned Heron toward the
    wall, no command within 15° of the stick kept off it, and Assisted
    stopped beside it; held straight, it slides at 0.28 m/s.
-4. **Planner and limiter disagree at a dead end** (scenario 4): the
+4. **Planner and limiter disagree at a dead end** (scenario 4).
+   **Decided 2026-11-16 (Chris): `heron_robot`'s Navigate loop (step 6)
+   shows BLOCKED when the plan's command has been stopped by the limiter
+   for more than 0.5 s;** the planner and the limiter are unchanged. The
    planner keeps a small command whose imagined path keeps the margin; the
    limiter, told the table's speed × 1.2 and the brake, refuses it. Safe
    (stopped), but the plan says Avoiding. The dead band leaves nothing slow
@@ -1451,9 +1463,12 @@ Each call:
 - **Engage:** the stick's direction turned into the odom frame by Heron's
   heading is the heading; the line runs through Heron's position; `seq`
   rises.
-- **Held:** the speed and turn rate follow the stick every call. If its
-  odom-frame direction drifts more than 10° from the heading (the stick
-  moved, or Heron turned under it), re-anchor at the current position.
+- **Held:** the speed and turn rate follow the stick every call.
+  Re-anchor at the current position when the right stick's direction
+  moves more than 10° from where it pointed, or, once the turn stick has
+  been used, the odom-frame direction more than 10° from the heading.
+  Heron turning by itself never re-anchors (changed 2026-11-16, §7.5 "As
+  built, §19.4 step 5", question 1).
 - **A new epoch** (odometry restarted): re-anchor, since the old anchor
   is in a frame that no longer exists.
 

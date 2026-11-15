@@ -23,11 +23,18 @@ std::optional<Course> CourseKeeper::update(const Geometry::Twist &stick,
     m_course.reset();
     return std::nullopt;
   }
-  const double heading = Geometry::wrapAngle(pose.heading + std::atan2(stick.vy, stick.vx));
+  const double stickRad = std::atan2(stick.vy, stick.vx);
+  const double heading = Geometry::wrapAngle(pose.heading + stickRad);
+  m_turned = m_turned || stick.wz != 0.0;
+  // Only what you change moves the line: the right stick, or the heading
+  // after you turned. Heron turning by itself does not (header).
   const bool reanchor =
       !m_course || m_course->epoch != epoch ||
-      std::abs(Geometry::wrapAngle(heading - m_course->headingRad)) > m_config.reanchorRad;
+      std::abs(Geometry::wrapAngle(stickRad - m_stickRad)) > m_config.reanchorRad ||
+      (m_turned && std::abs(Geometry::wrapAngle(heading - m_course->headingRad)) > m_config.reanchorRad);
   if (reanchor) {
+    m_stickRad = stickRad;
+    m_turned = stick.wz != 0.0;
     Course course;
     course.seq = ++m_seq;
     course.epoch = epoch;
@@ -42,6 +49,7 @@ std::optional<Course> CourseKeeper::update(const Geometry::Twist &stick,
 
 void CourseKeeper::reset() noexcept {
   m_course.reset();
+  m_turned = false;
 }
 
 }  // namespace Heron::Planner

@@ -505,7 +505,7 @@ int main() {
       spare = spare && b.closest >= 0.15;
       spareLimit = spareLimit && b.closest >= 0.10;  // 124 mm when opened
       back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
-      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 0.60;  // 474 mm with heading hold
+      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 0.35;  // 267 mm, the line kept
       uncut = uncut && b.cut == 0;
     }
     check("every run reached 4.5 m along", reached);
@@ -514,10 +514,9 @@ int main() {
          "the planner's 15 cm is a preference, and on the table its sideways moves are weak "
          "(a diagonal makes half its sideways part, left has no measured diagonal)");
     open("back within 10 cm of the line 2 m past it, every run", back,
-         "within 0.6 m of it, every run", backLimit,
-         "the planner avoids on exact 45 degree diagonals, where two wheels stand still and "
-         "heading hold can do nothing; the table's drift turns Heron past 10 degrees, CourseKeeper "
-         "re-anchors the line where Heron is, and the old line is lost");
+         "within 0.35 m of it, every run", backLimit,
+         "coming back left is slow: the table has no measured left diagonal, and the best "
+         "the planner finds makes 0.02 m/s sideways (question 2: measure the left diagonals)");
     check("the limiter cut none of the planner's choices (I11)", uncut);
   }
 

@@ -483,9 +483,22 @@ navigation, so SwC to Manual always takes over.
    heading hold can do nothing (§7.5 "As built, §19.4 step 5", question
    1).
 
-   **Next:** push and merge step 5 (when the user asks); then its
-   design questions 1, 2 and 4 with the user (§7.5 "As built, §19.4
-   step 5"), and step 6, Navigate in `heron_robot`.
+   Its design questions, decided 2026-11-16 (Chris): (1) `CourseKeeper`
+   re-anchors only for the right stick or after the turn stick, never
+   for drift: done, scenario 1's worst now 267 mm off (limit 0.35 m);
+   (2) measure the left diagonals before tuning the clearance weight;
+   (4) step 6's loop shows BLOCKED when the limiter has stopped the
+   plan's command for 0.5 s.
+
+   **Next:** push and merge step 5 (when the user asks). **At the next
+   floor session (the robot on):** measure the table's missing left
+   diagonals on the hardwood: Manual, `ssh -t <user>@<pi>
+   '~/heron/bin/heron_robot --lines 10'`, throttle 1.00, the right stick
+   at +45° (forward-left) at sizes 0.3, 0.55, 0.85 and 1.0, each held
+   2 s from rest, as the right diagonals were (p11 to p14 in
+   `profiles/surfaces/bench-mecanum/hardwood-1.conf`), and add them;
+   then rerun `nav_scenario_test` and weigh question 2. Then step 6,
+   Navigate in `heron_robot`, with BLOCKED as decided.
 
    Found 2026-11-16, for the LiDAR workstream (its Inbox): the A1M8
    twice refused to start Express (`cannot start scan mode 1`, every
