@@ -958,3 +958,19 @@ or the tape, [unverified]. The findings have no range noise; this is
 the first measurement. Captures `captures/noise{030,100,200}-sdk1_*`
 (git-ignored, on the Mac); the table is in `RESUME-navigation.md`,
 "Picking up" 2.
+
+### From navigation, 2026-11-16: Express refused to start until a Standard scan
+
+[ours, cause unverified] Bench rig, unit A on `/dev/rplidar`, firmware
+1.29. After several `heron_robot` runs that day, every program's start
+failed with `Lidar::start() : cannot start scan mode 1` (Express), twice
+in a row, while `lidar_info` still answered (health Good, 5 scan modes)
+and the head was spinning. `lidar_nearest --mode 3` (Sensitivity) failed
+the same way; `--mode 0` (Standard) scanned at once, and after it
+`--mode 1` started normally and kept doing so. No under-voltage
+(`vcgencmd get_throttled` 0x0) and no USB re-enumeration; the kernel
+log had three `dwc_otg ... Timed out waiting for FSM NP transfer`
+warnings about 10 minutes into that boot, not tied to the failure.
+Worth knowing for `Lidar::start()`: a fall-back of one Standard scan
+before giving up might recover it. Write-up: navigation's
+`RESUME-navigation.md`, step 4.

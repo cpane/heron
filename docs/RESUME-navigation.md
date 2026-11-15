@@ -1,13 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-14: N1's profile complete for the bench rig, the
-A1M8's range noise measured; `heron_robot` step 1 (Manual and Assisted)
-built and checked on the block and on the floor: Assisted stops short of
-a box at every speed and slides along it, once the motors' dead band was
-modelled (`min_speed`). Sideways measured: slow, drifting, needing a
-large command; design §19 (P13 to P18: a measured motion table, heading
-hold, plausibility, surface profiles per floor) proposed for review
-before step 2 (https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16: design §19.4 step 4 (heading hold,
+"commanded but not moving", and `CutHold`) floor-checked on the bench
+rig and ready to merge; step 5 (the simulator and planner on the motion
+table) built on its own branch, to rebase after it. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -121,6 +117,14 @@ navigation, so SwC to Manual always takes over.
   simulator by the table, surface profiles sorted by drive with a
   library of known surfaces. I17 to I22 (the interfaces) accepted the
   same day, I18 revised to points as measured. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
+
+## Decided (2026-11-16)
+
+- **`CutHold` (I24):** while the limiter cuts, the command only falls,
+  released by 0.1 s of Clear, the stick centred, or turned past 15°
+  (Chris, after the full-speed log showed the flicker). Kept although
+  it stops about 9 cm earlier at full speed: none at 0.29 m/s, and
+  re-centring the stick allows a creep.
 
 ## Picking up
 
@@ -432,27 +436,32 @@ navigation, so SwC to Manual always takes over.
    throttle scales the stick, so `stick +0.58` at throttle 0.6 is full
    stick. **Step 3 is done.**
 
-   **Step 4, built 2026-11-15, on `feature/navigation-heading-hold`,
-   not yet deployed (the Pi was off) or checked on the floor:** heading
-   hold (P14, `HeadingHold`), and "commanded but not moving"
-   (`MotionWatch`, `predictFromRest()`, `NOT_MOVING`; I23, accepted by
-   Chris 2026-11-15). `navigation-cpp-design.md` §7.5 "As built, §19.4
-   step 4". All 26 host tests pass.
+   **Step 4, built 2026-11-15 and floor-checked 2026-11-16, on
+   `feature/navigation-heading-hold`:** heading hold (P14,
+   `HeadingHold`), "commanded but not moving" (`MotionWatch`,
+   `predictFromRest()`, `NOT_MOVING`; I23), and, after diagnosing the
+   flicker, `CutHold` (I24: while the limiter cuts, the command only
+   falls). `navigation-cpp-design.md` §7.5 "As built, §19.4 step 4"
+   has the numbers: a full strafe held within ±2.7° (Manual +9 to
+   +12°); strafing at a box, 22 cm at front and back wheels (was 10 and
+   12); on a block, `NOT_MOVING` 0.5 s after the first touch of the
+   stick; at a box at full speed 22.5 cm with no flicker (13 cm before,
+   with it), at 0.29 m/s 15 cm (14 before). All 26 host tests pass,
+   and every test on the Pi. **Step 4 is done.**
 
-   **Next, with the robot:** `scripts/deploy_cpp.sh <user>@<pi>` (no
-   binary), the Pi tests, then `heron_teleop` off and `ssh -t
-   <user>@<pi> '~/heron/bin/heron_robot --lines 10'`:
-   1. Full strafe right across open floor, throttle 1.00, turn stick
-      untouched, about 2 m: the heading should stay within a few degrees
-      (before: 8 to 12°/s), `hold` shown on the status line.
-   2. Check 3 again, strafe toward a box on the right: before, 19° turned
-      and 10 / 12 cm at the front / back wheels; now about equal.
-   3. Check 4 again: armed in Assisted, lift 3 to 5 cm, right stick
-      forward: `NOT_MOVING` within about half a second, wheels stopped;
-      centre the stick, set down, drive normally.
-   4. The full-speed flicker, diagnose first (decided 2026-11-15): check 2
-      again with `--lines 50`, every cycle's limiter answer, then decide
-      (likely "while cut, the output only falls until Clear").
+   **Next:** push `feature/navigation-heading-hold` and merge it (the
+   user merges in the browser); then rebase
+   `feature/navigation-sim-table` (step 5, not pushed) onto develop,
+   give Navigate in the scenarios heading hold, rerun
+   `nav_scenario_test`, and tighten scenario 1's back-to-the-line limit
+   (1.25 m, set without the hold) to the new numbers. Then step 5's
+   design questions (§7.5 "As built, §19.4 step 5") and step 6,
+   Navigate in `heron_robot`.
+
+   Found 2026-11-16, for the LiDAR workstream (its Inbox): the A1M8
+   twice refused to start Express (`cannot start scan mode 1`, every
+   program) while answering GET_INFO and health Good; one Standard scan
+   (`lidar_nearest --mode 0`) cleared it.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
