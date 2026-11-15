@@ -362,12 +362,43 @@ navigation, so SwC to Manual always takes over.
      is the wrong model: the dead band is per wheel, and sideways has
      its own.
 
-   **Next: review design §19 and `navigation-cpp-design.md` §7.5**
-   (P13 to P18, I17 to I22): a motion table measured on the floor,
-   heading hold, the planner on commands, plausibility, the simulator by
-   the table. Then its order of work (§19.4): measure the table (half an
-   hour with the robot), Assisted through it, heading hold, the
-   simulator and planner, and only then Navigate.
+   **The motion table, hardwood, 2026-11-14** [ours, `heron_robot
+   --lines 10` (with the turn rate, heading and OTOS warnings), Manual,
+   log `captures/table-hardwood-1-2026-11-14.log`, Chris driving; 25
+   runs, one repeated (out of room)]: each command held 2 s, the settled
+   speed turned into the robot frame. The table is design §19.1, and the
+   `hardwood-1` example in §19.2 holds every point.
+   - Forward 0.19, 0.27, 0.31, 0.34, 0.39 m/s at 0.2 to 1.0, barely
+     turning. "1 o'clock" on the stick came out at about 15° and its
+     sideways part was lost: plain forward. "2 o'clock" came out at 45°.
+   - Strafe right: nothing at 0.2, 0.06 at 0.4, 0.15 at 0.6, 0.21 at
+     0.8, 0.27 at 1.0, turning clockwise 8 to 12°/s at 0.4 to 0.8. Left:
+     0.04 at 0.6 (a quarter of right's), 0.25 at 1.0. Backward 0.31 at
+     0.6.
+   - Taped strafe right, 0.6, 4.9 s: front wheel centres 29 in from the
+     tape, back 24 in, the back-left 13 in back along it; axles 4.5 in
+     apart, so a turn of 65° or more. The OTOS said 68°.
+   - **The OTOS's velocity is in the odom frame** (design §18 item 5,
+     settled): after a turn, straight runs printed a sideways part that
+     turning by −heading removed, and the taped strafe agreed only read
+     that way (39 cm back and 52 cm right against the tape's 30 and 61;
+     read as robot frame, 57 back and 8 right). `PoseTracker` passed it
+     on as robot frame; fixed (it turns it by −heading), `pose_test`
+     checks it. Every earlier speed in this file was in the odom frame:
+     the strafe's "creeping back" and the "sideways while driving
+     straight" were the robot's turn. Told odometry (its Inbox).
+   - Yesterday's taped strafe, with the axles now measured: front 3.75
+     in further than back over 4.5 in, about 56°, not the 30° written
+     then.
+
+   **Next: review the interfaces, `navigation-cpp-design.md` §7.5** (I17
+   to I22; P13 to P18 are accepted). One question the table raised: the
+   directions come out per run, not on an even grid, so should
+   `heron_motion` store points as measured and interpolate between them
+   as they fall, rather than require a grid (I18)? Then build, per design
+   §19.4 step 3: `heron_motion` and the surface profiles, `bench.conf`'s
+   hardwood numbers moved into `[surface.hardwood-1]`, Assisted through
+   the table, plausibility (P16), and step 1's floor checks again.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the

@@ -158,3 +158,19 @@ bits flagged it was not printed [unverified]. Navigation proposes to
 treat such readings as not fresh (`navigation-design.md` §19, P16); what
 the OTOS is doing is yours. Log: `captures/strafe-2026-11-14.log` (not
 in git; ask navigation). `RESUME-navigation.md`, "Picking up" 3.
+
+### From navigation, 2026-11-14: the OTOS's velocity is in its odom frame
+
+[ours] On the bench rig, hardwood, `heron_robot --lines 10` printing the
+OTOS's velocity and heading through `Odometry`. After the robot had
+turned, straight runs printed a sideways part that turning the velocity
+by −heading removed: forward at a heading of +13° read (0.200, +0.040)
+m/s, turned (0.204, −0.005); backward at −13° read (−0.300, +0.070),
+turned (−0.308, +0.001). A taped strafe that turned the robot about 68°
+agreed with the tape only with the velocity read in the odom frame. So
+the velocity registers are in the same frame as the pose, not the
+sensor's own. Navigation now turns it in `PoseTracker`; `Odometry`'s
+docs may want to say which frame it is. This also explains the earlier
+entry's "0.05 to 0.09 m/s sideways at full speed straight ahead": the
+robot had turned. Log `captures/table-hardwood-1-2026-11-14.log` (not in
+git). `RESUME-navigation.md`, "Picking up" 3.

@@ -380,3 +380,31 @@ placeholders and are tuned in the simulator.
 
 Record how each number was found, the date, and the supply and battery,
 with the numbers.
+
+### 8.8 The motion table (per floor)
+
+What each command really does on one floor (navigation design §19,
+P13 and P18): first used on the bench rig's hardwood, 2026-11-14. Until
+`heron_surface add` does it for you, by hand:
+
+1. `heron_teleop`'s autostart off; motor battery on and charged; the
+   robot on the floor, about 1 m clear ahead and to the right.
+2. `ssh -t <user>@<pi> '~/heron/bin/heron_robot --lines 10' | tee
+   captures/table-<surface>-<date>.log`, SwC up (Manual), armed.
+3. At throttle 0.2, 0.4, 0.6, 0.8 and 1.0: the right stick to the edge
+   of its travel at 12, 1, 2 and 3 o'clock, each held 2 s, let go, a
+   second's pause. Then left at 0.6 and 1.0, and back at 0.6.
+4. A strafe right at 0.6 for 3 s from a tape along the left wheels: the
+   front and back wheel centres' distances from the tape, and how far
+   back along it. With the axle-to-axle distance, the difference gives
+   the turn: sin(turn) = difference / axles.
+5. Slide the robot back between runs; a lift upsets the OTOS for
+   seconds. Lifted anyway: wait until `speed` reads 0.00 standing.
+
+Reading the log: for each run, the median of the settled part of the
+hold (from about 0.5 s in), speed in the robot frame (the status line's
+speed is, since `PoseTracker`'s fix of 2026-11-14), the turn rate from
+the heading's change. The stick does not give the directions you aim
+for: on the FS-i6X, 1 o'clock came out at about 15° and 2 o'clock at the
+stick's corner, 45°. Record the directions as sent. A size over 1 (the
+corner at full throttle) is clipped by the mixing.
