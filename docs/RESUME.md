@@ -6,7 +6,7 @@ another's. Start from the workstream you are picking up.
 
 | Workstream | Resume file | State | Pick up at |
 |---|---|---|---|
-| LiDAR (RPLIDAR A1M8) | [`RESUME-lidar.md`](RESUME-lidar.md) | paused 2026-10-04; sessions 2026-11-08 (navigation's Inbox entry), 2026-11-10 and -11 (the power path through a buck, a scope, unit A's board) | the soak on the LiDAR's own 5 V feed once wired (its "Picking up"), then park the motor (§9a), then lifecycle hardening (§9b) |
+| LiDAR (RPLIDAR A1M8) | [`RESUME-lidar.md`](RESUME-lidar.md) | paused 2026-10-04; sessions 2026-11-08 (navigation's Inbox entry), 2026-11-10 and -11 (the power path through a buck, a scope, unit A's board), 2026-11-16 (picked up, nothing built) | fold in navigation's two Inbox entries (range noise; an intermittent Express start failure), then the soak on the LiDAR's own 5 V feed if wired, else park the motor (§9a), then lifecycle hardening (§9b) |
 | Remote control (FlySky iBUS) | [`RESUME-remote.md`](RESUME-remote.md) | paused 2026-10-12 at a clean stopping point | optional checks only (its "Picking up") |
 | Odometry (SparkFun OTOS, I²C) | [`RESUME-odometry.md`](RESUME-odometry.md) | paused 2026-10-18 at a clean stopping point | optional checks only (its "Picking up") |
 | Motor controller (Arduino, 4 motors) | [`RESUME-motor.md`](RESUME-motor.md) | bench rig with mecanum wheels drives every move on the floor 2026-11-03; teleop recovers from an Arduino unplug 2026-11-08; dead band re-measured, wheels on, 2026-11-11 | the mini robot (its "Picking up next", step 1), once it is built |
