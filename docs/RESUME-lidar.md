@@ -1,8 +1,10 @@
 # LiDAR workstream — resume point
 
-Last updated 2026-11-11: unit A's board passed on the new supply, after
-the LiDAR's power was checked with a scope on 2026-11-10 (section 11);
-the park work next. The Pi
+Last updated 2026-11-16: picked up and handed back with nothing built;
+two Inbox entries from navigation wait to be folded in (proposed first,
+below), then the feed soak if the feed is wired, else park. Before that,
+2026-11-11: unit A's board passed on the new supply, after
+the LiDAR's power was checked with a scope on 2026-11-10 (section 11). The Pi
 was re-provisioned on 2026-10-04; the tests, recording checks and viewer were
 re-verified on it, but `lidar_nearest` and `lidar_adapter` were not re-run
 live (section 6, "Re-verified").
@@ -59,8 +61,20 @@ Recordings are git-ignored and live in `captures/` on this host and the Pi.
 (it passed on the buck's supply, section 11); the LiDAR is to get its own
 5 V feed from the buck's spare output terminal, wired by the user.
 
-**Picking up, first: the soak on the LiDAR's own 5 V feed,** once the user
-has wired it (section 11, open). Needs the Pi on, the user at the bench,
+**Picking up, first: fold in the Inbox** (proposed 2026-11-16, not yet
+agreed by the user), on a `chore/` branch, docs only, no hardware:
+(1) navigation's range noise to a still wall into
+`rplidar-a1m8-findings.md` as a new range-noise section and a row in
+"Key measured facts" below (the ~0.4% long reading against a tape stays
+[unverified]); (2) the intermittent Express start failure into the
+findings' "Still open" and section 9b (a retry in `Lidar::start()`).
+Entry (2) bears on park: its guess is that a program asks for a scan
+before the motor, stopped by the previous program's exit, is back up to
+speed, so park's step 1 should also time each start (section 9a).
+
+**Then ask the user whether the LiDAR's own 5 V feed is wired** (not
+known on 2026-11-16). If it is, **the soak on the LiDAR's own 5 V feed**
+(section 11, open); if not, go straight to park. Needs the Pi on, the user at the bench,
 ideally the scope on the LiDAR's red wire at its adapter board.
 
 1. Ask how the feed is wired: the LiDAR's USB lead must not also join the
@@ -520,7 +534,10 @@ and the probes open it as now and run the motor; when they close, park
 still holds the port and the motor stays stopped [unverified: that is what
 step 1 checks].
 
-1. **Feasibility, no hands.** In one ssh session hold the port open with
+1. **Feasibility, no hands.** (Also time each program's start from
+   port open to the first scan, and count `cannot start scan mode`
+   failures with and without the holder: navigation's Inbox entry of
+   2026-11-16.) In one ssh session hold the port open with
    DTR asserted (pyserial: `serial.Serial('/dev/rplidar', 115200)` then
    `dtr = True`, then sleep). In another, run
    `probes/lidar_07_requests.py` (15 starts: all answered?) and
