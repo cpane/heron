@@ -974,3 +974,10 @@ warnings about 10 minutes into that boot, not tied to the failure.
 Worth knowing for `Lidar::start()`: a fall-back of one Standard scan
 before giving up might recover it. Write-up: navigation's
 `RESUME-navigation.md`, step 4.
+
+**Correction, later the same day [ours, cause unverified]:** a minute
+after a fresh boot, Express failed again; then, run back to back,
+Express worked, Standard failed, Express failed. So a Standard scan
+does not reliably clear it: the failure comes and goes. One guess,
+unchecked: each program stops the motor on exit (DTR), and the next
+asks for a scan before the motor is back up to speed.

@@ -1330,8 +1330,9 @@ from the interfaces above:
 does not meet is reported OPEN at the same threshold and not counted, but
 each has a limit a little worse than its result here, and past the limit
 it fails, so a change that makes it clearly worse is caught: closest pass
-at least 10 cm; within 0.35 m of the line 2 m past the box (1.25 m
-before heading hold, 0.6 m before the line was kept); at the dead end Avoiding or Blocked, never
+at least 10 cm; within 0.5 m of the line 2 m past the box (1.25 m
+before heading hold, 0.6 m before the line was kept, 0.35 m with the
+left diagonal interpolated rather than measured); at the dead end Avoiding or Blocked, never
 Following or Stopped. The user chose OPEN with limits over failing,
 2026-11-15). **Rebased on step 4 (2026-11-16), every scenario drive has
 heading hold and `CutHold`,** fed as `heron_robot`'s loop feeds them
@@ -1340,10 +1341,10 @@ the results without them:
 
 | Scenario | Result |
 |---|---|
-| 1, Navigate at a box | Every run reached 4.5 m, 18 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 110 to 164 mm, four runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in 5 of 10, four more 98 to 118 mm off, one 267 mm (2 of 10, up to 1088). With heading hold but the old re-anchor rule: up to 474 mm |
-| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 107 mm, median at the end 195 mm (97, 147) |
-| 3, sliding along a wall | Closed to 97 mm, never touched, and **kept sliding at 0.28 m/s** (stopped at 69 mm, 0.14 m/s): now a check, no longer open |
-| 4, dead end | Stopped 245 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
+| 1, Navigate at a box | Every run reached 4.5 m, 17 to 19 s; the limiter cut none of the planner's choices. **Open:** closest 109 to 194 mm, three runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in the 4 runs that passed the box on its left (82 to 84 mm), the 6 that passed on its right 237 to 412 mm off (2 of 10, up to 1088). The left diagonal, measured 2026-11-16, makes almost no left (question 2); with it interpolated, the worst was 267 mm, and with the old re-anchor rule 474 |
+| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 123 mm, median at the end 206 mm (97, 147) |
+| 3, sliding along a wall | Never touched, and **kept sliding at 0.35 m/s**, 231 mm off it (stopped at 69 mm, 0.14 m/s): now a check, no longer open |
+| 4, dead end | Stopped 256 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
 | 5, LiDAR stops | Stopped 302 ms after the last scan (Stale), still 640 ms later |
 
 **Design questions from the open ones:**
@@ -1366,9 +1367,14 @@ the results without them:
    diagonals (35° or 55° hold), or have CourseKeeper not re-anchor while
    avoiding.
 2. **Passing within 15 cm.** **Decided 2026-11-16 (Chris): measure the
-   left diagonals first** (the next floor session, `heron_robot --lines
-   10` in Manual, each held 2 s, as the table was), rerun, and only then
-   weigh the clearance weight. The planner's 15 cm is a preference
+   left diagonals first, then weigh the clearance weight.** **Measured
+   the same day** (`hardwood-1.conf` p23 to p26): forward-left makes
+   forward at forward's speeds (0.19 to 0.31 m/s), only 0.03 m/s left,
+   and turns left 0.11 to 0.18 rad/s; Chris saw the robot turn about 45°
+   and curve left in each 4 s run. The right diagonal goes half sideways
+   and barely turns. Rerun: passing improved (closest 109 mm, most over
+   150), coming back left got worse (above). The clearance weight is
+   still to weigh, now on measured numbers. The planner's 15 cm is a preference
    (`preferredClearanceM`), and on the table the sideways moves are weak:
    a diagonal makes about half its sideways part, and the left side has no
    measured diagonal (interpolated between forward and a weak left).

@@ -490,14 +490,19 @@ navigation, so SwC to Manual always takes over.
    (4) step 6's loop shows BLOCKED when the limiter has stopped the
    plan's command for 0.5 s.
 
-   **Next:** push and merge step 5 (when the user asks). **At the next
-   floor session (the robot on):** measure the table's missing left
-   diagonals on the hardwood: Manual, `ssh -t <user>@<pi>
-   '~/heron/bin/heron_robot --lines 10'`, throttle 1.00, the right stick
-   at +45° (forward-left) at sizes 0.3, 0.55, 0.85 and 1.0, each held
-   2 s from rest, as the right diagonals were (p11 to p14 in
-   `profiles/surfaces/bench-mecanum/hardwood-1.conf`), and add them;
-   then rerun `nav_scenario_test` and weigh question 2. Then step 6,
+   **Left diagonals measured 2026-11-16** (`hardwood-1.conf` p23 to
+   p26, log `captures/left-diagonals-hardwood-1-2026-11-16.log`):
+   forward-left drives forward at forward's speeds, 0.03 m/s left, and
+   turns left about 8°/s (Chris saw it curve left, about 45° a run).
+   Rerun: passing the box improved (closest 109 mm), coming back left
+   after passing on the right got worse (up to 412 mm off, limit reset
+   to 0.5 m); scenarios 2 and 3 improved. Note: `heron_robot` prints
+   the speed already in the robot frame (PoseTracker), so do not turn
+   it by the heading again.
+
+   **Next:** push and merge step 5 (when the user asks). Then question
+   2's clearance weight, now on measured numbers, and how Navigate
+   comes back left on a floor whose left moves are weak; then step 6,
    Navigate in `heron_robot`, with BLOCKED as decided.
 
    Found 2026-11-16, for the LiDAR workstream (its Inbox): the A1M8
