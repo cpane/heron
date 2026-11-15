@@ -142,6 +142,9 @@ Plan Planner::plan(const PlanInput &input) {
   //    the course asks (I13), and the straight one.
   const double reach = cfg.accelMps2 * cfg.windowS;
   const double speedCap = std::min(course.speedMps, cfg.maxSpeedMps);
+  // Either says still: the OTOS's velocity can read a speed standing (header).
+  const bool nearlyStill = std::hypot(input.measured.vx, input.measured.vy) < kNearlyStillMps ||
+                           (input.movedMps >= 0.0 && input.movedMps < kNearlyStillMps);
   const Geometry::Vec2 dirOdom{std::cos(course.headingRad), std::sin(course.headingRad)};
   const Geometry::Vec2 dir = Geometry::rotate(dirOdom, -pose.heading);  // robot frame
   std::vector<Candidate> candidates;  // the straight one first: it wins a tie
@@ -151,7 +154,6 @@ Plan Planner::plan(const PlanInput &input) {
     // Commands (P15): every direction and size, imagined as the table
     // predicts; header.
     const Motion::MotionTable &table = *cfg.motion;
-    const bool nearlyStill = std::hypot(input.measured.vx, input.measured.vy) < kNearlyStillMps;
     const int directions = std::max(1, static_cast<int>(std::lround(2.0 * kPi / cfg.commandStepRad)));
     const int sizes = std::max(1, static_cast<int>(std::lround(1.0 / cfg.commandSizeStep)));
     for (int d = 0; d < directions; ++d) {
@@ -299,6 +301,8 @@ Plan Planner::plan(const PlanInput &input) {
   Plan plan;
   plan.courseSeq = course.seq;
   plan.time = input.now;
+  plan.nearlyStill = nearlyStill;
+  plan.movedMps = input.movedMps;
   plan.candidatesTried = static_cast<int>(candidates.size());
   plan.candidatesPassed = static_cast<int>(passed.size());
   if (passed.empty()) {

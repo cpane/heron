@@ -520,6 +520,16 @@ int main() {
     print("a slow course to the left, rolling at 0.06", plan);
     check("  rolling: a small command that would not start it is still allowed",
           plan.commandVy > 0.0 && plan.commandVy <= 0.6 + 1e-9);
+    // The OTOS reading a speed with the robot standing (2026-11-16): the
+    // pose not moving says still.
+    Planner phantom(still);
+    PlanInput standing = inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.07, 0.0});
+    standing.movedMps = 0.0;
+    plan = phantom.plan(standing);
+    print("a slow course to the left, the OTOS reading 0.07, the pose not moving", plan);
+    const Twist from = table->predictFromRest(plan.commandVx, plan.commandVy);
+    check("  the pose not moving: planned as still, a command that starts it",
+          plan.nearlyStill && std::hypot(from.vx, from.vy) >= kStartMps);
   }
 
   std::printf("Time\n");

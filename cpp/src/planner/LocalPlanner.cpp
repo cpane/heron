@@ -59,6 +59,12 @@ void LocalPlanner::Impl::cycle(const std::optional<Course> &course) {
   input.epoch = epoch;
   input.poseFresh = snapshot.fresh && at.ok;
   input.measured = snapshot.newest.velocity;
+  // The pose's own movement, a second test of nearly still (Planner.h).
+  const Pose::PoseLookup before = history.at(now - kMovedWindow);
+  if (at.ok && before.ok) {
+    const double seconds = std::chrono::duration<double>(kMovedWindow).count();
+    input.movedMps = std::hypot(at.pose.x - before.pose.x, at.pose.y - before.pose.y) / seconds;
+  }
   input.course = course;
   input.now = now;
   auto plan = std::make_shared<const Plan>(m_planner.plan(input));

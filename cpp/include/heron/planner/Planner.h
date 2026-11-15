@@ -49,7 +49,8 @@
 // moves is kept whatever the window says: from rest the motors' dead band
 // makes even the smallest command faster than the window reaches (forward
 // 0.19 m/s, against 0.18), and without it Heron could never start.
-// Nearly still (measured under kNearlyStillMps), a command must also start
+// Nearly still (the OTOS's velocity, or the pose's movement over
+// kMovedWindow, under kNearlyStillMps), a command must also start
 // the robot from rest at kStartMps or more (MotionTable::predictFromRest(),
 // the points as measured, stalls included): rolling, a small command keeps
 // the robot going, but from rest it may not move it at all, and on
@@ -108,6 +109,12 @@ inline constexpr double kCellSlackM = 0.0833;
 /** Measured slower than this, m/s, Heron is nearly still: with a table,
  *  only commands that start it from rest are candidates (header). */
 inline constexpr double kNearlyStillMps = 0.05;
+
+/** The pose's movement over this long is the second test of nearly still:
+ *  the OTOS's velocity can read a speed with the robot standing (2026-11-16:
+ *  -0.07 m/s for seconds, the LiDAR's nearest point unchanged), and then
+ *  only small commands, which cannot start it, were allowed. */
+inline constexpr Duration kMovedWindow = std::chrono::milliseconds(500);
 
 /** Nearly still, a candidate must start Heron from rest at this, m/s, or
  *  more (MotionTable::predictFromRest()): a command measured just above
@@ -183,6 +190,8 @@ struct Plan {
   double clearanceM{0.0};             // the chosen path's, after the cell slack
   int candidatesTried{0};
   int candidatesPassed{0};
+  bool nearlyStill{false};            // planned as from rest (header)
+  double movedMps{-1.0};              // the input's, for the status line
   TimePoint time{};                   // when it was made
 };
 
@@ -193,6 +202,8 @@ struct PlanInput {
   std::uint64_t epoch{0};       // the pose's
   bool poseFresh{false};        // PoseSnapshot::fresh, and the lookup found it
   Geometry::Twist measured{};   // newest odometry velocity, robot frame
+  double movedMps{-1.0};        // how fast the pose moved over the last
+                                // kMovedWindow; below 0 when not known
   std::optional<Course> course;
   TimePoint now{};
 };
