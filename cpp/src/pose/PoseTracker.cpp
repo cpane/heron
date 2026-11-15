@@ -8,6 +8,7 @@
 
 #include "heron/pose/PoseTracker.h"
 
+#include <cmath>
 #include <mutex>
 #include <stop_token>
 #include <thread>
@@ -53,8 +54,30 @@ void PoseFeed::update(const Odometry::OdometrySnapshot &o, TimePoint now) {
       // the same in both.
       const Geometry::Vec2 v =
           Geometry::rotate(Geometry::Vec2{o.velocity.x, o.velocity.y}, -o.pose.h);
-      m_history.add(PoseSample{now - o.age, Geometry::Pose2{o.pose.x, o.pose.y, o.pose.h},
+      const TimePoint at = now - o.age;
+      m_history.add(PoseSample{at, Geometry::Pose2{o.pose.x, o.pose.y, o.pose.h},
                                Geometry::Twist{v.x, v.y, o.velocity.h}});
+
+      // Plausibility (P16): too fast, a jump, or the OTOS's own warning.
+      std::string why;
+      if (m_config.maxPlausibleSpeedMps > 0.0 &&
+          std::hypot(v.x, v.y) > m_config.maxPlausibleSpeedMps) {
+        why = "implausible speed";
+      } else if (m_config.maxPlausibleAccelMps2 > 0.0 && m_lastVelocity && !newFrame) {
+        const double dt = std::chrono::duration<double>(at - m_lastVelocity->second).count();
+        const Geometry::Vec2 dv = v - m_lastVelocity->first;
+        if (dt > 0.0 && std::hypot(dv.x, dv.y) / dt > m_config.maxPlausibleAccelMps2) {
+          why = "implausible jump in speed";
+        }
+      }
+      if (why.empty() && m_config.maxPlausibleSpeedMps > 0.0 && o.trackingWarning()) {
+        why = "OTOS tracking warning";
+      }
+      if (!why.empty()) {
+        m_implausibleUntil = now + m_config.settle;
+        m_implausibleWhy = why;
+      }
+      m_lastVelocity = std::make_pair(v, at);
     }
   }
 
@@ -62,8 +85,11 @@ void PoseFeed::update(const Odometry::OdometrySnapshot &o, TimePoint now) {
   m_snapshot.newest = m_history.newest().value_or(PoseSample{});
   m_snapshot.tiltWarning = o.tiltWarning();
   m_snapshot.trackingWarning = o.trackingWarning();
-  m_snapshot.fresh = o.isOk() && m_lastGap <= m_config.maxSeqGap;
-  if (!o.fresh) {
+  const bool implausible = now < m_implausibleUntil;
+  m_snapshot.fresh = o.isOk() && m_lastGap <= m_config.maxSeqGap && !implausible;
+  if (implausible) {
+    m_snapshot.reason = m_implausibleWhy;
+  } else if (!o.fresh) {
     m_snapshot.reason = "odometry stale";
   } else if (o.sensorError()) {
     m_snapshot.reason = "odometry sensor error";

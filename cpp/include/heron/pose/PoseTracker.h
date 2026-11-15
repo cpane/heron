@@ -65,6 +65,14 @@ namespace Heron::Pose {
 struct PoseConfig {
   Duration pollPeriod{std::chrono::milliseconds(10)};
   std::uint64_t maxSeqGap{10};  // more readings missed than this: not fresh
+  // Plausibility (design §19, P16; I21). After a lift the OTOS gave seconds
+  // of nonsense speeds, called fresh. A reading faster than this, or whose
+  // speed changed faster than the accel below since the last reading, or
+  // with the OTOS's tracking warning, makes the pose not fresh until
+  // readings have been plausible for settle. 0 is off, as before.
+  double maxPlausibleSpeedMps{0.0};   // heron_robot: 1.5 x max_speed
+  double maxPlausibleAccelMps2{0.0};  // heron_robot leaves it off: the OTOS's 100 Hz noise is unmeasured
+  Duration settle{std::chrono::milliseconds(300)};
 };
 
 /** The newest pose, as of the call. */

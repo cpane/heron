@@ -242,6 +242,45 @@ int main() {
           near(v.vx, 0.3) && near(v.vy, 0.0) && near(v.wz, 0.1));
   }
 
+  std::printf("PoseFeed: plausibility (design §19, P16)\n");
+  {
+    PoseConfig config;
+    config.maxPlausibleSpeedMps = 0.63;
+    config.maxPlausibleAccelMps2 = 10.0;
+    PoseFeed feed(config);
+    const auto at = [&](std::uint64_t seq, double vx, int ms) {
+      Heron::Odometry::OdometrySnapshot o = reading(seq, 0.01 * static_cast<double>(seq));
+      o.velocity = Heron::Odometry::Planar{vx, 0.0, 0.0};
+      feed.update(o, t0 + milliseconds(ms));
+    };
+    at(1, 0.30, 0);
+    at(2, 0.31, 10);
+    check("driving at 0.3 m/s: fresh", feed.snapshot().fresh);
+    at(3, 2.6, 20);
+    check("2.6 m/s, as after a lift: not fresh, says why",
+          !feed.snapshot().fresh && feed.snapshot().reason == "implausible speed");
+    at(4, 0.30, 30);
+    check("  plausible again, but within the settle: still not fresh", !feed.snapshot().fresh);
+    at(5, 0.30, 330);
+    check("  plausible for 0.3 s: fresh again", feed.snapshot().fresh);
+    at(6, 0.45, 340);
+    check("0.30 to 0.45 in 10 ms (15 m/s^2): not fresh",
+          !feed.snapshot().fresh && feed.snapshot().reason == "implausible jump in speed");
+    at(7, 0.45, 700);
+    Heron::Odometry::OdometrySnapshot warned = reading(8, 0.08);
+    warned.velocity = Heron::Odometry::Planar{0.45, 0.0, 0.0};
+    warned.status = 0x02;  // tracking warning
+    feed.update(warned, t0 + milliseconds(710));
+    check("the OTOS's tracking warning: not fresh",
+          !feed.snapshot().fresh && feed.snapshot().reason == "OTOS tracking warning");
+
+    PoseFeed off(PoseConfig{});
+    Heron::Odometry::OdometrySnapshot fast = reading(1, 0.0);
+    fast.velocity = Heron::Odometry::Planar{2.6, 0.0, 0.0};
+    off.update(fast, t0);
+    check("plausibility off (the default): 2.6 m/s still fresh", off.snapshot().fresh);
+  }
+
   std::printf("PoseTracker: the thread, on a fake OTOS\n");
   {
     Fakes fakes;

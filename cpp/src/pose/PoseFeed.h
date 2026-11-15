@@ -27,6 +27,9 @@
 #define HERON_POSE_POSE_FEED_H
 
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <utility>
 
 #include "heron/odometry/Odometry.h"
 #include "heron/pose/PoseHistory.h"
@@ -60,6 +63,11 @@ class PoseFeed {
     std::uint64_t m_epoch{0};
     std::uint64_t m_lastSeq{0};
     std::uint64_t m_lastGap{0};  // readings missed before the newest
+    // Plausibility (P16): the last reading's robot-frame speed and time, and
+    // until when the pose stays not fresh, with why.
+    std::optional<std::pair<Geometry::Vec2, TimePoint>> m_lastVelocity;
+    TimePoint m_implausibleUntil{};
+    std::string m_implausibleWhy;
 };
 
 }  // namespace Heron::Pose
