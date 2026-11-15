@@ -205,7 +205,8 @@ struct Run {
     const Twist measured = history.newest()->velocity;
     const Heron::Robot::AssistedInput assisted{
         &limiter, bench().geometry, bench().motion.get(),
-        LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, measured, now}};
+        LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, measured, now}, std::nullopt, false,
+        std::nullopt};
     const Decision d = Heron::Robot::decide(Heron::Robot::Mode::Assisted, true, stick, &assisted);
     base.commandFractions(d.body.vx, d.body.vy, d.body.wz, now);
     return d;
