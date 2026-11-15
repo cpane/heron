@@ -257,6 +257,10 @@ int main() {
           speed(hw.predictFromRest(0.3 * rx, 0.3 * ry)) < 0.02);
     check("from rest, right at 0.4, the first size that moved: as measured",
           speed(hw.predictFromRest(0.4 * rx, 0.4 * ry)) > 0.05);
+    check("from rest, forward at 0.1, below the smallest point measured (0.2): nothing",
+          speed(hw.predictFromRest(0.1, 0.0)) < 0.02);
+    check("from rest, forward at 0.2, the smallest point: as measured, 0.19",
+          near(speed(hw.predictFromRest(0.2, 0.0)), 0.19));
     check("from rest, forward at 0.6: as predict(), no stall there",
           speed(hw.predictFromRest(0.6, 0.0)) == speed(hw.predict(0.6, 0.0)));
   }

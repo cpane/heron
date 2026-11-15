@@ -108,11 +108,13 @@ class MotionTable {
 
     /** What a translation command makes from rest: the points as measured,
      *  stalls included, so a command the table could not start the robot
-     *  with predicts (almost) nothing. Between a column's last stall and
-     *  the first size above it that moved, it reads the stall, not a
-     *  blend: the dead band is a step somewhere in that gap, and on
-     *  2026-11-16 a command halfway between them (55 deg column, 0.5 a
-     *  stall, 0.7 0.13 m/s) read as 0.07 m/s and left the robot standing.
+     *  with predicts (almost) nothing. Below the first size in a column
+     *  seen to move (after its last stall), it reads nothing, not a blend
+     *  and not that point: the dead band is a step somewhere short of it.
+     *  On 2026-11-16 a command halfway between a stall and a move (55 deg
+     *  column, 0.5 a stall, 0.7 0.13 m/s) read as 0.07 m/s, and forward at
+     *  0.1, below the smallest point measured (0.2, 0.19 m/s), read as
+     *  0.19: the wheels were sent 0.1 and the robot stood both times.
      *  For "commanded but not moving" (design §19.4 step 4), which must not
      *  trip at the dead band, and the planner's nearly-still rule; never
      *  for the limiter, which wants predict(). */
