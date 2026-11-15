@@ -1294,6 +1294,76 @@ from the interfaces above:
 | I23 | **"Commanded but not moving" is a pure class in `RobotCore`,** fed the table's from-rest prediction of the command driven and the OTOS's speed; tripped, Assisted stops (`NOT_MOVING`) until the stick is centred | A gentle lift reads as still and stays fresh (floor check 4); only the loop knows what the wheels were told. From rest, so the dead band never trips it; latched, so a lifted robot does not pulse its wheels every half second |
 | I24 | **While the limiter cuts, the command only falls (`CutHold`),** released by 0.1 s of Clear, the stick centred, or turned more than 15°; the limiter is unchanged | The OTOS's noise at speed flips the limiter's answer cycle to cycle; smoothing the speed instead would delay the safety check. A lower command than allowed is always safe; the cost, measured, is a stop about 9 cm earlier at full speed and none at 0.29 m/s |
 
+**As built, §19.4 step 5 (2026-11-15), on the host only:** the simulator
+by the table (P17) and the planner on commands (P15), the scenarios run
+against the bench rig's hardwood (`tests/BenchTable.h` reads
+`profiles/bench.conf` and `hardwood-1` as `heron_robot` does). Changes
+from the interfaces above:
+
+- **`Base::commandFractions()` and the turn:** the table has no turn, so
+  `BaseConfig` gains `maxTurnRateRadps` and `turnFloorRadps`: while
+  translating a unit of wz adds `max − floor` rad/s, on the spot it is
+  lifted to the floor first (RobotCore's "Units"); `fractionsToTwist()`
+  shows the aim. The table's stalls read as moving (`predict()`), so the
+  simulated base starts small commands the real one cannot from rest.
+  A full strafe right reads 0.25 m/s at −90° (the right column sits at
+  −85°; 0.27 was measured at −90°).
+- **The planner's window and the dead band:** kept only within
+  `accelMps2 × windowS` of the measured speed, nothing could start: from
+  rest forward's least is 0.19 m/s against a 0.18 m/s window. So **each
+  direction's smallest command that moves is kept whatever the window
+  says.** "As large as the course's size" is read as I13: a command
+  predicted faster than the course asks is dropped. "Straight" is any
+  candidate whose predicted motion runs within 5° of the course. The plan's
+  twist is the prediction, drift added to the course's turn;
+  `commandVx`, `commandVy` the command (0 without a table). With a box
+  ahead, 87 candidates, 5.6 ms a call on the Mac.
+- **Navigate drives the command through `decide()`'s Assisted path** in
+  the scenarios (Clear as it is, otherwise the nearest allowed command
+  within 15°), not "anything but Clear stops the translation": the
+  scenarios stand in for `heron_robot`, whose Navigate is step 6.
+- **The scenarios run `decide()` itself** for Assisted (2, 3, 5), the
+  stick in fractions; scenario 2 draws forward 0.4 to 1.0 with a sideways
+  part up to ±0.35, scenario 3 holds (0.9, 0.4), scenario 5 0.8.
+
+**Results** (`nav_scenario_test`; an expectation the robot as measured
+does not meet is reported OPEN at the same threshold and not counted):
+
+| Scenario | Result |
+|---|---|
+| 1, Navigate at a box | Every run reached 4.5 m, 17 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 124 to 204 mm (three runs under 150); back within 10 cm of the line 2 m past it in 2 of 10 (76 and 83 mm; the rest 102 to 1088 mm off) |
+| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 97 mm, median at the end 147 mm |
+| 3, sliding along a wall | Closed to 69 mm, never touched. **Open:** stopped there, 0.14 m/s over the last 2 s (0.25 asked) |
+| 4, dead end | Stopped 249 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
+| 5, LiDAR stops | Stopped 302 ms after the last scan (Stale), still 640 ms later |
+
+**Design questions from the open ones:**
+
+1. **Navigate needs heading hold (P14).** The table's drift turns Heron
+   (a diagonal right −0.07 rad/s; forward +0.02 to +0.05); past 10°
+   CourseKeeper re-anchors the line where Heron is (§8.1, "Heron turned
+   under it"), and the original line is lost: −0.5 to −1.1 m off in the
+   worst runs. `HeadingHold` is on `feature/navigation-heading-hold`;
+   Navigate in `heron_robot` (step 6) should use it, and the scenarios
+   with it.
+2. **Passing within 15 cm.** The planner's 15 cm is a preference
+   (`preferredClearanceM`), and on the table the sideways moves are weak:
+   a diagonal makes about half its sideways part, and the left side has no
+   measured diagonal (interpolated between forward and a weak left).
+   Measuring left diagonals, or raising the clearance weight, are the
+   choices.
+3. **Sliding along a wall pushed diagonally into it** (scenario 3): no
+   command within 15° of the stick keeps off the wall, so Assisted stops
+   beside it, where the speed model slid. The 15° window was chosen after
+   check 1 so a substitute never swerves; a substitute that drops only the
+   part toward the obstacle (forward alone, here) would slide.
+4. **Planner and limiter disagree at a dead end** (scenario 4): the
+   planner keeps a small command whose imagined path keeps the margin; the
+   limiter, told the table's speed × 1.2 and the brake, refuses it. Safe
+   (stopped), but the plan says Avoiding. The dead band leaves nothing slow
+   enough to creep on; the planner could check its choice against the
+   limiter's rule, or call such a stop Blocked.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

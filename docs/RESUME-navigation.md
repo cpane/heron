@@ -449,10 +449,23 @@ navigation, so SwC to Manual always takes over.
    with it), at 0.29 m/s 15 cm (14 before). All 26 host tests pass,
    and every test on the Pi. **Step 4 is done.**
 
-   **Next:** push `feature/navigation-heading-hold` and merge it (the
-   user merges in the browser); then rebase
-   `feature/navigation-sim-table` (step 5, not pushed) onto develop,
-   give Navigate in the scenarios heading hold, rerun
+   **Step 5, built on the host 2026-11-15 (`feature/navigation-sim-table`,
+   from develop, not pushed):** the simulated base moves by the table
+   (P17, `Base::commandFractions()`), the planner chooses commands (P15,
+   `PlannerConfig::motion`, `Plan::commandVx/Vy`), and the scenarios run
+   against the bench rig's hardwood (`tests/BenchTable.h`), Assisted
+   through `decide()` itself. All 26 host tests pass. Scenarios 2 and 5
+   pass as before; **four expectations are OPEN** (reported, not
+   counted): scenario 1's 15 cm and back-to-the-line, scenario 3's
+   sliding, scenario 4's Blocked. Each is a design question in
+   `navigation-cpp-design.md` §7.5 "As built, §19.4 step 5": Navigate
+   needs heading hold (P14, on `feature/navigation-heading-hold`); weak
+   sideways moves on the table; the 15° substitute window stops a
+   diagonal slide along a wall; planner and limiter disagree at a dead
+   end. Not yet run on the Pi.
+
+   **Next:** step 5 is rebased onto develop (step 4 merged,
+   PR #73): give Navigate in the scenarios heading hold, rerun
    `nav_scenario_test`, and tighten scenario 1's back-to-the-line limit
    (1.25 m, set without the hold) to the new numbers. Then step 5's
    design questions (§7.5 "As built, §19.4 step 5") and step 6,
