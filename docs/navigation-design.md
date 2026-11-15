@@ -1145,7 +1145,16 @@ the method as §8.8 once it is used.
 3. `heron_motion` and surface profiles (P18), the bench rig's hardwood
    numbers moved into `[surface.hardwood]`; Assisted through the table; P16; the
    floor checks of step 1 repeated, with a strafe at a box.
-4. Heading hold (P14), checked on the floor in Assisted.
+4. Heading hold (P14), checked on the floor in Assisted; and with it
+   **"commanded but not moving"** (added 2026-11-14, after floor check
+   4): wheels commanded to move while the OTOS reads exactly zero for
+   about 0.5 s marks the pose not fresh. It catches the robot lifted, and
+   wheels spinning while stuck. Its threshold must not trip at the dead
+   band (a small command that moves nothing from rest is not a fault).
+   Heading hold needs the same "is it really moving" signal. Treating the
+   OTOS's TILT as not fresh was rejected for now: the odometry reference
+   records the tilt warning on in every bench snapshot, and community
+   reports describe false tilt warnings on long runs.
 5. The simulator by the table (P17) and the planner on commands (P15),
    scenarios 1 to 4 passing again.
 6. Step 2 proper: Navigate in `heron_robot`, then round a box on the
@@ -1155,6 +1164,16 @@ the method as §8.8 once it is used.
    set-up script, in the builder workstream.
 
 ### 19.5 Open
+
+- **Assisted cannot tell lifted from still** (floor check 4,
+  2026-11-14). Lifted 3 to 5 cm while armed in Assisted, the OTOS raised
+  TILT only, no TRACKING, and read exactly +0.00: the pose stayed fresh
+  and the wheels turned in the air with the stick at about 0.59. P16
+  works as designed, flagging only the tracking warning and implausible
+  speeds; an earlier lift that raised TRACKING at −1.47 m/s was marked
+  not fresh, so whether a lift is caught depends on how it is lifted.
+  The limiter still guards from the LiDAR and the table, not the OTOS's
+  speed. Step 4's "commanded but not moving" check (19.4) closes it.
 
 - **Floors the OTOS cannot track.** Carpet read 27% short; rubber and
   some gym finishes may too [unverified]. Such a floor needs another

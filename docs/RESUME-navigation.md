@@ -410,16 +410,32 @@ navigation, so SwC to Manual always takes over.
    speeds to −1.47 m/s with TRACKING and TILT, every line `(not fresh)`,
    fresh again about 0.3 s after. Re-run check 1, then 2 and 3.
 
+   **Floor check 4, 2026-11-14:** lifted 3 to 5 cm while armed in
+   Assisted, the OTOS raised TILT only (no TRACKING) and read exactly
+   +0.00; the pose stayed fresh and the wheels turned in the air with the
+   stick at about 0.59. P16 worked as designed; the expectation ("a lift
+   gives `POSE_NOT_FRESH`") was wrong: a lift is caught only when the
+   OTOS raises TRACKING or reads an implausible speed, as the lift before
+   check 1 did. **Known limit: Assisted cannot tell lifted from still**
+   (design §19.5). Decided 2026-11-14 (the user): record it, and add a
+   "commanded but not moving" check to step 4 (design §19.4); TILT as
+   not fresh rejected for now.
+
    **Next: step 1's floor checks again, through the table** (design
    §19.4 step 3's end): Assisted at a box straight on at 0.6 and full
    (expect it to stop short as before, a little earlier at full since
    the table says it goes 0.39, not 0.42); a strafe right toward a box on
    the right (it should stop short; toward a wall ahead it now refuses a
    strafe, `navigation-cpp-design.md` §7.5 as built); a lift, then
-   Assisted: `POSE_NOT_FRESH` until it settles. `heron_teleop` off, `ssh
+   Assisted: caught (`POSE_NOT_FRESH`) only if the OTOS raises TRACKING
+   or reads an implausible speed; a gentle lift that raises TILT alone
+   stays fresh (check 4, the known limit). `heron_teleop` off, `ssh
    -t <user>@<pi> '~/heron/bin/heron_robot --lines 10'`, the start-up
    should print `Surface: hardwood-1` and "Assisted: ready, through the
-   surface's motion table". Then design §19.4 step 4, heading hold.
+   surface's motion table". Then design §19.4 step 4: heading hold, and
+   with it "commanded but not moving" (wheels commanded, the OTOS
+   exactly zero for about 0.5 s: pose not fresh, a threshold that does
+   not trip at the dead band; heading hold uses the same signal).
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
