@@ -298,6 +298,85 @@ int main() {
         !isValidRigName("") && !isValidRigName("Bench") && !isValidRigName("mini_2") &&
             !isValidRigName("-mini") && !isValidRigName(std::string(33, 'a')));
 
+  std::printf("Surfaces (navigation design §19, P18)\n");
+  {
+    const std::string surfaces =
+        "\n[surface.gym]\n"
+        "max_speed = 0.30\n"
+        "brake = 0.9\n"
+        "linear_scalar = 1.05\n"
+        "mirror = 1\n"
+        "p01 = 0 1.0 0.30 0 0\n"
+        "p02 = -90 1 0 -0.2 -0.1\n"
+        "\n[surface.gym.calibration]\n"
+        "date = 2026-11-14\n"
+        "\n[surface.wood-2]\n"
+        "min_speed = 0.1\n";
+    const RigProfile p = parseRigProfile(kFull + surfaces, "test.conf");
+    const SurfaceProfile *gym = findSurface(p, "gym");
+    check("two surfaces read, in file order", p.surfaces.size() == 2 && p.surfaces[1].name == "wood-2");
+    check("[surface.gym]: its values, mirror, two points, its record",
+          gym && near(*gym->maxSpeed, 0.30) && near(*gym->brake, 0.9) &&
+              near(*gym->linearScalar, 1.05) && !gym->minSpeed && gym->mirror &&
+              gym->points.size() == 2 && near(gym->points[1].directionDeg, -90.0) &&
+              near(gym->points[1].vy, -0.2) && near(gym->points[1].wz, -0.1) &&
+              gym->calibration.size() == 1);
+    check("a surface with no table: no points, mirror off", findSurface(p, "wood-2") &&
+                                                               findSurface(p, "wood-2")->points.empty() &&
+                                                               !findSurface(p, "wood-2")->mirror);
+    check("no such surface: nullptr", findSurface(p, "rubber") == nullptr);
+
+    const RigProfile onGym = onSurface(p, "gym");
+    check("onSurface(gym): its values in [geometry] and [odometry], the rest kept",
+          onGym.activeSurface == "gym" && near(onGym.geometry->maxSpeed, 0.30) &&
+              near(onGym.geometry->brake, 0.9) && near(onGym.geometry->maxTurnRate, 2.0) &&
+              near(onGym.odometry->linearScalar, 1.05) && near(onGym.odometry->angularScalar, 0.995));
+    bool unknown = false;
+    try {
+      (void)onSurface(p, "rubber");
+    } catch (const std::invalid_argument &) {
+      unknown = true;
+    }
+    check("onSurface(an unknown name): refused", unknown);
+
+    std::string withRig = kFull;
+    withRig.replace(withRig.find("platform = uno-l293d\n"), 21,
+                    "platform = uno-l293d\ndrive = bench-mecanum\nsurface = gym\n");
+    const RigProfile named = parseRigProfile(withRig + surfaces, "test.conf");
+    check("[rig] drive and surface read", named.drive == "bench-mecanum" && named.surface == "gym");
+
+    checkError("a point of four numbers", kFull + "\n[surface.gym]\np01 = 0 1.0 0.3 0\n", ":50",
+               "five numbers");
+    checkError("a point of size 0", kFull + "\n[surface.gym]\np01 = 0 0 0.3 0 0\n", ":50",
+               "a size must be above 0");
+    checkError("mirror 2", kFull + "\n[surface.gym]\nmirror = 2\n", ":50", "must be 0 or 1");
+    checkError("an unknown key in a surface", kFull + "\n[surface.gym]\nlength = 1\n", ":50",
+               "unknown key 'length' in [surface.gym]");
+    checkError("a surface record without its surface", kFull + "\n[surface.gym.calibration]\ndate = x\n",
+               ":49", "has no [surface.gym] section to record");
+    checkError("a surface name with '_'", kFull + "\n[surface.my_gym]\n", ":49",
+               "not a valid surface name");
+
+    const SurfaceProfile file = parseSurfaceFile(
+        "format = 1\n[surface.gym]\nmax_speed = 0.3\n[surface.gym.calibration]\nby = hand\n", "gym.conf");
+    check("a surface file: its one surface and record", file.name == "gym" && near(*file.maxSpeed, 0.3) &&
+                                                            file.calibration.size() == 1);
+    const auto fileError = [](const std::string &text) {
+      try {
+        (void)parseSurfaceFile(text, "gym.conf");
+      } catch (const std::runtime_error &e) {
+        return std::string(e.what());
+      }
+      return std::string();
+    };
+    check("a surface file without format: refused",
+          contains(fileError("[surface.gym]\nmax_speed = 0.3\n"), "'format = 1' is missing"));
+    check("a surface file with two surfaces: refused",
+          contains(fileError("format = 1\n[surface.a]\n[surface.b]\n"), "holds one [surface.<name>]"));
+    check("a surface file with [rig]: refused",
+          contains(fileError("format = 1\n[rig]\nname = x\n"), "only one [surface.<name>]"));
+  }
+
   std::printf("Files\n");
 
   {
@@ -334,6 +413,40 @@ int main() {
       noRig = contains(e.what(), "scripts/set_rig.sh");
     }
     check("no rig file: the error says how to set it", noRig);
+
+    // The drive's library: a surface file per known surface.
+    std::string withDrive = kGood;
+    withDrive.replace(withDrive.find("platform = uno-l293d\n"), 21,
+                      "platform = uno-l293d\ndrive = d1\nsurface = gym\n");
+    writeFile(dir / "profiles" / "bench.conf", withDrive);
+    bool noSurface = false;
+    try {
+      (void)loadRigProfile(dir / "profiles" / "bench.conf");
+    } catch (const std::runtime_error &e) {
+      noSurface = contains(e.what(), "neither the profile nor the library of drive 'd1' has it");
+    }
+    check("load: a default surface found nowhere is refused", noSurface);
+    std::filesystem::create_directories(dir / "profiles" / "surfaces" / "d1");
+    writeFile(dir / "profiles" / "surfaces" / "d1" / "gym.conf",
+              "format = 1\n[surface.gym]\nmax_speed = 0.3\np01 = 0 1 0.3 0 0\n");
+    const RigProfile library = loadRigProfile(dir / "profiles" / "bench.conf");
+    check("load: the drive's library surfaces added",
+          library.surfaces.size() == 1 && library.surfaces[0].name == "gym" &&
+              contains(library.surfaces[0].source, "surfaces/d1/gym.conf"));
+    writeFile(dir / "profiles" / "bench.conf",
+              withDrive + "\n[surface.gym]\nmax_speed = 0.25\n");
+    const RigProfile own = loadRigProfile(dir / "profiles" / "bench.conf");
+    check("load: the rig's own surface wins over the library's",
+          own.surfaces.size() == 1 && near(*own.surfaces[0].maxSpeed, 0.25));
+    writeFile(dir / "profiles" / "surfaces" / "d1" / "wrong.conf",
+              "format = 1\n[surface.other]\nmax_speed = 0.3\n");
+    bool misnamed = false;
+    try {
+      (void)loadRigProfile(dir / "profiles" / "bench.conf");
+    } catch (const std::runtime_error &e) {
+      misnamed = contains(e.what(), "must be named after it: other.conf");
+    }
+    check("load: a surface file not named after its surface is refused", misnamed);
 
     writeFile(dir / "rig", "bench\n");
     check("the rig file names the profile",

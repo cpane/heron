@@ -30,9 +30,10 @@
 // back up past its old seq; at 10 ms against a 0.65 s start-up, it does.
 //
 // The velocity is passed on as the robot-frame twist PoseSample promises.
-// Whether the OTOS gives it in its own frame or the odom frame is not
-// measured yet (docs/navigation-design.md §18); if the odom frame, it is
-// turned here, with rotate(v, -heading), once N1 has checked it.
+// The OTOS gives it in the odom frame (measured on the bench rig
+// 2026-11-14: after a turn, a straight run's printed speed had a sideways
+// part that rotate(v, -heading) removed, and a taped strafe agreed;
+// docs/navigation-design.md §18 item 5), so it is turned here.
 //
 // Design: docs/navigation-cpp-design.md §4.2.
 //
@@ -64,6 +65,14 @@ namespace Heron::Pose {
 struct PoseConfig {
   Duration pollPeriod{std::chrono::milliseconds(10)};
   std::uint64_t maxSeqGap{10};  // more readings missed than this: not fresh
+  // Plausibility (design §19, P16; I21). After a lift the OTOS gave seconds
+  // of nonsense speeds, called fresh. A reading faster than this, or whose
+  // speed changed faster than the accel below since the last reading, or
+  // with the OTOS's tracking warning, makes the pose not fresh until
+  // readings have been plausible for settle. 0 is off, as before.
+  double maxPlausibleSpeedMps{0.0};   // heron_robot: 1.5 x max_speed
+  double maxPlausibleAccelMps2{0.0};  // heron_robot leaves it off: the OTOS's 100 Hz noise is unmeasured
+  Duration settle{std::chrono::milliseconds(300)};
 };
 
 /** The newest pose, as of the call. */

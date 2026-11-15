@@ -92,7 +92,9 @@ int runShow(const std::vector<std::string> &files) {
   const RigProfile profile = loadRigProfile(file);
 
   std::printf("%s\n\n", profile.source.c_str());
-  std::printf("rig       %s\nplatform  %s\n\n", profile.name.c_str(), profile.platform.c_str());
+  std::printf("rig       %s\nplatform  %s\ndrive     %s\nsurface   %s\n\n", profile.name.c_str(),
+              profile.platform.c_str(), profile.drive.empty() ? "none" : profile.drive.c_str(),
+              profile.surface.empty() ? "none" : profile.surface.c_str());
   std::printf("  %-19s%12s%12s%12s%12s\n", "motor", "1", "2", "3", "4");
   std::printf("  %-19s%12s%12s%12s%12s\n", "", "front-left", "front-right", "back-right",
               "back-left");
@@ -145,6 +147,32 @@ int runShow(const std::vector<std::string> &files) {
     printReal("stop_margin", profile.navigation->stopMargin, "m");
     printReal("slow_margin", profile.navigation->slowMargin, "m");
     printCalibration(profile.navigationCalibration);
+  }
+
+  // The surfaces: the rig's own and its drive's library's (design §19, P18).
+  std::printf("\n[surface.*]%s\n", profile.surfaces.empty() ? "    none" : "");
+  for (const SurfaceProfile &surface : profile.surfaces) {
+    std::printf("\n[surface.%s]%s\n", surface.name.c_str(),
+                surface.name == profile.surface ? "    the default" : "");
+    std::printf("    from %s\n", surface.source.c_str());
+    const auto optional = [](const char *key, const std::optional<double> &v, const char *unit) {
+      if (v) {
+        printReal(key, *v, unit);
+      }
+    };
+    optional("max_speed", surface.maxSpeed, "m/s");
+    optional("min_speed", surface.minSpeed, "m/s");
+    optional("max_turn_rate", surface.maxTurnRate, "rad/s");
+    optional("brake", surface.brake, "m/s^2");
+    optional("linear_scalar", surface.linearScalar, "");
+    optional("angular_scalar", surface.angularScalar, "");
+    std::printf("  %-19s%s\n", "mirror", surface.mirror ? "1" : "0");
+    std::printf("  %-19s%zu points\n", "motion table", surface.points.size());
+    for (const SurfacePoint &p : surface.points) {
+      std::printf("    %+7.1f deg  size %4.2f  ->  vx %+5.2f  vy %+5.2f m/s  wz %+5.2f rad/s\n",
+                  p.directionDeg, p.size, p.vx, p.vy, p.wz);
+    }
+    printCalibration(surface.calibration);
   }
   return 0;
 }

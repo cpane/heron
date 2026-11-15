@@ -229,6 +229,14 @@ target_link_libraries(heron_perception
 # The safety limiter: the last check between a command and the motors,
 # against the newest raw scan, never the map. Pure, no thread: the control
 # loop calls it every 20 ms. docs/navigation-cpp-design.md §6.
+# The motion table (design §19, P13, I17): what each drive command really
+# does on one floor, read both ways. Pure; heron_robot, the planner and the
+# simulator use it.
+add_library(heron_motion STATIC src/motion/MotionTable.cpp)
+target_link_libraries(heron_motion
+    PUBLIC heron_geometry
+    PRIVATE heron_warnings)
+
 add_library(heron_limiter STATIC src/limiter/Limiter.cpp)
 target_link_libraries(heron_limiter
     PUBLIC heron_geometry heron_pose heron_lidar_types
@@ -272,7 +280,7 @@ target_link_libraries(heron_nav_sim
 add_library(heron_robot_core STATIC src/robot/RobotCore.cpp)
 target_include_directories(heron_robot_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(heron_robot_core
-    PUBLIC heron_drive heron_geometry heron_limiter heron_lidar heron_odometry heron_profile
+    PUBLIC heron_drive heron_geometry heron_limiter heron_lidar heron_motion heron_odometry heron_pose heron_profile
            heron_ibus
     PRIVATE heron_warnings)
 
@@ -376,6 +384,10 @@ add_executable(perception_test tests/PerceptionTest.cpp)
 target_link_libraries(perception_test
     PRIVATE heron_perception heron_nav_sim Threads::Threads heron_warnings)
 add_test(NAME perception_test COMMAND perception_test)
+
+add_executable(motion_test tests/MotionTest.cpp)
+target_link_libraries(motion_test PRIVATE heron_motion heron_warnings)
+add_test(NAME motion_test COMMAND motion_test)
 
 add_executable(limiter_test tests/LimiterTest.cpp)
 target_link_libraries(limiter_test PRIVATE heron_limiter heron_warnings)

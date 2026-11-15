@@ -38,6 +38,7 @@ constexpr std::string_view kLidar = "lidar";
 constexpr std::string_view kOdometry = "odometry";
 constexpr std::string_view kNavigation = "navigation";
 constexpr std::string_view kCalibrationSuffix = ".calibration";
+constexpr std::string_view kSurfacePrefix = "surface.";
 constexpr std::size_t kMaxRigNameLength = 32;
 
 // The OTOS's scalar register holds 0.872..1.127 (Odometry::OtosConfig).
@@ -84,7 +85,10 @@ bool isName(std::string_view text, bool allowDot) {
   }
   return std::all_of(text.begin(), text.end(), [allowDot](char c) {
     const auto u = static_cast<unsigned char>(c);
-    return std::islower(u) != 0 || std::isdigit(u) != 0 || c == '_' || (allowDot && c == '.');
+    // A section header may also hold '-', for a surface's name
+    // ([surface.hardwood-1]); a key may not.
+    return std::islower(u) != 0 || std::isdigit(u) != 0 || c == '_' ||
+           (allowDot && (c == '.' || c == '-'));
   });
 }
 
@@ -242,6 +246,13 @@ void readRig(const Section &section, RigProfile &profile, const std::string &sou
         fail(source, entry.line, "unknown platform '" + entry.value + "'; known: " + known);
       }
       profile.platform = entry.value;
+    } else if (entry.key == "drive" || entry.key == "surface") {
+      if (!isValidRigName(entry.value)) {
+        fail(source, entry.line,
+             "'" + entry.value + "' is not a valid " + entry.key + " name: up to " +
+                 std::to_string(kMaxRigNameLength) + " of a-z, 0-9 and '-'");
+      }
+      (entry.key == "drive" ? profile.drive : profile.surface) = entry.value;
     } else {
       fail(source, entry.line, "unknown key '" + entry.key + "' in [rig]");
     }
@@ -381,6 +392,105 @@ NavigationProfile readNavigation(const Section &section, const std::string &sour
   return n;
 }
 
+// "p" and digits: a motion table point's key.
+bool isPointKey(std::string_view key) {
+  return key.size() > 1 && key[0] == 'p' &&
+         std::all_of(key.begin() + 1, key.end(),
+                     [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; });
+}
+
+SurfaceProfile readSurface(const Section &section, const std::string &name, const std::string &source) {
+  SurfaceProfile surface;
+  surface.name = name;
+  surface.source = source;
+  for (const Entry &entry : section.entries) {
+    const auto real = [&](double min, double max) { return toReal(entry, min, max, source); };
+    if (entry.key == "max_speed") {
+      surface.maxSpeed = real(0.01, 5.0);
+    } else if (entry.key == "min_speed") {
+      surface.minSpeed = real(0.0, 5.0);
+    } else if (entry.key == "max_turn_rate") {
+      surface.maxTurnRate = real(0.01, 20.0);
+    } else if (entry.key == "brake") {
+      surface.brake = real(0.01, 20.0);
+    } else if (entry.key == "linear_scalar") {
+      surface.linearScalar = real(kMinOtosScalar, kMaxOtosScalar);
+    } else if (entry.key == "angular_scalar") {
+      surface.angularScalar = real(kMinOtosScalar, kMaxOtosScalar);
+    } else if (entry.key == "mirror") {
+      if (entry.value != "0" && entry.value != "1") {
+        fail(source, entry.line, "'mirror': '" + entry.value + "' must be 0 or 1");
+      }
+      surface.mirror = entry.value == "1";
+    } else if (isPointKey(entry.key)) {
+      // <direction deg> <size> <vx> <vy> <wz>, each checked as a number.
+      std::vector<std::string> words;
+      std::istringstream in(entry.value);
+      for (std::string w; in >> w;) {
+        words.push_back(w);
+      }
+      if (words.size() != 5) {
+        fail(source, entry.line,
+             "'" + entry.key + "': five numbers, <direction deg> <size> <vx> <vy> <wz>, not '" +
+                 entry.value + "'");
+      }
+      const auto word = [&](std::size_t k, double min, double max) {
+        return toReal(Entry{entry.key, words[k], entry.line}, min, max, source);
+      };
+      const SurfacePoint point{word(0, -180.0, 180.0), word(1, 0.0, 1.5), word(2, -5.0, 5.0),
+                               word(3, -5.0, 5.0), word(4, -20.0, 20.0)};
+      if (!(point.size > 0.0)) {
+        fail(source, entry.line, "'" + entry.key + "': a size must be above 0");
+      }
+      surface.points.push_back(point);
+    } else {
+      fail(source, entry.line, "unknown key '" + entry.key + "' in [" + section.name + "]");
+    }
+  }
+  return surface;
+}
+
+// "surface.<name>" or "surface.<name>.calibration": the name, and whether
+// it is the record. No value if the section is not a surface's.
+std::optional<std::pair<std::string, bool>> surfaceSection(const Section &section,
+                                                           const std::string &source) {
+  const std::string_view full = section.name;
+  if (full.substr(0, kSurfacePrefix.size()) != kSurfacePrefix) {
+    return std::nullopt;
+  }
+  std::string_view rest = full.substr(kSurfacePrefix.size());
+  bool calibration = false;
+  if (rest.size() > kCalibrationSuffix.size() &&
+      rest.substr(rest.size() - kCalibrationSuffix.size()) == kCalibrationSuffix) {
+    rest.remove_suffix(kCalibrationSuffix.size());
+    calibration = true;
+  }
+  if (!isValidRigName(rest)) {
+    fail(source, section.line,
+         "[" + section.name + "]: '" + std::string(rest) + "' is not a valid surface name: up to " +
+             std::to_string(kMaxRigNameLength) + " of a-z, 0-9 and '-'");
+  }
+  return std::make_pair(std::string(rest), calibration);
+}
+
+// Each surface's record joined to its surface after the loop, so the two
+// may come in either order. A record without its surface fails.
+void joinSurfaceRecords(std::vector<SurfaceProfile> &surfaces,
+                        const std::vector<std::pair<const Section *, std::string>> &records,
+                        const std::string &source) {
+  for (const auto &[section, name] : records) {
+    const auto found = std::find_if(surfaces.begin(), surfaces.end(),
+                                    [&name](const SurfaceProfile &s) { return s.name == name; });
+    if (found == surfaces.end()) {
+      fail(source, section->line,
+           "[" + section->name + "] has no [surface." + name + "] section to record");
+    }
+    for (const Entry &entry : section->entries) {
+      found->calibration.emplace_back(entry.key, entry.value);
+    }
+  }
+}
+
 // Every key a section needs; a missing one is reported at the section's
 // header line.
 void requireKeys(const Section &section, std::initializer_list<std::string_view> keys,
@@ -419,8 +529,15 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
       {kNavigation, &profile.navigationCalibration},
   }};
 
+  std::vector<std::pair<const Section *, std::string>> surfaceRecords;
   for (const Section &section : sections) {
-    if (section.name == kTopLevel) {
+    if (const auto surface = surfaceSection(section, source)) {
+      if (surface->second) {
+        surfaceRecords.emplace_back(&section, surface->first);
+      } else {
+        profile.surfaces.push_back(readSurface(section, surface->first, source));
+      }
+    } else if (section.name == kTopLevel) {
       readTopLevel(section, formatSeen, source);
     } else if (section.name == kRig) {
       readRig(section, profile, source);
@@ -449,13 +566,15 @@ RigProfile parseRigProfile(std::string_view text, const std::string &source) {
         fail(source, section.line,
              "unknown section [" + section.name +
                  "]; known: [rig], [motor], [geometry], [lidar], [odometry], [navigation], "
-                 "each but [rig] with a [<section>.calibration]");
+                 "each but [rig] with a [<section>.calibration], and [surface.<name>]");
       }
       for (const Entry &entry : section.entries) {
         record->second->emplace_back(entry.key, entry.value);
       }
     }
   }
+
+  joinSurfaceRecords(profile.surfaces, surfaceRecords, source);
 
   // A calibration record needs its section: checked after the loop, so the
   // two may come in either order.
@@ -528,7 +647,102 @@ RigProfile loadRigProfile(const std::filesystem::path &file) {
                              "', but a profile must be named after its rig: " + profile.name +
                              ".conf");
   }
+
+  // The drive's library of known surfaces, after the rig's own, which win
+  // on a name; in name order, so the result does not depend on the disk.
+  if (!profile.drive.empty()) {
+    const std::filesystem::path library = file.parent_path() / "surfaces" / profile.drive;
+    std::error_code ec;
+    if (std::filesystem::is_directory(library, ec)) {
+      std::vector<std::filesystem::path> files;
+      for (const auto &item : std::filesystem::directory_iterator(library)) {
+        if (item.path().extension() == ".conf") {
+          files.push_back(item.path());
+        }
+      }
+      std::sort(files.begin(), files.end());
+      for (const std::filesystem::path &path : files) {
+        std::ifstream surfaceIn(path, std::ios::binary);
+        std::ostringstream surfaceText;
+        surfaceText << surfaceIn.rdbuf();
+        SurfaceProfile surface = parseSurfaceFile(surfaceText.str(), path.string());
+        if (surface.name != path.stem().string()) {
+          throw std::runtime_error("Heron::Profile::loadRigProfile() : " + path.string() +
+                                   ": its surface is '" + surface.name +
+                                   "', but a surface file must be named after it: " +
+                                   surface.name + ".conf");
+        }
+        if (findSurface(profile, surface.name) == nullptr) {
+          profile.surfaces.push_back(std::move(surface));
+        }
+      }
+    }
+  }
+  if (!profile.surface.empty() && findSurface(profile, profile.surface) == nullptr) {
+    throw std::runtime_error("Heron::Profile::loadRigProfile() : " + file.string() +
+                             ": [rig] surface is '" + profile.surface +
+                             "', but neither the profile nor the library of drive '" +
+                             profile.drive + "' has it");
+  }
   return profile;
+}
+
+SurfaceProfile parseSurfaceFile(std::string_view text, const std::string &source) {
+  const std::vector<Section> sections = split(text, source);
+  bool formatSeen = false;
+  std::vector<SurfaceProfile> surfaces;
+  std::vector<std::pair<const Section *, std::string>> records;
+  for (const Section &section : sections) {
+    if (const auto surface = surfaceSection(section, source)) {
+      if (surface->second) {
+        records.emplace_back(&section, surface->first);
+      } else {
+        surfaces.push_back(readSurface(section, surface->first, source));
+      }
+    } else if (section.name == kTopLevel) {
+      readTopLevel(section, formatSeen, source);
+    } else {
+      fail(source, section.line,
+           "[" + section.name + "] in a surface file: only one [surface.<name>] and its record");
+    }
+  }
+  if (!formatSeen) {
+    fail(source, 0, "'format = " + std::to_string(kProfileFormat) +
+                        "' is missing; it goes before the first section");
+  }
+  if (surfaces.size() != 1) {
+    fail(source, 0,
+         "a surface file holds one [surface.<name>], not " + std::to_string(surfaces.size()));
+  }
+  joinSurfaceRecords(surfaces, records, source);
+  return surfaces.front();
+}
+
+const SurfaceProfile *findSurface(const RigProfile &profile, std::string_view name) {
+  const auto found = std::find_if(profile.surfaces.begin(), profile.surfaces.end(),
+                                  [name](const SurfaceProfile &s) { return s.name == name; });
+  return found == profile.surfaces.end() ? nullptr : &*found;
+}
+
+RigProfile onSurface(const RigProfile &profile, const std::string &name) {
+  const SurfaceProfile *surface = findSurface(profile, name);
+  if (surface == nullptr) {
+    throw std::invalid_argument("Heron::Profile::onSurface() : " + profile.source +
+                                " has no surface '" + name + "'");
+  }
+  RigProfile on = profile;
+  on.activeSurface = name;
+  if (on.geometry) {
+    on.geometry->maxSpeed = surface->maxSpeed.value_or(on.geometry->maxSpeed);
+    on.geometry->minSpeed = surface->minSpeed.value_or(on.geometry->minSpeed);
+    on.geometry->maxTurnRate = surface->maxTurnRate.value_or(on.geometry->maxTurnRate);
+    on.geometry->brake = surface->brake.value_or(on.geometry->brake);
+  }
+  if (on.odometry) {
+    on.odometry->linearScalar = surface->linearScalar.value_or(on.odometry->linearScalar);
+    on.odometry->angularScalar = surface->angularScalar.value_or(on.odometry->angularScalar);
+  }
+  return on;
 }
 
 bool isValidRigName(std::string_view name) {

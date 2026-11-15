@@ -257,7 +257,7 @@ int main() {
   const Scan close = wallAhead(0.30, lidarAt, t0);
   const Scan far = wallAhead(3.0, lidarAt, t0);
   const auto assistedWith = [&](const Scan *scan) {
-    return AssistedInput{&limiter, geometry,
+    return AssistedInput{&limiter, geometry, nullptr,
                          Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}};
   };
 
@@ -349,6 +349,74 @@ int main() {
     d = decide(Mode::Assisted, true, BodyVelocity{0.5, 0.0, 0.0}, nullptr);
     check("not ready: stopped, AssistedUnavailable, never Manual",
           stopped(d.wheels) && d.why == Why::AssistedUnavailable);
+  }
+
+  std::printf("On a surface, through its motion table (design §19)\n");
+  {
+    const Heron::Profile::RigProfile hw = Heron::Profile::onSurface(bench, bench.surface);
+    check("bench.conf's default surface: hardwood-1, its numbers in place",
+          bench.surface == "hardwood-1" && hw.activeSurface == "hardwood-1" &&
+              near(hw.geometry->brake, 0.7, 1e-12) && near(hw.odometry->linearScalar, 0.908, 1e-12));
+    const std::optional<Heron::Motion::MotionTable> table = toMotionTable(hw);
+    check("  its motion table: 22 points in 6 columns", table && table->columns() == 6);
+    check("  Assisted not refused", assistedRefusal(hw).empty());
+    check("no surface: no table", !toMotionTable(bench));
+    Heron::Profile::RigProfile bare = bench;
+    bare.surfaces.push_back(Heron::Profile::SurfaceProfile{});
+    bare.surfaces.back().name = "bare";
+    bare = Heron::Profile::onSurface(bare, "bare");
+    check("a surface with no table: Assisted refused, says so",
+          assistedRefusal(bare) == "surface bare has no motion table");
+    check("the pose's plausibility: 1.5 x max_speed, the jump check off",
+          near(toPoseConfig(hw).maxPlausibleSpeedMps, 0.63, 1e-12) &&
+              toPoseConfig(hw).maxPlausibleAccelMps2 == 0.0);
+
+    const auto through = [&](const Scan *scan, bool fresh) {
+      return AssistedInput{&limiter, hw.geometry.value(), &*table,
+                           Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}};
+    };
+    const AssistedInput open = through(&far, true);
+    Decision d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &open);
+    check("wall at 3 m, forward 0.6: Clear, the stick's command as it is",
+          d.why == Why::Limited && d.limited->reason == Heron::Limiter::Reason::Clear &&
+              same(d.body, BodyVelocity{0.6, 0.0, 0.0}, 1e-12));
+    const Twist told = d.limited->command;
+    check("  the limiter told 0.31 x 1.2 m/s forward, the drift's turn included",
+          near(told.vx, 0.31 * kTableMargin, 1e-9) && near(told.wz, 0.05, 1e-9));
+    const AssistedInput wall = through(&close, true);
+    d = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &wall);
+    const Twist made = table->predict(d.body.vx, d.body.vy);
+    std::printf("        wall at 0.30 m, full forward: %s, allowed %.3f m/s, command (%.3f, %.3f) makes %.3f\n",
+                Heron::Limiter::toString(d.limited->reason), d.limited->command.vx / kTableMargin,
+                d.body.vx, d.body.vy, made.vx);
+    check("wall at 0.30 m, full forward: a smaller command, still moving, making no more than allowed",
+          d.body.vx > 0.0 && d.body.vx < 1.0 && made.vx <= d.limited->command.vx / kTableMargin + 0.005);
+    // Check 1 (2026-11-14): stick 0.58 forward toward a box, the limiter
+    // cutting. A diagonal stood in for forward (vy -0.19 of full) and the
+    // rolling robot stopped 8 cm short. Now: forward-ish or stopped.
+    bool forwardOrStopped = true;
+    bool someStopped = false;
+    for (double at = 0.20; at <= 0.60; at += 0.01) {
+      const Scan box = wallAhead(at, lidarAt, t0);
+      const AssistedInput toBox = through(&box, true);
+      d = decide(Mode::Assisted, true, BodyVelocity{0.58, 0.0, 0.0}, &toBox);
+      const bool zero = d.body.vx == 0.0 && d.body.vy == 0.0;
+      someStopped = someStopped || zero;
+      forwardOrStopped = forwardOrStopped &&
+                         (zero || (d.body.vx > 0.0 && std::abs(std::atan2(d.body.vy, d.body.vx)) <=
+                                                         15.0 * Heron::Geometry::kDegToRad + 1e-9));
+      if (!zero && std::abs(d.body.vy) > 0.05) {
+        std::printf("        box at %.2f m: command (%.3f, %.3f), %s\n", at, d.body.vx, d.body.vy,
+                    Heron::Limiter::toString(d.limited->reason));
+      }
+    }
+    check("check 1, box 0.20 to 0.60 m ahead, stick 0.58: forward within 15 degrees, or stopped",
+          forwardOrStopped);
+    check("  and near the box, stopped", someStopped);
+    const AssistedInput stale = through(&far, false);
+    d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &stale);
+    check("the pose not fresh: stopped, POSE_NOT_FRESH (P16)",
+          stopped(d.wheels) && d.why == Why::PoseNotFresh);
   }
 
   std::printf("Navigate and disarmed\n");

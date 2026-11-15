@@ -45,8 +45,10 @@
 // ---------------
 //   Once a second, or --lines N times: the mode, armed, the throttle, the
 //   stick and what went out (fractions of full drive), the four wheels,
-//   the measured speed from the OTOS (m/s, x forward, y left), and in
-//   Assisted the limiter's reason, the nearest point and the scan's age.
+//   the measured speed from the OTOS (m/s, x forward, y left; rad/s,
+//   left positive), the heading since start-up (degrees, left positive),
+//   the OTOS's TRACKING and TILT warnings when set, and in Assisted the
+//   limiter's reason, the nearest point and the scan's age.
 //   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
@@ -76,6 +78,7 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -103,11 +106,12 @@ constexpr std::chrono::milliseconds kPeriod(20);  // 50 Hz, the protocol's rate
 [[noreturn]] void usage(int status) {
   std::fprintf(status == 0 ? stdout : stderr,
                "Usage: heron_robot [--dry-run] [--manual-is-high] [--lines N] [--profile FILE]\n"
-               "                   [--remote DEVICE]\n"
+               "                   [--surface NAME] [--remote DEVICE]\n"
                "  --dry-run         everything but the motors; print the wheels\n"
                "  --manual-is-high  SwC High is Manual (default: Low is Manual)\n"
                "  --lines N         status lines a second, 1 to 50 (default 1)\n"
                "  --profile FILE    the rig profile (default this Pi's)\n"
+               "  --surface NAME    the floor (default the profile's [rig] surface)\n"
                "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n");
   std::exit(status);
 }
@@ -123,6 +127,7 @@ int main(int argc, char **argv) {
   bool manualIsHigh = false;
   int linesPerSecond = 1;
   std::string profilePath;
+  std::string surfaceName;
   Heron::Remote::ReceiverConfig remoteConfig;  // /dev/serial0, stale after 100 ms
   // SwA on CH7, as heron_teleop: 1000 up (disarmed) and the transmitter's
   // failsafe value, so disarming and radio loss read the same.
@@ -144,8 +149,9 @@ int main(int argc, char **argv) {
         usage(2);
       }
       linesPerSecond = static_cast<int>(n);
-    } else if ((arg == "--profile" || arg == "--remote") && i + 1 < argc) {
-      (arg == "--profile" ? profilePath : remoteConfig.serial.device) = argv[++i];
+    } else if ((arg == "--profile" || arg == "--remote" || arg == "--surface") && i + 1 < argc) {
+      (arg == "--profile" ? profilePath : arg == "--surface" ? surfaceName : remoteConfig.serial.device) =
+          argv[++i];
     } else {
       std::fprintf(stderr, "ERROR: unexpected argument '%s'\n", arg.c_str());
       usage(2);
@@ -165,11 +171,21 @@ int main(int argc, char **argv) {
     profile = Heron::Profile::loadRigProfile(profilePath.empty()
                                                  ? Heron::Profile::findRigProfile()
                                                  : std::filesystem::path(profilePath));
+    // The floor (design §19, P18): its numbers in place before any
+    // library's settings are filled (I22).
+    if (surfaceName.empty()) {
+      surfaceName = profile.surface;
+    }
+    if (!surfaceName.empty()) {
+      profile = Heron::Profile::onSurface(profile, surfaceName);
+    }
   } catch (const std::exception &e) {
     std::fprintf(stderr, "ERROR: %s\n", e.what());
     return 1;
   }
   std::printf("Profile: %s (rig %s)\n", profile.source.c_str(), profile.name.c_str());
+  std::printf("Surface: %s\n", profile.activeSurface.empty() ? "none (the profile's own numbers)"
+                                                              : profile.activeSurface.c_str());
   std::string unavailable = Heron::Robot::assistedRefusal(profile);
   std::printf("SwC: Low %s, middle ASSISTED, High %s\n",
               Heron::Robot::toString(Heron::Robot::modeFromSwitch(Heron::Remote::Switch3::Low, manualIsHigh)),
@@ -191,7 +207,7 @@ int main(int argc, char **argv) {
     if (!odometry->start()) {
       unavailable = "OTOS: " + odometry->getHealth().lastError;
     } else {
-      pose = std::make_unique<Heron::Pose::PoseTracker>(*odometry);
+      pose = std::make_unique<Heron::Pose::PoseTracker>(*odometry, Heron::Robot::toPoseConfig(profile));
       if (!pose->start()) {
         unavailable = "the pose tracker did not start";
       }
@@ -209,9 +225,12 @@ int main(int argc, char **argv) {
   }
 
   std::unique_ptr<Heron::Limiter::Limiter> limiter;
+  std::optional<Heron::Motion::MotionTable> motion;
   if (unavailable.empty()) {
     limiter = std::make_unique<Heron::Limiter::Limiter>(Heron::Robot::toLimiterConfig(profile));
-    std::printf("Assisted: ready\n");
+    motion = Heron::Robot::toMotionTable(profile);  // checked by assistedRefusal()
+    std::printf("Assisted: ready, %s\n",
+                motion ? "through the surface's motion table" : "with the min_speed model (no table)");
   } else {
     std::printf("Assisted: UNAVAILABLE (%s). Manual works; Assisted stops.\n", unavailable.c_str());
   }
@@ -268,13 +287,13 @@ int main(int argc, char **argv) {
         history = pose->copyHistory().first;
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
         assisted = Heron::Robot::AssistedInput{
-            limiter.get(), geometry,
+            limiter.get(), geometry, motion ? &*motion : nullptr,
             Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}};
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
 
-      if (armed && d.why != Why::AssistedUnavailable && d.why != Why::NavigateNotBuilt) {
+      if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {
         ++driving;
         if (motors) {
           (void)motors->drive(d.wheels);
@@ -319,9 +338,12 @@ int main(int argc, char **argv) {
         std::string speedText;
         if (pose) {
           const Heron::Pose::PoseSnapshot p = pose->getLatest();
-          char text[64];
-          std::snprintf(text, sizeof(text), "  speed %+5.2f %+5.2f m/s%s", p.newest.velocity.vx,
-                        p.newest.velocity.vy, p.fresh ? "" : " (not fresh)");
+          char text[128];
+          std::snprintf(text, sizeof(text), "  speed %+5.2f %+5.2f m/s %+5.2f rad/s  heading %+6.1f deg%s%s%s",
+                        p.newest.velocity.vx, p.newest.velocity.vy, p.newest.velocity.wz,
+                        p.newest.pose.heading / Heron::Geometry::kDegToRad,
+                        p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
+                        p.tiltWarning ? " TILT" : "");
           speedText = text;
         }
         std::string motorText = "dry run";

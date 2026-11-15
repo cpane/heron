@@ -1015,15 +1015,16 @@ status line. Changes from §7.2 and §7.3:
   under the floor stops; Navigate and disarmed stop. A hand-built scan, as
   `limiter_test`'s, not the simulator.
 
-### 7.5 Proposed for step 2: moving as the robot moves (2026-11-14)
+### 7.5 For step 2: moving as the robot moves (accepted 2026-11-14)
 
-The interfaces for design §19 (P13 to P18), to be reviewed with it; I17 to I22.
+The interfaces for design §19 (P13 to P18): I17 to I22, accepted by
+Chris 2026-11-14, I18 as revised after the first table.
 Nothing here is built.
 
 | # | Decision | Why |
 |---|---|---|
 | I17 | **`heron_motion`, a new pure library, holds the motion table** and nothing else; `heron_robot`, `heron_planner` and `heron_nav_sim` link it | One model, three users; tested alone with hand-made tables, as the other cores are |
-| I18 | **The table is indexed by the command's direction and size,** fractions of full drive, and holds what the robot made, a `Twist` | That is what is measured (§19.3), so the table stores observations, not fitted constants |
+| I18 | **The table holds points as measured,** each a command (direction and size, fractions of full drive) and what the robot made, a `Twist`; no even grid is required. Points each within 10° of the next, in direction, form one column, at their mean direction; within a column it is linear in size, below the smallest size as the smallest and above the largest as the largest; between the two columns either side of a direction, linear in angle | That is what is measured (§19.3), so the table stores observations, not fitted constants. The stick does not send the angles aimed for (1 o'clock came out at 15°, 2 o'clock at 45°, "right" at −75° to −90°), so a grid would mean throwing measurements away or faking their directions (revised 2026-11-14, after the first table) |
 | I19 | **A plan carries the command as well as the twist** (`Plan::command`), and Navigate drives the command | The twist is the prediction; driving it back through an inverse would lose what the planner chose |
 | I20 | **Heading hold is a pure class in `RobotCore`,** fed the heading, the turn stick and the table's drift each cycle | The loop stays reading and driving; the hold is tested on the Mac like `decide()` |
 | I21 | **Plausibility is `PoseTracker`'s,** by config: it already judges freshness, and every user of the pose then sees the same verdict | The limiter, perception, the planner and the status line cannot disagree about a nonsense speed |
@@ -1041,14 +1042,17 @@ struct MotionPoint {
 
 class MotionTable {
   public:
-    /** @param mirror the left half is the right's, vy and wz negated
-     *  @throws std::invalid_argument unless the points form a grid of
-     *          directions x sizes, sizes rising, at least 2 of each */
+    /** @param mirror a direction with no column on the left is taken from
+     *         its mirror on the right, vy and wz negated
+     *  @throws std::invalid_argument for fewer than 2 columns, or a
+     *          column of 1 point that is not a dead one (made nothing) */
     MotionTable(std::vector<MotionPoint> points, bool mirror);
 
-    /** What a translation command makes: interpolated between the four
-     *  nearest points; below the smallest size, as the smallest (the dead
-     *  band lifts any command to it); zero at zero. */
+    /** What a translation command makes (I18): in each of the two columns
+     *  either side of its direction, linear in size (below the smallest as
+     *  the smallest: the dead band lifts any command to it; above the
+     *  largest as the largest); then linear in angle between them. Zero at
+     *  zero. */
     [[nodiscard]] Geometry::Twist predict(double vxFraction, double vyFraction) const;
 
     /** The command along directionRad whose predicted speed is speedMps:
@@ -1151,6 +1155,76 @@ stopping Assisted); `pose_test` (a nonsense speed and a jump not fresh,
 then fresh after the settle); `planner_test` (only table commands
 chosen, slides at the table's strafe speed); `nav_scenario_test`
 scenarios 1 to 4 with the bench rig's table.
+
+**As built, §19.4 step 3 (2026-11-14):** `heron_motion`
+(`MotionTable`, `motion_test`), surfaces in `heron_profile` (`[rig]
+drive` and `surface`, `[surface.<name>]`, the library
+`profiles/surfaces/<drive>/`, `parseSurfaceFile()`, `onSurface()`,
+`rig_profile show` lists them; `rig_profile_test`), plausibility in
+`PoseTracker` (`pose_test`), and Assisted through the table in
+`RobotCore` with `heron_robot --surface` (`robot_test`). The bench rig's
+profile names drive `bench-mecanum` and surface `hardwood-1`. Changes
+from the interfaces above:
+
+- **Columns group by neighbours:** a point joins a column when within
+  10° of the point before it, so the hardwood's right (−75° to −90°) is
+  one column while 0° and −15° are two. A column of one point (the
+  hardwood's backward) gives that point at every size, rather than being
+  refused.
+- **`nearestCommand(want)`, added:** the command whose predicted motion
+  is nearest `want` without exceeding it on either axis (same sign or
+  zero, within 5 mm/s), searched over directions every 5° and sizes
+  every 0.05. The limiter cuts by axis, so the allowed motion's direction
+  is not the stick's, and `commandFor()` along one direction could not
+  answer it.
+- **Assisted with a table:** the limiter is told `predict()` × 1.2 plus
+  the turn (the stick's, through "Units", plus the table's drift). Clear:
+  the stick's command. Otherwise the turn is scaled by the limiter's
+  `scale.wz`, and the translation is `nearestCommand()` of the allowed
+  motion ÷ 1.2, checked once more (Clear or Slowed passes: the slow zone
+  scales every command near something), else stopped. **A strafe that
+  creeps forward is refused toward a wall ahead**: on hardwood a strafe
+  makes 0.04 m/s forward, so with a wall in front Assisted stops the
+  slide that step 1 allowed. Safe; whether to let a few mm/s through is
+  open.
+- **The profile holds plain `SurfacePoint`s**, not `heron_motion`'s
+  `MotionPoint`: `heron_profile` is shared with the motor workstream and
+  links no navigation library; `RobotCore::toMotionTable()` converts.
+  **`mirror` is off unless set.**
+- **Plausibility as configured by `heron_robot`:** the speed limit at
+  1.5 × `max_speed` (0.63 m/s on hardwood) and the OTOS's tracking
+  warning; **the speed-jump check is off**: readings come 100 a second
+  and the OTOS's noise at that rate is unmeasured, so a threshold could
+  stop Assisted in normal driving. Normal driving peaked at 0.58 m/s and
+  raised no warning in the table session.
+- **Stalls lifted, substitutes near the stick (after check 1,
+  2026-11-14):** Assisted straight at a box at 0.58 stopped 8 cm short,
+  closer than the 10 to 13 cm before the table. From 0.36 m the limiter
+  cut below forward's floor (0.19 m/s), no forward command fitted, and
+  `nearestCommand()` chose forward-right diagonals (`out +0.23 −0.19`)
+  that the table put at 0.02 to 0.05 m/s; the robot, already rolling,
+  kept 0.20 to 0.25 m/s to the stop. The table's points were measured
+  from rest, and a command that cannot start a still robot does not stop
+  a moving one. So a point that made under 0.02 m/s (`kStallMps`) is a
+  stall, and sizes at or below a column's last stall read as the first
+  point above it that moved (the limiter assumes small commands move);
+  and `nearestCommand(want, aroundRad, withinRad)` looks only within 15°
+  (`kSubstituteWidthRad`) of the direction given, the stick's, so a
+  substitute never swerves the robot. Near the box nothing fits and
+  Assisted stops; at 0.58 from 0.36 m it would coast about 5 cm.
+- **Floor checks after the fix (2026-11-14), measured:** straight at a
+  box at 0.58, 14 cm short; at full, 14.5 cm (cut from 0.49 m, let go at
+  0.30 m doing 0.29 m/s, the LiDAR read the box at 0.23 and 0.24 m both
+  times, so the stop no longer depends on speed); a full strafe right
+  toward a box on the right, 10 cm at the front wheels and 12 at the
+  back. No swerve: the largest sideways substitute going forward was
+  −0.08; going right, the substitutes leaned up to 15° backward
+  (`out −0.16 −0.58`). The strafe turned the robot 19° clockwise, half of
+  it while slowing, which brought the front wheels closer; heading hold
+  (step 4) is for that. **Open:** while cut at full speed the output
+  jumped between nothing and a command (`0.00, 0.80, 0.00, 0.45, 0.30,
+  0.00`) as the allowance changed scan to scan; the stop was where it
+  should be.
 
 ## 8. `heron_planner`: the local planner (N5)
 

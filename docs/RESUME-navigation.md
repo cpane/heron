@@ -116,6 +116,11 @@ navigation, so SwC to Manual always takes over.
   early rather than late, 7 to 10 cm short of the stop line. Stopping
   nearer it needs the limiter to report the cut and the slow zone
   apart.
+- **Design §19, P13 to P18 accepted** (Chris): a measured motion table
+  per floor, heading hold, the planner on commands, plausibility, the
+  simulator by the table, surface profiles sorted by drive with a
+  library of known surfaces. I17 to I22 (the interfaces) accepted the
+  same day, I18 revised to points as measured. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
 
 ## Picking up
 
@@ -357,12 +362,83 @@ navigation, so SwC to Manual always takes over.
      is the wrong model: the dead band is per wheel, and sideways has
      its own.
 
-   **Next: review design §19 and `navigation-cpp-design.md` §7.5**
-   (P13 to P18, I17 to I22): a motion table measured on the floor,
-   heading hold, the planner on commands, plausibility, the simulator by
-   the table. Then its order of work (§19.4): measure the table (half an
-   hour with the robot), Assisted through it, heading hold, the
-   simulator and planner, and only then Navigate.
+   **The motion table, hardwood, 2026-11-14** [ours, `heron_robot
+   --lines 10` (with the turn rate, heading and OTOS warnings), Manual,
+   log `captures/table-hardwood-1-2026-11-14.log`, Chris driving; 25
+   runs, one repeated (out of room)]: each command held 2 s, the settled
+   speed turned into the robot frame. The table is design §19.1, and the
+   `hardwood-1` example in §19.2 holds every point.
+   - Forward 0.19, 0.27, 0.31, 0.34, 0.39 m/s at 0.2 to 1.0, barely
+     turning. "1 o'clock" on the stick came out at about 15° and its
+     sideways part was lost: plain forward. "2 o'clock" came out at 45°.
+   - Strafe right: nothing at 0.2, 0.06 at 0.4, 0.15 at 0.6, 0.21 at
+     0.8, 0.27 at 1.0, turning clockwise 8 to 12°/s at 0.4 to 0.8. Left:
+     0.04 at 0.6 (a quarter of right's), 0.25 at 1.0. Backward 0.31 at
+     0.6.
+   - Taped strafe right, 0.6, 4.9 s: front wheel centres 29 in from the
+     tape, back 24 in, the back-left 13 in back along it; axles 4.5 in
+     apart, so a turn of 65° or more. The OTOS said 68°.
+   - **The OTOS's velocity is in the odom frame** (design §18 item 5,
+     settled): after a turn, straight runs printed a sideways part that
+     turning by −heading removed, and the taped strafe agreed only read
+     that way (39 cm back and 52 cm right against the tape's 30 and 61;
+     read as robot frame, 57 back and 8 right). `PoseTracker` passed it
+     on as robot frame; fixed (it turns it by −heading), `pose_test`
+     checks it. Every earlier speed in this file was in the odom frame:
+     the strafe's "creeping back" and the "sideways while driving
+     straight" were the robot's turn. Told odometry (its Inbox).
+   - Yesterday's taped strafe, with the axles now measured: front 3.75
+     in further than back over 4.5 in, about 56°, not the 30° written
+     then.
+
+   **§19.4 step 3 built 2026-11-14** (`navigation-cpp-design.md` §7.5,
+   "As built"): `heron_motion`, surface profiles and the library
+   (`profiles/surfaces/bench-mecanum/hardwood-1.conf`, `bench.conf`
+   naming drive and surface), plausibility (P16), Assisted through the
+   table, `heron_robot --surface`. `motion_test`, `rig_profile_test`,
+   `pose_test`, `robot_test` pass on the Mac and the Pi, all 26 host
+   tests. Deployed.
+
+   **Floor check 1 through the table, 2026-11-14:** start-up printed
+   `Surface: hardwood-1` and "Assisted: ready, through the surface's
+   motion table". Straight at a box at 0.58: **stopped 8 cm short**,
+   closer than before. Cut from 0.36 m, it drove forward-right diagonals
+   the table put at 0.02 to 0.05 m/s, and the rolling robot kept 0.20 to
+   0.25 m/s. Fixed the same day (`navigation-cpp-design.md` §7.5 as
+   built, "Stalls lifted"): stalls read as the next point that moved, and
+   substitutes stay within 15° of the stick. Before arming, a lift showed
+   speeds to −1.47 m/s with TRACKING and TILT, every line `(not fresh)`,
+   fresh again about 0.3 s after. Re-run check 1, then 2 and 3.
+
+   **Floor check 4, 2026-11-14:** lifted 3 to 5 cm while armed in
+   Assisted, the OTOS raised TILT only (no TRACKING) and read exactly
+   +0.00; the pose stayed fresh and the wheels turned in the air with the
+   stick at about 0.59. P16 worked as designed; the expectation ("a lift
+   gives `POSE_NOT_FRESH`") was wrong: a lift is caught only when the
+   OTOS raises TRACKING or reads an implausible speed, as the lift before
+   check 1 did. **Known limit: Assisted cannot tell lifted from still**
+   (design §19.5). Decided 2026-11-14 (the user): record it, and add a
+   "commanded but not moving" check to step 4 (design §19.4); TILT as
+   not fresh rejected for now.
+
+   **Floor checks 1 to 3 after the fix, 2026-11-14:** straight at a box
+   at 0.58 (throttle 0.6, full stick), **14 cm** short; at full
+   (throttle 1.0), **14.5 cm**; full strafe right toward a box on the
+   right, **10 cm** at the front wheels, 12 at the back. Both straight
+   runs stopped with the box at 0.23 to 0.24 m on the LiDAR, so the stop
+   no longer depends on speed. No swerve. The strafe turned the robot
+   19° clockwise. Open: the output flickered while cut at full speed
+   (`navigation-cpp-design.md` §7.5 as built). Note for checks: the
+   throttle scales the stick, so `stick +0.58` at throttle 0.6 is full
+   stick. **Step 3 is done.**
+
+   **Next: design §19.4 step 4,** heading hold (P14), and with it:
+   "commanded but not moving" (wheels commanded, the OTOS exactly zero
+   for about 0.5 s: pose not fresh, a threshold that does not trip at the
+   dead band; heading hold uses the same signal); the strafe's 19° turn
+   (check 3) is what it should remove; and look at the output flicker
+   while cut at full speed. To drive: `heron_teleop` off, `ssh -t
+   <user>@<pi> '~/heron/bin/heron_robot --lines 10'`.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
@@ -458,10 +534,6 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **N1's numbers are measured** for the bench rig (2026-11-14), except
   `accel` and the margins, which are the design's starting values; and
   the strafe speed, for which `max_speed` and `min_speed` stand in.
-- **Design §19, P13 to P18** (2026-11-14): proposed, for review on
-  https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU. Nothing in it is
-  tied to hardwood (Chris): floor-dependent numbers go in surface
-  profiles (P18).
 - **Assisted stops 7 to 10 cm short of the stop line** (2026-11-14):
   under `min_speed` a cut stops. To stop nearer it, the limiter would
   report the cut's scale and the slow zone's apart; not asked for yet.
