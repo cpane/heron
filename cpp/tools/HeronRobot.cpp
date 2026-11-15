@@ -86,6 +86,7 @@
 //
 // --dry-run starts everything but the motors and prints what it would
 // send: for checking the sticks, SwC and the limiter with nothing turning.
+// "Commanded but not moving" is off in it, since nothing moves.
 // Ctrl-C ends it; the motors are released on the way out.
 
 #include <chrono>
@@ -406,9 +407,11 @@ int main(int argc, char **argv) {
           assisted.holdRadps = rate;
         }
         // Commanded but not moving: last cycle's command, from rest,
-        // against what the OTOS reads now (design §19.4 step 4).
-        const Heron::Geometry::Twist expected =
-            motion ? motion->predictFromRest(lastBody.vx, lastBody.vy) : Heron::Geometry::Twist{};
+        // against what the OTOS reads now (design §19.4 step 4). Off in a
+        // dry run, where nothing is driven, so nothing moves.
+        const Heron::Geometry::Twist expected = motion && !dryRun
+                                                    ? motion->predictFromRest(lastBody.vx, lastBody.vy)
+                                                    : Heron::Geometry::Twist{};
         assisted.notMoving = watch.update(std::hypot(expected.vx, expected.vy),
                                           std::hypot(p.newest.velocity.vx, p.newest.velocity.vy),
                                           translating, now);
@@ -427,10 +430,12 @@ int main(int argc, char **argv) {
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, drive, ready ? &assisted : nullptr);
       cutHold.update(drive, d);
+      // BLOCKED is the limiter's doing only: stopped for any other reason
+      // (NOT_MOVING, the pose) the status already says why.
       const bool blocked =
           mode == Mode::Navigate &&
-          blockedWatch.update(drive.vx != 0.0 || drive.vy != 0.0,
-                              d.why == Why::Limited && (d.body.vx != 0.0 || d.body.vy != 0.0), now);
+          blockedWatch.update(d.why == Why::Limited && (drive.vx != 0.0 || drive.vy != 0.0),
+                              d.body.vx != 0.0 || d.body.vy != 0.0, now);
 
       lastBody = armed && d.why == Why::Limited ? d.body : Heron::Drive::BodyVelocity{};
       if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {
