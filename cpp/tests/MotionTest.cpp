@@ -249,6 +249,14 @@ int main() {
     check("from rest, the -45 diagonal at 0.3 (a stall, 0.01): under 0.10",
           speed(hw.predictFromRest(0.21, -0.21)) < 0.10);
     check("from rest, full strafe right: 0.27, over 0.10", speed(hw.predictFromRest(0.0, -1.0)) > 0.25);
+    // Along the right column itself (-84 deg, its mean), so no other
+    // column blends in.
+    const double rx = std::cos(-84.0 * kDegToRad);
+    const double ry = std::sin(-84.0 * kDegToRad);
+    check("from rest, right at 0.3, between the 0.2 stall and 0.4: the stall, not a blend",
+          speed(hw.predictFromRest(0.3 * rx, 0.3 * ry)) < 0.02);
+    check("from rest, right at 0.4, the first size that moved: as measured",
+          speed(hw.predictFromRest(0.4 * rx, 0.4 * ry)) > 0.05);
     check("from rest, forward at 0.6: as predict(), no stall there",
           speed(hw.predictFromRest(0.6, 0.0)) == speed(hw.predict(0.6, 0.0)));
   }

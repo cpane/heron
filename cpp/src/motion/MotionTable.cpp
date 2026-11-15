@@ -145,6 +145,9 @@ MotionTable::MotionTable(std::vector<MotionPoint> points, bool mirror) {
 Geometry::Twist MotionTable::inColumn(const Column &column, double size, bool liftStalls) const {
   const std::vector<MotionPoint> &p = column.points;
   const std::size_t first = liftStalls ? column.firstRead : 0;
+  if (!liftStalls && column.firstRead > 0 && size < p[column.firstRead].size - 1e-9) {
+    return p[column.firstRead - 1].made;  // from rest, short of a size that moved: the stall (header)
+  }
   if (size <= p[first].size) {
     return p[first].made;  // the dead band, or a stall, lifts any command to it
   }
