@@ -432,13 +432,27 @@ navigation, so SwC to Manual always takes over.
    throttle scales the stick, so `stick +0.58` at throttle 0.6 is full
    stick. **Step 3 is done.**
 
-   **Next: design §19.4 step 4,** heading hold (P14), and with it:
-   "commanded but not moving" (wheels commanded, the OTOS exactly zero
-   for about 0.5 s: pose not fresh, a threshold that does not trip at the
-   dead band; heading hold uses the same signal); the strafe's 19° turn
-   (check 3) is what it should remove; and look at the output flicker
-   while cut at full speed. To drive: `heron_teleop` off, `ssh -t
-   <user>@<pi> '~/heron/bin/heron_robot --lines 10'`.
+   **Step 4, built 2026-11-15, on `feature/navigation-heading-hold`,
+   not yet deployed (the Pi was off) or checked on the floor:** heading
+   hold (P14, `HeadingHold`), and "commanded but not moving"
+   (`MotionWatch`, `predictFromRest()`, `NOT_MOVING`; I23, accepted by
+   Chris 2026-11-15). `navigation-cpp-design.md` §7.5 "As built, §19.4
+   step 4". All 26 host tests pass.
+
+   **Next, with the robot:** `scripts/deploy_cpp.sh <user>@<pi>` (no
+   binary), the Pi tests, then `heron_teleop` off and `ssh -t
+   <user>@<pi> '~/heron/bin/heron_robot --lines 10'`:
+   1. Full strafe right across open floor, throttle 1.00, turn stick
+      untouched, about 2 m: the heading should stay within a few degrees
+      (before: 8 to 12°/s), `hold` shown on the status line.
+   2. Check 3 again, strafe toward a box on the right: before, 19° turned
+      and 10 / 12 cm at the front / back wheels; now about equal.
+   3. Check 4 again: armed in Assisted, lift 3 to 5 cm, right stick
+      forward: `NOT_MOVING` within about half a second, wheels stopped;
+      centre the stick, set down, drive normally.
+   4. The full-speed flicker, diagnose first (decided 2026-11-15): check 2
+      again with `--lines 50`, every cycle's limiter answer, then decide
+      (likely "while cut, the output only falls until Clear").
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the

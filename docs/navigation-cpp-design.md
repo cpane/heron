@@ -1226,6 +1226,36 @@ from the interfaces above:
   0.00`) as the allowance changed scan to scan; the stop was where it
   should be.
 
+**As built, §19.4 step 4 (2026-11-15, not yet checked on the floor):**
+
+- **`HeadingHold`** (I20, as proposed: gain 2/s, at most 0.8 rad/s), in
+  `RobotCore`. `heron_robot` feeds it each Assisted cycle the turn stick
+  as a rate, whether the stick translates, the pose's heading and epoch,
+  and the table's drift for the stick's translation; with the turn stick
+  centred and a translation asked for, its rate goes to `decide()` as
+  `AssistedInput::holdRadps`. The limiter is told it (plus the drift, as
+  for any turn); the wheels get `holdFraction()` of it: a rad/s while
+  translating is `max_turn_rate × (1 − min_speed / max_speed)` per unit
+  of wz (every wheel already past the dead band, each rises
+  `max − min` per unit), held to half the slowest wheel's translation so
+  no wheel is pushed into the dead band or reversed. On a 45° diagonal
+  two wheels stand still, so nothing is held. **A translation cut to
+  nothing takes the turn with it:** alone, a small turn meets the turn's
+  floor (about 1.3 rad/s) and spins the robot. The status line shows
+  `hold ±x.x deg` while holding.
+- **`MotionWatch`, "commanded but not moving"** (accepted by Chris
+  2026-11-15, I23 below), in `RobotCore`: last cycle's driven command
+  read by **`MotionTable::predictFromRest()`** (new: the points as
+  measured, stalls not lifted), against the OTOS's speed. Expected 0.10
+  m/s or more while it reads under 0.01, for 0.5 s, trips it; it stays
+  tripped until the translation stick is centred. Tripped, Assisted stops
+  with **`Why::NotMoving`** (`NOT_MOVING`), not "pose not fresh": the pose
+  tracker cannot see the wheels' command (I21). No table, no watch.
+
+| # | Decision | Why |
+|---|---|---|
+| I23 | **"Commanded but not moving" is a pure class in `RobotCore`,** fed the table's from-rest prediction of the command driven and the OTOS's speed; tripped, Assisted stops (`NOT_MOVING`) until the stick is centred | A gentle lift reads as still and stays fresh (floor check 4); only the loop knows what the wheels were told. From rest, so the dead band never trips it; latched, so a lifted robot does not pulse its wheels every half second |
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9
