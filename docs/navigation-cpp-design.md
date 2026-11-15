@@ -1156,6 +1156,48 @@ then fresh after the settle); `planner_test` (only table commands
 chosen, slides at the table's strafe speed); `nav_scenario_test`
 scenarios 1 to 4 with the bench rig's table.
 
+**As built, §19.4 step 3 (2026-11-14):** `heron_motion`
+(`MotionTable`, `motion_test`), surfaces in `heron_profile` (`[rig]
+drive` and `surface`, `[surface.<name>]`, the library
+`profiles/surfaces/<drive>/`, `parseSurfaceFile()`, `onSurface()`,
+`rig_profile show` lists them; `rig_profile_test`), plausibility in
+`PoseTracker` (`pose_test`), and Assisted through the table in
+`RobotCore` with `heron_robot --surface` (`robot_test`). The bench rig's
+profile names drive `bench-mecanum` and surface `hardwood-1`. Changes
+from the interfaces above:
+
+- **Columns group by neighbours:** a point joins a column when within
+  10° of the point before it, so the hardwood's right (−75° to −90°) is
+  one column while 0° and −15° are two. A column of one point (the
+  hardwood's backward) gives that point at every size, rather than being
+  refused.
+- **`nearestCommand(want)`, added:** the command whose predicted motion
+  is nearest `want` without exceeding it on either axis (same sign or
+  zero, within 5 mm/s), searched over directions every 5° and sizes
+  every 0.05. The limiter cuts by axis, so the allowed motion's direction
+  is not the stick's, and `commandFor()` along one direction could not
+  answer it.
+- **Assisted with a table:** the limiter is told `predict()` × 1.2 plus
+  the turn (the stick's, through "Units", plus the table's drift). Clear:
+  the stick's command. Otherwise the turn is scaled by the limiter's
+  `scale.wz`, and the translation is `nearestCommand()` of the allowed
+  motion ÷ 1.2, checked once more (Clear or Slowed passes: the slow zone
+  scales every command near something), else stopped. **A strafe that
+  creeps forward is refused toward a wall ahead**: on hardwood a strafe
+  makes 0.04 m/s forward, so with a wall in front Assisted stops the
+  slide that step 1 allowed. Safe; whether to let a few mm/s through is
+  open.
+- **The profile holds plain `SurfacePoint`s**, not `heron_motion`'s
+  `MotionPoint`: `heron_profile` is shared with the motor workstream and
+  links no navigation library; `RobotCore::toMotionTable()` converts.
+  **`mirror` is off unless set.**
+- **Plausibility as configured by `heron_robot`:** the speed limit at
+  1.5 × `max_speed` (0.63 m/s on hardwood) and the OTOS's tracking
+  warning; **the speed-jump check is off**: readings come 100 a second
+  and the OTOS's noise at that rate is unmeasured, so a threshold could
+  stop Assisted in normal driving. Normal driving peaked at 0.58 m/s and
+  raised no warning in the table session.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

@@ -391,14 +391,24 @@ navigation, so SwC to Manual always takes over.
      in further than back over 4.5 in, about 56°, not the 30° written
      then.
 
-   **Next: review the interfaces, `navigation-cpp-design.md` §7.5** (I17
-   to I22; P13 to P18 are accepted). One question the table raised: the
-   directions come out per run, not on an even grid, so should
-   `heron_motion` store points as measured and interpolate between them
-   as they fall, rather than require a grid (I18)? Then build, per design
-   §19.4 step 3: `heron_motion` and the surface profiles, `bench.conf`'s
-   hardwood numbers moved into `[surface.hardwood-1]`, Assisted through
-   the table, plausibility (P16), and step 1's floor checks again.
+   **§19.4 step 3 built 2026-11-14** (`navigation-cpp-design.md` §7.5,
+   "As built"): `heron_motion`, surface profiles and the library
+   (`profiles/surfaces/bench-mecanum/hardwood-1.conf`, `bench.conf`
+   naming drive and surface), plausibility (P16), Assisted through the
+   table, `heron_robot --surface`. `motion_test`, `rig_profile_test`,
+   `pose_test`, `robot_test` pass on the Mac and the Pi, all 26 host
+   tests. Deployed, not yet run on the floor.
+
+   **Next: step 1's floor checks again, through the table** (design
+   §19.4 step 3's end): Assisted at a box straight on at 0.6 and full
+   (expect it to stop short as before, a little earlier at full since
+   the table says it goes 0.39, not 0.42); a strafe right toward a box on
+   the right (it should stop short; toward a wall ahead it now refuses a
+   strafe, `navigation-cpp-design.md` §7.5 as built); a lift, then
+   Assisted: `POSE_NOT_FRESH` until it settles. `heron_teleop` off, `ssh
+   -t <user>@<pi> '~/heron/bin/heron_robot --lines 10'`, the start-up
+   should print `Surface: hardwood-1` and "Assisted: ready, through the
+   surface's motion table". Then design §19.4 step 4, heading hold.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
