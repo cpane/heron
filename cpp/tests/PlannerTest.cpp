@@ -24,6 +24,7 @@
 #include <random>
 #include <vector>
 
+#include "BenchTable.h"
 #include "heron/planner/CourseKeeper.h"
 #include "heron/planner/Planner.h"
 #include "planner/DistanceField.h"
@@ -428,6 +429,50 @@ int main() {
     check("never farther than 1 m off the line: round the right", plan.state == State::Avoiding &&
                                                                        plan.twist.vy < 0.0);
     check("the path ends no farther off", plan.path.back().y <= 1e-9);
+  }
+
+  std::printf("With the bench rig's hardwood table: commands (P15)\n");
+  {
+    const Heron::Test::BenchTable bench = Heron::Test::benchHardwood();
+    PlannerConfig tableConfig = config;
+    tableConfig.motion = bench.motion;
+    tableConfig.maxSpeedMps = bench.geometry.maxSpeed;
+    ObstacleMap map = emptyMap();
+    seeFree(map);
+    Planner planner(tableConfig);
+    Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3)));
+    print("from rest, table", plan);
+    const Twist made = bench.motion->predict(plan.commandVx, plan.commandVy);
+    check("from rest: a command chosen, though the dead band's least (0.19 m/s) is past the window",
+          plan.state == State::Following && (plan.commandVx != 0.0 || plan.commandVy != 0.0));
+    check("  the twist is the table's prediction of the command, drift included",
+          near(plan.twist.vx, made.vx, 1e-12) && near(plan.twist.vy, made.vy, 1e-12) &&
+              near(plan.twist.wz, made.wz, 1e-12));
+    check("  no faster than the course asks (I13)", std::hypot(made.vx, made.vy) <= 0.3 + 1e-9);
+
+    plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3), Twist{0.27, 0.0, 0.0}));
+    print("at 0.27 m/s, table", plan);
+    check("at speed: Following, a forward command", plan.state == State::Following && plan.commandVx > 0.3 &&
+                                                        std::abs(plan.commandVy) < 0.1 * plan.commandVx);
+
+    plan = planner.plan(inputFor(map, courseAlong(-kPi / 2.0, 0.3), Twist{0.0, -0.2, 0.0}));
+    print("a course to the right, table", plan);
+    const Twist sideways = bench.motion->predict(plan.commandVx, plan.commandVy);
+    check("a course to the right: a strafe command of at least 0.4 (the strafe's dead band)",
+          plan.commandVy <= -0.4 && sideways.vy < -0.1);
+
+    const Vec2 centre{0.75, 0.03};
+    ObstacleMap boxed = emptyMap();
+    seeFree(boxed);
+    seeBox(boxed, centre, 0.3, 0.3);
+    Planner round(tableConfig);
+    plan = round.plan(inputFor(boxed, courseAlong(0.0, 0.3), Twist{0.27, 0.0, 0.0}));
+    print("box ahead, table", plan);
+    const double truth = trueClearance(plan, body, boxPoints(centre, 0.3, 0.3));
+    std::printf("        the chosen path's true clearance: %.3f m; command (%.2f, %.2f)\n", truth,
+                plan.commandVx, plan.commandVy);
+    check("box ahead: Avoiding by a command whose predicted motion goes round it, margin kept",
+          plan.state == State::Avoiding && truth >= tableConfig.stopMarginM);
   }
 
   std::printf("Time\n");

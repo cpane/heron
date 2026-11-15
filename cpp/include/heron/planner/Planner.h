@@ -38,6 +38,21 @@
 //      on the line, otherwise Avoiding. None left: Blocked, and a zero
 //      twist.
 //
+// With the floor's motion table (design §19, P15), step 3 changes: the
+// candidates are commands, not speeds, because on the bench rig's hardwood
+// a command does not make the motion its numbers suggest (a diagonal loses
+// half its sideways part, a strafe needs 0.4 of full and turns the robot).
+// Directions every 15 degrees, sizes 0.1 to 1.0 in 0.1, each imagined as
+// the table predicts it, drift and all, plus the course's turn rate; kept
+// if no faster than the course asks (I13) and within accelMps2 x windowS
+// of the measured speed on each axis. A direction's smallest command that
+// moves is kept whatever the window says: from rest the motors' dead band
+// makes even the smallest command faster than the window reaches (forward
+// 0.19 m/s, against 0.18), and without it Heron could never start. The
+// plan then carries the command chosen (I19), and Navigate drives that.
+// "Straight" is any candidate whose predicted motion runs within 5 degrees
+// of the course. Without a table, as above.
+//
 // The cell slack, kCellSlackM: the map is 5 cm cells, so true clearance
 // can fall short of what the field says by half a cell's diagonal for
 // where the hit lies in its cell, as much again for reading the field at a
@@ -56,17 +71,20 @@
 //   const Plan plan = planner.plan(PlanInput{map.get(), poseNow, epoch, fresh,
 //                                            measured, course, now});
 //   // plan.twist: vx, vy chosen, wz the course's; plan.state and reason say why
+//   // with config.motion set: plan.commandVx, commandVy, the fractions to drive
 
 #ifndef HERON_PLANNER_PLANNER_H
 #define HERON_PLANNER_PLANNER_H
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
 #include "heron/geometry/Outline.h"
 #include "heron/geometry/Pose2.h"
+#include "heron/motion/MotionTable.h"
 #include "heron/perception/ObstacleMap.h"
 #include "heron/planner/CourseKeeper.h"
 
@@ -106,6 +124,11 @@ struct PlannerConfig {
   double onLineM{0.05};         // within this of the line: Following
   Duration maxMapAge{std::chrono::milliseconds(500)};
   ScoreWeights weights{};
+  /** The floor's motion table (P15): with it the candidates are commands,
+   *  each imagined as the table predicts; nullptr: speeds, as before. */
+  std::shared_ptr<const Motion::MotionTable> motion;
+  double commandStepRad{15.0 * Geometry::kDegToRad};  // with a table: directions this far apart
+  double commandSizeStep{0.1};                         // and sizes this far apart, up to 1
 };
 
 enum class State : std::uint8_t {
@@ -127,7 +150,10 @@ enum class Reason : std::uint8_t {
 
 /** One cycle's answer; never changed once published. */
 struct Plan {
-  Geometry::Twist twist{};            // vx, vy chosen; wz the course's
+  Geometry::Twist twist{};            // vx, vy chosen; wz the course's (with a
+                                      // table: as predicted, the drift added)
+  double commandVx{0.0};              // with a table: the command chosen,
+  double commandVy{0.0};              // fractions of full drive (I19); else 0
   std::vector<Geometry::Pose2> path;  // odom frame, every pathStepS, for telemetry
   State state{State::Stopped};
   Reason reason{Reason::NoCourse};
