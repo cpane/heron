@@ -26,7 +26,14 @@
 //             until the stick is centred. Once the limiter cuts, the
 //             command only falls until it has been clear for 0.1 s
 //             (CutHold), so a noisy speed cannot pulse the wheels.
-//   Navigate  not built yet (step 2): stops.
+//   Navigate  hold the right stick in a direction and Heron keeps to that
+//             line, sliding round what is in the way and coming back to
+//             it (CourseKeeper, the map, the planner; design §8). The
+//             plan's command goes through everything Assisted has: the
+//             limiter, heading hold, NOT_MOVING, CutHold. Letting go stops
+//             at once; the left stick turns as in Manual. BLOCKED on the
+//             status line: the limiter has let none of the plan through
+//             for over 0.5 s.
 //
 // Its decisions are in src/robot/RobotCore.h, tested by robot_test; this
 // file is the start-up, the loop and the status line.
@@ -55,8 +62,10 @@
 //   left positive), the heading since start-up (degrees, left positive),
 //   the OTOS's TRACKING and TILT warnings when set, while heading hold
 //   holds the heading error it is correcting ("hold", degrees, held minus
-//   now), and in Assisted the limiter's reason, the nearest point and the
-//   scan's age.
+//   now), and in Assisted and Navigate the limiter's reason, the nearest
+//   point and the scan's age. In Navigate also the plan: its state
+//   (FOLLOWING, AVOIDING, BLOCKED, STOPPED) and reason, the clearance its
+//   path keeps, and BLOCKED when the limiter holds it back.
 //   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
@@ -66,10 +75,11 @@
 //   2. The remote.
 //   3. The OTOS, first among the sensors: its gyro calibrates at start, so
 //      keep the robot still (design §9). Then the pose tracker.
-//   4. The LiDAR.
+//   4. The LiDAR, then the map (Perception) and the planner, each a thread.
 //   5. The motors (resets the Arduino), unless --dry-run.
-// A sensor that fails to start is reported and leaves Assisted unavailable:
-// Manual still works, and Assisted stops rather than falling back to Manual.
+// A sensor that fails to start is reported and leaves Assisted and Navigate
+// unavailable: Manual still works, and the other two stop rather than
+// falling back to Manual.
 // A LiDAR that stops while running leaves its scans going stale, and the
 // limiter stops Assisted (Stale, design §7.4).
 //
@@ -96,6 +106,8 @@
 #include "heron/limiter/Limiter.h"
 #include "heron/motor/Motors.h"
 #include "heron/odometry/Odometry.h"
+#include "heron/perception/Perception.h"
+#include "heron/planner/LocalPlanner.h"
 #include "heron/pose/PoseTracker.h"
 #include "heron/profile/RigProfile.h"
 #include "heron/remote/Normalize.h"
@@ -234,14 +246,28 @@ int main(int argc, char **argv) {
   }
 
   std::unique_ptr<Heron::Limiter::Limiter> limiter;
-  std::optional<Heron::Motion::MotionTable> motion;
+  std::shared_ptr<const Heron::Motion::MotionTable> motion;
+  std::unique_ptr<Heron::Perception::Perception> perception;
+  std::unique_ptr<Heron::Planner::LocalPlanner> planner;
   if (unavailable.empty()) {
     limiter = std::make_unique<Heron::Limiter::Limiter>(Heron::Robot::toLimiterConfig(profile));
-    motion = Heron::Robot::toMotionTable(profile);  // checked by assistedRefusal()
+    if (auto table = Heron::Robot::toMotionTable(profile)) {  // checked by assistedRefusal()
+      motion = std::make_shared<const Heron::Motion::MotionTable>(std::move(*table));
+    }
     std::printf("Assisted: ready, %s\n",
                 motion ? "through the surface's motion table" : "with the min_speed model (no table)");
+    // Navigate's map and planner, each its own thread (design §5).
+    perception = std::make_unique<Heron::Perception::Perception>(*lidar, *pose,
+                                                                 Heron::Robot::toPerceptionConfig(*profile.lidar));
+    Heron::Planner::LocalPlannerConfig plannerConfig;
+    plannerConfig.planner = Heron::Robot::toPlannerConfig(profile, motion);
+    planner = std::make_unique<Heron::Planner::LocalPlanner>(*perception, *pose, plannerConfig);
+    (void)perception->start();
+    (void)planner->start();
+    std::printf("Navigate: ready\n");
   } else {
-    std::printf("Assisted: UNAVAILABLE (%s). Manual works; Assisted stops.\n", unavailable.c_str());
+    std::printf("Assisted and Navigate: UNAVAILABLE (%s). Manual works; the others stop.\n",
+                unavailable.c_str());
   }
 
   // 5. The motors.
@@ -264,6 +290,10 @@ int main(int argc, char **argv) {
   Heron::Robot::HeadingHold hold;
   Heron::Robot::MotionWatch watch;
   Heron::Robot::CutHold cutHold;
+  Heron::Planner::CourseKeeper keeper;
+  Heron::Robot::BlockedWatch blockedWatch;
+  bool coursing = false;                // a course was last given to the planner
+  Mode lastMode = Mode::Manual;         // last cycle's, to start afresh on a change
   Heron::Drive::BodyVelocity lastBody;  // what the wheels were told last cycle
   Mode shownMode = Mode::Manual;
   Why shownWhy = Why::Disarmed;
@@ -290,24 +320,45 @@ int main(int argc, char **argv) {
       const bool armed = gate.update(r.isOk(), throttle);
       const Heron::Drive::BodyVelocity stick = Heron::Drive::sticksToVelocity(r.frame, sticks);
 
-      // Assisted's inputs, read only in Assisted: Manual reads nothing new.
+      // Assisted's and Navigate's inputs, read only there: Manual reads
+      // nothing new.
       std::shared_ptr<const Heron::Scan> scan;
       Heron::Pose::PoseHistory history;
       Heron::Robot::AssistedInput assisted;
       const bool ready = limiter != nullptr;
-      if (mode == Mode::Assisted && ready) {
+      const bool sensing = (mode == Mode::Assisted || mode == Mode::Navigate) && ready;
+      // Navigate: the plan's command stands in for the stick from here on.
+      Heron::Drive::BodyVelocity drive = stick;
+      std::shared_ptr<const Heron::Planner::Plan> plan;
+      std::optional<Heron::Planner::Course> course;
+      if (mode != lastMode || !armed) {
+        hold.reset();  // a mode's heading, ceiling and course are its own
+        watch.reset();
+        cutHold.reset();
+        keeper.reset();
+        blockedWatch.reset();
+      }
+      lastMode = mode;
+      if (sensing) {
         scan = lidar->getLatest();
         history = pose->copyHistory().first;
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
+        if (mode == Mode::Navigate && armed) {
+          course = keeper.update(Heron::Robot::toTwist(stick, geometry), p.newest.pose, p.epoch);
+          planner->setCourse(course);
+          coursing = true;
+          plan = planner->getLatest();
+          drive = Heron::Robot::navigateCommand(course, plan.get(), stick, geometry, motion != nullptr, now);
+        }
         assisted = Heron::Robot::AssistedInput{
-            limiter.get(), geometry, motion ? &*motion : nullptr,
+            limiter.get(), geometry, motion.get(),
             Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt, false,
             std::nullopt};
         // Heading hold (P14): with the turn stick centred and a translation
         // asked for, its rate stands in for the stick's turn.
-        const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
-        const double stickTurn = Heron::Robot::toTwist(Heron::Drive::BodyVelocity{0.0, 0.0, stick.wz}, geometry).wz;
-        const double drift = motion && translating ? motion->predict(stick.vx, stick.vy).wz : 0.0;
+        const bool translating = drive.vx != 0.0 || drive.vy != 0.0;
+        const double stickTurn = Heron::Robot::toTwist(Heron::Drive::BodyVelocity{0.0, 0.0, drive.wz}, geometry).wz;
+        const double drift = motion && translating ? motion->predict(drive.vx, drive.vy).wz : 0.0;
         const double rate = hold.update(stickTurn, translating, p.newest.pose.heading, drift, p.epoch);
         if (armed && hold.holding()) {
           assisted.holdRadps = rate;
@@ -320,16 +371,24 @@ int main(int argc, char **argv) {
                                           std::hypot(p.newest.velocity.vx, p.newest.velocity.vy),
                                           translating, now);
         // While the limiter cuts, the command only falls (CutHold).
-        assisted.cutCeiling = cutHold.ceiling(stick);
+        assisted.cutCeiling = cutHold.ceiling(drive);
       }
-      if (!armed || mode != Mode::Assisted || !ready) {
+      if (coursing && !(mode == Mode::Navigate && armed && sensing)) {
+        planner->setCourse(std::nullopt);  // the planner idles
+        coursing = false;
+      }
+      if (!armed || !sensing) {
         hold.reset();
         watch.reset();
         cutHold.reset();
       }
       const Heron::Robot::Decision d =
-          Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
-      cutHold.update(stick, d);
+          Heron::Robot::decide(mode, armed, drive, ready ? &assisted : nullptr);
+      cutHold.update(drive, d);
+      const bool blocked =
+          mode == Mode::Navigate &&
+          blockedWatch.update(drive.vx != 0.0 || drive.vy != 0.0,
+                              d.why == Why::Limited && (d.body.vx != 0.0 || d.body.vy != 0.0), now);
 
       lastBody = armed && d.why == Why::Limited ? d.body : Heron::Drive::BodyVelocity{};
       if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {
@@ -370,6 +429,19 @@ int main(int argc, char **argv) {
           if (scan) {
             limitText += "  scan " + std::to_string(duration_cast<milliseconds>(now - scan->tEnd).count()) + " ms";
           }
+        }
+        if (mode == Mode::Navigate && plan) {
+          char text[128];
+          std::snprintf(text, sizeof(text), "  plan %s%s%s clear %.2f m  %lld ms old%s",
+                        Heron::Planner::toString(plan->state),
+                        plan->reason == Heron::Planner::Reason::None ? "" : " ",
+                        plan->reason == Heron::Planner::Reason::None ? "" : Heron::Planner::toString(plan->reason),
+                        plan->clearanceM, static_cast<long long>(duration_cast<milliseconds>(now - plan->time).count()),
+                        course && plan->courseSeq != course->seq ? " (older course)" : "");
+          limitText += text;
+        }
+        if (blocked) {
+          limitText += "  BLOCKED";
         }
         // The measured speed, robot frame, read for this line only: it never
         // reaches decide(), so Manual still reads nothing new. Against
@@ -415,6 +487,18 @@ int main(int argc, char **argv) {
 
   if (motors) {
     motors->stop();  // sends Stop, closes the port
+  }
+  if (planner) {
+    const Heron::Planner::PlannerHealth h = planner->getHealth();
+    planner->stop();
+    std::printf("Planner: %" PRIu64 " plans, %" PRIu64 " blocked, longest %.1f ms\n", h.plans, h.blocked,
+                static_cast<double>(duration_cast<microseconds>(h.longestCycle).count()) / 1000.0);
+  }
+  if (perception) {
+    const Heron::Perception::PerceptionHealth h = perception->getHealth();
+    perception->stop();
+    std::printf("Map: %" PRIu64 " scans added, %" PRIu64 " skipped, %" PRIu64 " resets\n", h.scansAdded,
+                h.scansSkipped, h.mapResets);
   }
   if (lidar) {
     lidar->stop();
