@@ -77,7 +77,8 @@
 //      keep the robot still (design §9). Then the pose tracker.
 //   4. The LiDAR, then the map (Perception) and the planner, each a thread.
 //   5. The motors (resets the Arduino), unless --dry-run.
-// A sensor that fails to start is reported and leaves Assisted and Navigate
+// Each sensor's start is tried up to three times, 2 s apart (both fail now
+// and then and pass on the next start). One that still fails is reported and leaves Assisted and Navigate
 // unavailable: Manual still works, and the other two stop rather than
 // falling back to Manual.
 // A LiDAR that stops while running leaves its scans going stale, and the
@@ -123,6 +124,39 @@ extern "C" void onSignal(int) {
 }
 
 constexpr std::chrono::milliseconds kPeriod(20);  // 50 Hz, the protocol's rate
+
+// Starting a sensor is tried this many times, this far apart. Both fail now
+// and then and pass on the next start (2026-11-16, in their workstreams'
+// Inboxes): the OTOS's scalars read back wrong shortly after the Pi powers
+// on; the LiDAR refuses its scan mode. The wait gives the LiDAR's motor,
+// stopped by the failed start, time to spin up again (a guess, unchecked).
+constexpr int kStartAttempts = 3;
+constexpr std::chrono::seconds kStartRetryWait(2);
+
+/** Makes a sensor and starts it, up to kStartAttempts times, a fresh
+ *  instance each time (restarting one is not yet proven for the LiDAR:
+ *  RESUME-lidar.md §9), waiting between; says so on each failure.
+ *  @return the running sensor; on failure the last one, stopped, whose
+ *          getHealth().lastError says why */
+template <typename Sensor, typename Make>
+std::unique_ptr<Sensor> startWithRetries(Make make, const char *name, bool &started) {
+  std::unique_ptr<Sensor> sensor;
+  started = false;
+  for (int attempt = 1; attempt <= kStartAttempts && s_stopRequested == 0; ++attempt) {
+    sensor = make();
+    if (sensor->start()) {
+      started = true;
+      return sensor;
+    }
+    std::printf("  %s did not start (attempt %d of %d): %s\n", name, attempt, kStartAttempts,
+                sensor->getHealth().lastError.c_str());
+    sensor->stop();
+    if (attempt < kStartAttempts) {
+      std::this_thread::sleep_for(kStartRetryWait);
+    }
+  }
+  return sensor;
+}
 
 [[noreturn]] void usage(int status) {
   std::fprintf(status == 0 ? stdout : stderr,
@@ -224,9 +258,14 @@ int main(int argc, char **argv) {
   std::unique_ptr<Heron::Pose::PoseTracker> pose;
   if (unavailable.empty()) {
     std::printf("Starting the OTOS: keep the robot still...\n");
-    odometry = std::make_unique<Heron::Odometry::Odometry>(Heron::Robot::toOtosConfig(*profile.odometry));
-    if (!odometry->start()) {
-      unavailable = "OTOS: " + odometry->getHealth().lastError;
+    bool started = false;
+    odometry = startWithRetries<Heron::Odometry::Odometry>(
+        [&profile] {
+          return std::make_unique<Heron::Odometry::Odometry>(Heron::Robot::toOtosConfig(*profile.odometry));
+        },
+        "the OTOS", started);
+    if (!started) {
+      unavailable = "OTOS: " + (odometry ? odometry->getHealth().lastError : std::string("stopped"));
     } else {
       pose = std::make_unique<Heron::Pose::PoseTracker>(*odometry, Heron::Robot::toPoseConfig(profile));
       if (!pose->start()) {
@@ -239,9 +278,12 @@ int main(int argc, char **argv) {
   std::unique_ptr<Heron::Lidar::Lidar> lidar;
   if (unavailable.empty()) {
     std::printf("Starting the LiDAR...\n");
-    lidar = std::make_unique<Heron::Lidar::Lidar>(Heron::Robot::toLidarConfig(*profile.lidar));
-    if (!lidar->start()) {
-      unavailable = "LiDAR: " + lidar->getHealth().lastError;
+    bool started = false;
+    lidar = startWithRetries<Heron::Lidar::Lidar>(
+        [&profile] { return std::make_unique<Heron::Lidar::Lidar>(Heron::Robot::toLidarConfig(*profile.lidar)); },
+        "the LiDAR", started);
+    if (!started) {
+      unavailable = "LiDAR: " + (lidar ? lidar->getHealth().lastError : std::string("stopped"));
     }
   }
 
