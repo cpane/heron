@@ -1394,6 +1394,63 @@ the results without them:
    enough to creep on; the planner could check its choice against the
    limiter's rule, or call such a stop Blocked.
 
+**As built, §19.4 step 6: Navigate in `heron_robot` (2026-11-16).**
+§8.7's case, with the table of §19:
+
+- **The plan's command is a stick.** `navigateCommand()`
+  (`RobotCore.h`) gives the plan's `commandVx`, `commandVy` (I19) if the
+  plan is for this course (`courseSeq`) and no older than 0.3 s
+  (`kMaxPlanAge`), otherwise nothing; the turn is the stick's now. The
+  loop passes it to `decide()` in place of the stick, and `decide()`'s
+  Navigate case is Assisted's: the limiter told the table's speed × 1.2,
+  the nearest allowed command within 15°, heading hold, `MotionWatch`,
+  `CutHold`, all fed with the plan's command. So Navigate has every
+  safeguard Assisted has, and `robot_test` checks they drive the same
+  wheels for the same command. Without a table the plan's speeds are
+  turned back into fractions. `Why::NavigateNotBuilt` is gone.
+- **The map and the planner run all the time Assisted is ready**
+  (`Perception`, `LocalPlanner`, each its own thread; settings from
+  `toPerceptionConfig()` and `toPlannerConfig()`), so the map is warm
+  when SwC goes down; the planner idles with no course. A change of mode
+  or disarming resets heading hold, `MotionWatch`, `CutHold`, the course
+  and BLOCKED.
+- **BLOCKED** (question 4): `BlockedWatch`, the plan asking to translate
+  while `decide()`'s answer is the limiter's and drives none of it, for
+  more than 0.5 s. Stopped for another reason (`NOT_MOVING`, the pose)
+  it is not shown; the status says why.
+- **The status line** adds the plan's state and reason, the clearance its
+  path keeps, its age, and "(older course)"; on Ctrl-C the planner's
+  plans and longest `plan()`, and the map's scans.
+- **Start-up retries.** The OTOS and the LiDAR are each started up to
+  three times, 2 s apart, a fresh instance each time (restarting one
+  LiDAR instance is not yet proven, `RESUME-lidar.md` §9). The same day
+  the OTOS failed once shortly after power-on (scalars read back 0x00
+  0x00), and the LiDAR refused Express in several starts in a row.
+- **`--dry-run` turns `MotionWatch` off:** nothing is driven, so nothing
+  moves, and it tripped half a second after the stick moved.
+
+**Floor check, 2026-11-16** [ours, `heron_robot --lines 10`, hardwood,
+throttle 0.6, right stick held forward, a box about 1 m ahead a little
+left of the line; log `captures/navigate-run2.log` on the Pi; the path
+rebuilt from the OTOS's speed and heading, so on this floor's scalar]:
+
+| Along | What it did |
+|---|---|
+| 0 to 0.6 m | FOLLOWING, straight, 0.30 to 0.33 m/s |
+| 0.6 m | AVOIDING, the box about 0.5 m ahead, a little left |
+| 0.7 to 0.8 m | The limiter slowed it to about 0.03 m/s for about 1.5 s while the plan turned right |
+| 0.8 to 1.3 m | Forward-right diagonals, out to about 0.35 m right of the line |
+| 1.0 to 1.6 m | Past the box: its nearest point 0.26 m from the centre, **about 16 cm from the body** (preferred 15) |
+| 1.8 to 2.4 m | Back left on forward-left diagonals, from 0.38 to 0.26 m off the line |
+| 2.4 to 3.5 m | Something 0.33 m to its right; held about 0.30 m off the line until let go |
+
+No BLOCKED, `NOT_MOVING` or `POSE_NOT_FRESH`; the heading drifted to
+about −9° and stayed. **Round a box: passed.** Back to the line: begun,
+slowly (12 of 38 cm in about a metre, as the measured left diagonal
+predicts), and cut short by the second obstacle; not yet seen to finish.
+An earlier run in a smaller room went round the box the same way and
+stopped for an unrelated obstacle as it turned back.
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

@@ -18,7 +18,11 @@
 //     trip; the settings built from profiles/bench.conf, as measured in N1.
 //   - Assisted refused without its sections, or with the blind spot
 //     uncovered; Assisted with a wall ahead cuts a forward stick, keeps a
-//     backward one, and stops with no scan; Navigate stops (step 2).
+//     backward one, and stops with no scan.
+//   - Navigate: the planner's and the map's settings from the profile; the
+//     plan's command driven only for this course and fresh, the turn the
+//     stick's; through decide() exactly as Assisted would drive it; BLOCKED
+//     after 0.5 s of the limiter holding a plan back.
 //
 // The bench profile is read from the repository on the Mac
 // (HERON_PROFILE_DIR) and from ~/heron/profiles on a Pi, where
@@ -32,6 +36,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <numbers>
 #include <random>
 #include <stdexcept>
@@ -223,6 +228,27 @@ int main() {
     check("  margins 0.05 and 0.25, brake 0.7",
           near(limiter.stopMarginM, 0.05, 1e-12) && near(limiter.slowMarginM, 0.25, 1e-12) &&
               near(limiter.brakeMps2, 0.7, 1e-12));
+    const Heron::Perception::PerceptionConfig map = toPerceptionConfig(*bench.lidar);
+    check("map: the LiDAR 8 mm behind the centre",
+          near(map.mount.offset.x, -0.008, 1e-12) && map.mount.offset.y == 0.0);
+    const auto table = std::make_shared<const Heron::Motion::MotionTable>(
+        *toMotionTable(Heron::Profile::onSurface(bench, bench.surface)));
+    const Heron::Planner::PlannerConfig planner = toPlannerConfig(bench, table);
+    check("planner: the outline halved, stop margin 0.05",
+          near(planner.outline.halfLength, 0.09525, 1e-12) && near(planner.outline.halfWidth, 0.09525, 1e-12) &&
+              near(planner.stopMarginM, 0.05, 1e-12));
+    check("  max_speed 0.42, accel 0.6, the table given (P15)",
+          near(planner.maxSpeedMps, 0.42, 1e-12) && near(planner.accelMps2, 0.6, 1e-12) &&
+              planner.motion == table);
+    Heron::Profile::RigProfile noNav = bench;
+    noNav.navigation.reset();
+    bool threw = false;
+    try {
+      (void)toPlannerConfig(noNav, nullptr);
+    } catch (const std::invalid_argument &) {
+      threw = true;
+    }
+    check("  without [navigation]: throws", threw);
   }
 
   std::printf("Assisted refused (§7.1)\n");
@@ -625,11 +651,69 @@ int main() {
           stopped(d.wheels) && d.why == Why::PoseNotFresh);
   }
 
-  std::printf("Navigate and disarmed\n");
+  std::printf("Navigate (§8.7, step 6)\n");
+  {
+    const TimePoint now = t0 + 20ms;
+    Heron::Planner::Course course;
+    course.seq = 4;
+    Heron::Planner::Plan plan;
+    plan.courseSeq = 4;
+    plan.commandVx = 0.6;
+    plan.commandVy = -0.2;
+    plan.twist = Twist{0.30, -0.05, 0.0};
+    plan.time = now - 100ms;
+    const BodyVelocity turning{0.9, 0.0, 0.25};  // only wz is used
+    check("the plan's command, the stick's turn",
+          same(navigateCommand(course, &plan, turning, geometry, true, now), BodyVelocity{0.6, -0.2, 0.25}));
+    check("the stick centred (no course): stop at once",
+          same(navigateCommand(std::nullopt, &plan, turning, geometry, true, now), BodyVelocity{}));
+    check("no plan yet: stop", same(navigateCommand(course, nullptr, turning, geometry, true, now), BodyVelocity{}));
+    Heron::Planner::Plan older = plan;
+    older.courseSeq = 3;
+    check("a plan for the course before a re-anchor: stop",
+          same(navigateCommand(course, &older, turning, geometry, true, now), BodyVelocity{}));
+    Heron::Planner::Plan stale = plan;
+    stale.time = now - 301ms;
+    check("a plan older than 0.3 s: stop", same(navigateCommand(course, &stale, turning, geometry, true, now), BodyVelocity{}));
+    stale.time = now - 300ms;
+    check("  0.3 s exactly: driven", !same(navigateCommand(course, &stale, turning, geometry, true, now), BodyVelocity{}));
+    const BodyVelocity speeds = navigateCommand(course, &plan, turning, geometry, false, now);
+    const BodyVelocity expected = toBodyVelocity(Twist{0.30, -0.05, 0.0}, geometry, true);
+    check("no table: the plan's speeds as fractions, the stick's turn",
+          same(speeds, BodyVelocity{expected.vx, expected.vy, 0.25}));
+
+    const AssistedInput open = assistedWith(&far);
+    const AssistedInput wall = assistedWith(&close);
+    const BodyVelocity want{0.6, 0.0, 0.0};
+    Decision n = decide(Mode::Navigate, true, want, &open);
+    Decision a = decide(Mode::Assisted, true, want, &open);
+    check("through decide(): exactly as Assisted drives the same command",
+          n.why == Why::Limited && n.wheels == a.wheels && same(n.body, a.body));
+    n = decide(Mode::Navigate, true, want, &wall);
+    a = decide(Mode::Assisted, true, want, &wall);
+    check("  a wall ahead: the limiter cuts it the same way",
+          n.wheels == a.wheels && n.limited && a.limited && n.limited->reason == a.limited->reason &&
+              n.body.vx < want.vx);
+    check("  not ready: stopped, ASSISTED_UNAVAILABLE",
+          decide(Mode::Navigate, true, want, nullptr).why == Why::AssistedUnavailable);
+
+    BlockedWatch watch;
+    bool shown = false;
+    for (int i = 0; i <= 25; ++i) {  // 0.5 s exactly
+      shown = watch.update(true, false, t0 + i * 20ms) || shown;
+    }
+    check("BLOCKED: not at 0.5 s of the plan held back", !shown);
+    check("  shown past 0.5 s", watch.update(true, false, t0 + 520ms));
+    check("  cleared once anything is driven", !watch.update(true, true, t0 + 540ms));
+    (void)watch.update(true, false, t0 + 560ms);
+    check("  and starts its window again", !watch.update(true, false, t0 + 1000ms));
+    check("  cleared when the plan asks for nothing", !watch.update(false, false, t0 + 2000ms));
+  }
+
+  std::printf("Disarmed\n");
   {
     const AssistedInput open = assistedWith(&far);
-    Decision d = decide(Mode::Navigate, true, BodyVelocity{0.5, 0.0, 0.0}, &open);
-    check("Navigate: stopped until step 2", stopped(d.wheels) && d.why == Why::NavigateNotBuilt);
+    Decision d;
     bool allStopped = true;
     for (const Mode mode : {Mode::Manual, Mode::Assisted, Mode::Navigate}) {
       d = decide(mode, false, BodyVelocity{1.0, 0.0, 0.0}, &open);

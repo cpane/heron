@@ -998,3 +998,21 @@ Express worked, Standard failed, Express failed. So a Standard scan
 does not reliably clear it: the failure comes and goes. One guess,
 unchecked: each program stops the motor on exit (DTR), and the next
 asks for a scan before the motor is back up to speed.
+
+### From navigation, 2026-11-16: stopped answering until its USB cable was replugged
+
+[ours, cause unverified] Bench rig, unit A, firmware 1.29, power block
+through the PD trigger and buck, no under-voltage (`get_throttled` 0x0),
+the Pi up about 11 minutes. `heron_robot`'s three start attempts, 2 s
+apart, a fresh `Lidar` each time: `cannot start scan mode 1`, then `no
+answer to GET_INFO from /dev/rplidar`, then `cannot start scan mode 1`.
+After that `lidar_info` got health once, then nothing three runs in a
+row, the head spinning throughout. Unplugging the LiDAR's USB cable at
+the Pi for 5 s and plugging it back (1-1.4 again, `/dev/rplidar`)
+brought it back at once: `lidar_info` answered every time. The kernel
+log had two `dwc_otg_hcd_urb_dequeue: Timed out waiting for FSM NP
+transfer` warnings at 615 s, about when the starts failed; none after a
+later power cycle, when everything started first time. Worth knowing for
+§9b: whether a USB reset of the CP2102 from software (`USBDEVFS_RESET`)
+recovers it as a replug did; navigation means to try it next time.
+Write-up: `RESUME-navigation.md`, "Picking up" 0.

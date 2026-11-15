@@ -1,9 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: design §19.4 steps 4 (heading hold,
-"commanded but not moving", `CutHold`; floor-checked) and 5 (the
-simulator and planner on the motion table; left diagonals measured)
-merged; next, step 6, Navigate in `heron_robot`. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16: design §19.4 step 6, Navigate in
+`heron_robot`, built and floor-checked (round a box: passed), with
+start-up retries for the OTOS and LiDAR; next, keeping `heron_robot`
+running at a Maker Faire stand (the OTOS after a lift, the LiDAR that
+needed a replug, booting into `heron_robot`). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -142,7 +143,54 @@ navigation, so SwC to Manual always takes over.
   BLOCKED when the limiter has stopped the plan's command for more than
   0.5 s, the planner and limiter unchanged.
 
+- **Two mini robots for a Maker Faire on the weekend of 2026-11-21**
+  (Chris): the bench rig is mini robot 1; a second, identical, follows.
+  Navigate is a must-have. Complete, working functionality first; an
+  oddity is looked into now only if it could change the design. The
+  Faire's floor is a rubber field-house floor. The full-size robot is
+  on hold.
+- **Step 6's floor check passed** (Chris, "go ahead and merge"): round a
+  box at about 16 cm; the return to the line is to be seen on the rubber
+  floor check, where the table changes anyway.
+
 ## Picking up
+
+0. **Before the Faire, in this order** (each needs the robot on; Chris
+   drives):
+   1. **The OTOS after a lift.** Picked up while `heron_robot` ran
+      (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
+      then TRACKING stayed on with speeds about −3 m/s, the pose not
+      fresh, for over a minute until the program ended: Assisted and
+      Navigate stop (`POSE_NOT_FRESH`) until a restart. Proposed: when the
+      pose has not been fresh for about 2 s, and once disarmed or the
+      sticks centred and the robot still, `heron_robot` restarts the OTOS
+      and the pose tracker itself (a new epoch, I8, so the map and course
+      start afresh), as the start-up retry does. Check: lift it, put it
+      down, see Assisted come back without a restart.
+   2. **The LiDAR that stopped answering** (2026-11-16): three start
+      attempts failed (Express refused, once no answer to GET_INFO), then
+      `lidar_info` got nothing, the head spinning; a replug of its USB
+      cable brought it back at once. The kernel log had two `dwc_otg ...
+      Timed out waiting for FSM NP transfer` warnings near the failure.
+      Next time, before replugging, try a USB reset of the adapter from
+      software (the `USBDEVFS_RESET` ioctl on its device node; needs a
+      small tool, and permission). If it recovers the LiDAR, `heron_robot`
+      can do it on a failed start; if not, recovery is a replug, and the
+      design says so (LiDAR's Inbox has the facts).
+   3. **Boot into `heron_robot`** in place of `heron_teleop`: a service
+      like `heron-teleop@.service`, and the autostart script taking
+      which program. Builder's and motor's scripts are involved; check
+      their docs first.
+   4. **Mini robot 2:** a copy of `bench.conf` as its own profile, then
+      spot checks (dead band, OTOS, LiDAR yaw) against robot 1's
+      numbers. Its bring-up is motor's and builder's work; Navigate needs
+      only the profile.
+   5. **The rubber floor** (a mat or tiles beforehand): the OTOS's
+      tracking (a false `NOT_MOVING` would stop the robot mid-demo),
+      stopping distances, a few table points, and Navigate back to the
+      line.
+   6. **A rehearsal:** both robots, a full battery, power cycles, picked
+      up and put down, all three modes.
 
 1. **N1's profile sections: built 2026-11-11** (`navigation-cpp-design.md`
    §7.1, "As built"). `heron_profile` reads `[geometry]` (one shared
@@ -479,8 +527,12 @@ navigation, so SwC to Manual always takes over.
    `heron_robot` prints the speed already in the robot frame
    (PoseTracker); do not turn it by the heading again.
 
-   **Next, step 6: Navigate in `heron_robot`** (below, "Step 2,
-   Navigate", the original numbering): `CourseKeeper` and
+   **Step 6, built and floor-checked 2026-11-16:** Navigate in
+   `heron_robot`, start-up retries; as built and the floor run in
+   `navigation-cpp-design.md` §7.5, "As built, §19.4 step 6". Round a
+   box at about 16 cm, passed; back to the line begun but not seen to
+   finish. All 25 test programs pass on the Pi (step 5's code included).
+   What step 6 was: `CourseKeeper` and
    `LocalPlanner` into the loop with SwC down, the plan's command
    through `decide()`'s Assisted path as in `NavScenarioTest`'s
    `NavRun::cycle` (heading hold and `CutHold` included, as in
@@ -604,7 +656,8 @@ Settled 2026-11-04: the bench rig carries navigation.
   frame cannot be checked yet.
 - **`plan()` with every thread running** on the Pi [unverified]: 15.8
   ms alone against a 20 ms budget; `PlannerHealth` reports it once
-  `heron_robot` runs (design §18, 2).
+  `heron_robot` runs (design §18, 2). Not yet read: on 2026-11-16 the
+  Ctrl-C summary did not reach the log (`tee` ended with it).
 - **Navigate cannot turn on the spot:** with the right stick centred
   there is no course, and Heron stops, turning included (§8.9). Fine for
   the first version; the user has not been asked whether to change it.
@@ -624,8 +677,15 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **`CutHold` stops about 9 cm earlier at full speed** (22.5 against
   13 cm, 2026-11-16), none at 0.29 m/s; once stopped, re-centring the
   stick allows a creep. Accepted by the user.
-- **Step 5's code has not run on the Pi** [unverified]: host tests
-  only (26 pass); step 6 deploys it.
+- **Navigate's return to the line** after passing on the right is slow
+  (12 of 38 cm in about a metre on the hardwood, 2026-11-16) and was not
+  seen to finish [one run]. Left moves are weak on this floor (above).
+- **Navigate hesitates before a box:** about 1.5 s nearly stopped while
+  the limiter slows it and the plan turns (2026-11-16, one run).
+- **The heading drifts in Navigate** (−9°, kept, 2026-11-16): the
+  planner follows the line in odom, so the path is right, but the robot
+  points off it. The 45° diagonals, where heading hold cannot act, are
+  the likely cause [unverified].
 - **The scenarios leave out `MotionWatch`:** the simulated OTOS is
   never lifted, and pressed against a wall it might trip where the
   floor has not shown it does [unverified].

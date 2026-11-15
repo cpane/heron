@@ -139,6 +139,26 @@ std::optional<Motion::MotionTable> toMotionTable(const Profile::RigProfile &prof
   return Motion::MotionTable(std::move(points), surface->mirror);
 }
 
+Perception::PerceptionConfig toPerceptionConfig(const Profile::LidarProfile &l) {
+  Perception::PerceptionConfig config;
+  config.mount = Perception::LidarMount{Geometry::Vec2{l.x, l.y}};
+  return config;
+}
+
+Planner::PlannerConfig toPlannerConfig(const Profile::RigProfile &profile,
+                                       std::shared_ptr<const Motion::MotionTable> motion) {
+  if (!profile.geometry || !profile.navigation) {
+    throw std::invalid_argument("Heron::Robot::toPlannerConfig() : the profile needs [geometry] and [navigation]");
+  }
+  Planner::PlannerConfig config;
+  config.outline = Geometry::Outline{profile.geometry->length / 2.0, profile.geometry->width / 2.0};
+  config.stopMarginM = profile.navigation->stopMargin;
+  config.maxSpeedMps = profile.geometry->maxSpeed;
+  config.accelMps2 = profile.geometry->accel;
+  config.motion = std::move(motion);
+  return config;
+}
+
 Pose::PoseConfig toPoseConfig(const Profile::RigProfile &profile) {
   Pose::PoseConfig config;
   if (profile.geometry) {
@@ -262,8 +282,6 @@ const char *toString(Why why) noexcept {
       return "POSE_NOT_FRESH";
     case Why::NotMoving:
       return "NOT_MOVING";
-    case Why::NavigateNotBuilt:
-      return "NAVIGATE_NOT_BUILT";
   }
   return "?";
 }
@@ -280,7 +298,8 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       decision.body = stick;
       decision.why = Why::Manual;
       break;
-    case Mode::Assisted: {
+    case Mode::Assisted:
+    case Mode::Navigate: {  // Navigate: the plan's command, as a stick
       if (assisted == nullptr || assisted->limiter == nullptr) {
         decision.why = Why::AssistedUnavailable;
         return decision;
@@ -394,12 +413,42 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       }
       break;
     }
-    case Mode::Navigate:
-      decision.why = Why::NavigateNotBuilt;
-      return decision;
   }
   decision.wheels = Drive::mix(decision.body);
   return decision;
+}
+
+Drive::BodyVelocity navigateCommand(const std::optional<Planner::Course> &course, const Planner::Plan *plan,
+                                    const Drive::BodyVelocity &stick, const Profile::GeometryProfile &g,
+                                    bool withTable, std::chrono::steady_clock::time_point now) noexcept {
+  if (!course || plan == nullptr || plan->courseSeq != course->seq || now - plan->time > kMaxPlanAge) {
+    return Drive::BodyVelocity{};
+  }
+  if (!withTable) {
+    // The plan chose speeds; under min_speed, up to it: the planner found
+    // the faster path clear.
+    const Drive::BodyVelocity v = toBodyVelocity(Geometry::Twist{plan->twist.vx, plan->twist.vy, 0.0}, g, true);
+    return Drive::BodyVelocity{v.vx, v.vy, stick.wz};
+  }
+  return Drive::BodyVelocity{plan->commandVx, plan->commandVy, stick.wz};
+}
+
+bool BlockedWatch::update(bool asked, bool driven, std::chrono::steady_clock::time_point now) noexcept {
+  if (!asked || driven) {
+    m_blocked = false;
+    m_since.reset();
+    return false;
+  }
+  if (!m_since) {
+    m_since = now;
+  }
+  m_blocked = now - *m_since > kWindow;
+  return m_blocked;
+}
+
+void BlockedWatch::reset() noexcept {
+  m_blocked = false;
+  m_since.reset();
 }
 
 bool CutHold::along(const Drive::BodyVelocity &stick) const noexcept {

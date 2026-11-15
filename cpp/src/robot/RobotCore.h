@@ -33,8 +33,11 @@
 //             would bring the LiDAR's points inside the stop outline. Not
 //             ready (a profile section missing, the blind spot not covered,
 //             the LiDAR or OTOS not started) is stop, never Manual.
-//   Navigate  the planner's motion through the limiter. Not built yet
-//             (step 2): stop.
+//   Navigate  the right stick sets a course (CourseKeeper); the planner
+//             picks the command that follows it round obstacles, and that
+//             command goes through Assisted's path as if it were the
+//             stick: the limiter, the table, heading hold, CutHold
+//             (navigateCommand()). Letting go stops at once.
 //
 // Units (I2). The remote and the mixing work in fractions of full drive,
 // -1..1; the limiter and the planner in m/s and rad/s. toTwist() and
@@ -72,6 +75,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -81,6 +85,9 @@
 #include "heron/limiter/Limiter.h"
 #include "heron/motion/MotionTable.h"
 #include "heron/odometry/OtosConfig.h"
+#include "heron/perception/Perception.h"
+#include "heron/planner/CourseKeeper.h"
+#include "heron/planner/Planner.h"
 #include "heron/pose/PoseTracker.h"
 #include "heron/profile/RigProfile.h"
 #include "heron/remote/Normalize.h"
@@ -161,6 +168,20 @@ inline constexpr double kTableMargin = 1.2;
  * @throws std::invalid_argument if its points form fewer than 2 columns
  */
 [[nodiscard]] std::optional<Motion::MotionTable> toMotionTable(const Profile::RigProfile &profile);
+
+/** The map's settings: where the LiDAR sits ([lidar] x, y; its yaw is the
+ *  scan's own, toLidarConfig()); the counts and timings as designed. */
+[[nodiscard]] Perception::PerceptionConfig toPerceptionConfig(const Profile::LidarProfile &l);
+
+/**
+ * The planner's settings: the outline, stop_margin, max_speed, accel, and
+ * the floor's table, so its candidates are commands (P15).
+ *
+ * @throws std::invalid_argument if [geometry] or [navigation] is missing;
+ *         check assistedRefusal() first
+ */
+[[nodiscard]] Planner::PlannerConfig toPlannerConfig(const Profile::RigProfile &profile,
+                                                     std::shared_ptr<const Motion::MotionTable> motion);
 
 /** The pose tracker's settings: plausibility (P16) from [geometry]'s
  *  max_speed, 1.5 times; the speed-jump check left off (its threshold
@@ -330,12 +351,11 @@ enum class Why : std::uint8_t {
   Limited,             // Assisted: the limiter's answer; see Decision::limited
   AssistedUnavailable, // Assisted but not ready: stopped
   PoseNotFresh,        // Assisted with the pose not fresh (P16): stopped
-  NotMoving,           // Assisted, told to move and nothing moved (MotionWatch): stopped
-  NavigateNotBuilt     // Navigate, step 2: stopped
+  NotMoving            // Assisted, told to move and nothing moved (MotionWatch): stopped
 };
 
-/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH",
- *          "NOT_MOVING" or "NAVIGATE_NOT_BUILT" */
+/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH"
+ *          or "NOT_MOVING" */
 [[nodiscard]] const char *toString(Why why) noexcept;
 
 /** One cycle's choice. */
@@ -349,11 +369,14 @@ struct Decision {
 /**
  * One cycle, design §9's table. Manual reads nothing but the stick, so it
  * gives heron_teleop's wheels for the same frames (D5); Assisted runs the
- * stick through the limiter; Navigate stops until step 2.
+ * stick through the limiter; Navigate runs the plan's command through the
+ * same path (the loop passes navigateCommand() as the stick), so every
+ * safeguard Assisted has, Navigate has.
  *
  * @param mode SwC's mode
  * @param armed ArmGate::update()'s answer this cycle
- * @param stick Drive::sticksToVelocity()'s answer this cycle
+ * @param stick Drive::sticksToVelocity()'s answer this cycle; in Navigate,
+ *        navigateCommand()'s
  * @param assisted What Assisted needs, or nullptr if it is not ready
  * @return The wheels and why
  */
@@ -400,6 +423,54 @@ class CutHold {
     double m_directionRad{0.0};  // the translation stick's, when the hold began
     int m_clears{0};             // Clear cycles in a row while holding
     Drive::BodyVelocity m_last{};
+};
+
+/**
+ * Navigate's command (navigation-cpp-design.md §8.7, with the table of
+ * §19): the plan's, in fractions of full drive, if it was made for this
+ * course and is no older than kMaxPlanAge; otherwise none, so Heron stops.
+ * With a table the plan's command is used as chosen (I19); without one its
+ * speeds are turned back into fractions. The turn is the stick's now, not
+ * the one the plan was made with; centred, heading hold keeps the heading.
+ *
+ * @param course CourseKeeper's answer this cycle; no value: the stick is
+ *        centred, stop at once (D1), not 100 ms later in the planner
+ * @param plan LocalPlanner's newest, or nullptr
+ * @param stick this cycle's sticks; only the turn (wz) is used
+ * @param withTable whether the planner had the floor's table
+ */
+[[nodiscard]] Drive::BodyVelocity navigateCommand(const std::optional<Planner::Course> &course,
+                                                  const Planner::Plan *plan, const Drive::BodyVelocity &stick,
+                                                  const Profile::GeometryProfile &g, bool withTable,
+                                                  std::chrono::steady_clock::time_point now) noexcept;
+
+/** A plan older than this is not driven (design §8.2). */
+inline constexpr std::chrono::milliseconds kMaxPlanAge{300};
+
+/**
+ * BLOCKED on the status line (decided 2026-11-16, step 5's question 4):
+ * the plan asks to move and the limiter has let none of it through for
+ * longer than the window. The planner and the limiter are unchanged: this
+ * only says so, so whoever drives sees why Heron waits.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class BlockedWatch {
+  public:
+    static constexpr std::chrono::milliseconds kWindow{500};
+
+    /**
+     * @param asked the plan's command translates
+     * @param driven what decide() gave translates
+     * @return whether to show BLOCKED
+     */
+    bool update(bool asked, bool driven, std::chrono::steady_clock::time_point now) noexcept;
+    void reset() noexcept;
+    [[nodiscard]] bool blocked() const noexcept { return m_blocked; }
+
+  private:
+    bool m_blocked{false};
+    std::optional<std::chrono::steady_clock::time_point> m_since;
 };
 
 }  // namespace Heron::Robot
