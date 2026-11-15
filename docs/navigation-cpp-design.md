@@ -1197,6 +1197,21 @@ from the interfaces above:
   and the OTOS's noise at that rate is unmeasured, so a threshold could
   stop Assisted in normal driving. Normal driving peaked at 0.58 m/s and
   raised no warning in the table session.
+- **Stalls lifted, substitutes near the stick (after check 1,
+  2026-11-14):** Assisted straight at a box at 0.58 stopped 8 cm short,
+  closer than the 10 to 13 cm before the table. From 0.36 m the limiter
+  cut below forward's floor (0.19 m/s), no forward command fitted, and
+  `nearestCommand()` chose forward-right diagonals (`out +0.23 −0.19`)
+  that the table put at 0.02 to 0.05 m/s; the robot, already rolling,
+  kept 0.20 to 0.25 m/s to the stop. The table's points were measured
+  from rest, and a command that cannot start a still robot does not stop
+  a moving one. So a point that made under 0.02 m/s (`kStallMps`) is a
+  stall, and sizes at or below a column's last stall read as the first
+  point above it that moved (the limiter assumes small commands move);
+  and `nearestCommand(want, aroundRad, withinRad)` looks only within 15°
+  (`kSubstituteWidthRad`) of the direction given, the stick's, so a
+  substitute never swerves the robot. Near the box nothing fits and
+  Assisted stops; at 0.58 from 0.36 m it would coast about 5 cm.
 
 ## 8. `heron_planner`: the local planner (N5)
 

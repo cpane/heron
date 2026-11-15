@@ -397,7 +397,18 @@ navigation, so SwC to Manual always takes over.
    naming drive and surface), plausibility (P16), Assisted through the
    table, `heron_robot --surface`. `motion_test`, `rig_profile_test`,
    `pose_test`, `robot_test` pass on the Mac and the Pi, all 26 host
-   tests. Deployed, not yet run on the floor.
+   tests. Deployed.
+
+   **Floor check 1 through the table, 2026-11-14:** start-up printed
+   `Surface: hardwood-1` and "Assisted: ready, through the surface's
+   motion table". Straight at a box at 0.58: **stopped 8 cm short**,
+   closer than before. Cut from 0.36 m, it drove forward-right diagonals
+   the table put at 0.02 to 0.05 m/s, and the rolling robot kept 0.20 to
+   0.25 m/s. Fixed the same day (`navigation-cpp-design.md` §7.5 as
+   built, "Stalls lifted"): stalls read as the next point that moved, and
+   substitutes stay within 15° of the stick. Before arming, a lift showed
+   speeds to −1.47 m/s with TRACKING and TILT, every line `(not fresh)`,
+   fresh again about 0.3 s after. Re-run check 1, then 2 and 3.
 
    **Next: step 1's floor checks again, through the table** (design
    §19.4 step 3's end): Assisted at a box straight on at 0.6 and full
