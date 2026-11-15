@@ -1016,3 +1016,13 @@ later power cycle, when everything started first time. Worth knowing for
 §9b: whether a USB reset of the CP2102 from software (`USBDEVFS_RESET`)
 recovers it as a replug did; navigation means to try it next time.
 Write-up: `RESUME-navigation.md`, "Picking up" 0.
+
+**Later the same day [ours, cause unverified]:** it stuck again after a
+power cycle (three starts with no answer to GET_INFO, then health
+answered but never the scan modes). `usbreset` of the CP2102 (clean
+re-enumeration, the head still spinning) did not recover it. RESET from
+`probes/lidar_01_port.py --reset` got the whole 64-byte banner,
+correct; afterwards answers were hit and miss again. A replug with both
+ends of the LiDAR's cable reseated recovered it at once. Navigation's
+reading: the sensor is alive and a link is losing bytes (a marginal
+plug or cable, the 5 V, or the Pi 3's USB); not established.

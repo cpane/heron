@@ -165,13 +165,14 @@ std::unique_ptr<Sensor> startWithRetries(Make make, const char *name, bool &star
 [[noreturn]] void usage(int status) {
   std::fprintf(status == 0 ? stdout : stderr,
                "Usage: heron_robot [--dry-run] [--manual-is-high] [--lines N] [--profile FILE]\n"
-               "                   [--surface NAME] [--remote DEVICE]\n"
+               "                   [--surface NAME] [--remote DEVICE] [--test-otos-restart]\n"
                "  --dry-run         everything but the motors; print the wheels\n"
                "  --manual-is-high  SwC High is Manual (default: Low is Manual)\n"
                "  --lines N         status lines a second, 1 to 50 (default 1)\n"
                "  --profile FILE    the rig profile (default this Pi's)\n"
                "  --surface NAME    the floor (default the profile's [rig] surface)\n"
-               "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n");
+               "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n"
+               "  --test-otos-restart  restart the OTOS once, 5 s in, as a stuck one is\n");
   std::exit(status);
 }
 
@@ -184,6 +185,7 @@ int main(int argc, char **argv) {
 
   bool dryRun = false;
   bool manualIsHigh = false;
+  bool testOtosRestart = false;
   int linesPerSecond = 1;
   std::string profilePath;
   std::string surfaceName;
@@ -198,6 +200,8 @@ int main(int argc, char **argv) {
       usage(0);
     } else if (arg == "--dry-run") {
       dryRun = true;
+    } else if (arg == "--test-otos-restart") {
+      testOtosRestart = true;
     } else if (arg == "--manual-is-high") {
       manualIsHigh = true;
     } else if (arg == "--lines" && i + 1 < argc) {
@@ -347,6 +351,11 @@ int main(int argc, char **argv) {
   Why shownWhy = Why::Disarmed;
   bool first = true;
   auto next = steady_clock::now();
+  // --test-otos-restart: once, through the same path as a stuck OTOS.
+  std::optional<steady_clock::time_point> forcedRestartAt;
+  if (testOtosRestart) {
+    forcedRestartAt = next + seconds(5);
+  }
   auto nextLine = next;
   std::uint64_t cycles = 0;
   std::uint64_t driving = 0;
@@ -434,8 +443,11 @@ int main(int argc, char **argv) {
                       ok ? "" : odometry->getHealth().lastError.c_str());
         }
         const bool centred = stick.vx == 0.0 && stick.vy == 0.0 && stick.wz == 0.0;
-        if (otosRecovery.update(pose->getLatest().fresh, centred, now) && !otosRestart.valid()) {
-          std::printf("-- OTOS: pose not fresh for 2 s, restarting it (keep the robot still)\n");
+        const bool forced = forcedRestartAt && now >= *forcedRestartAt;
+        if ((otosRecovery.update(pose->getLatest().fresh, centred, now) || forced) && !otosRestart.valid()) {
+          forcedRestartAt.reset();
+          std::printf("-- OTOS: %s, restarting it (keep the robot still)\n",
+                      forced ? "--test-otos-restart" : "pose not fresh for 2 s");
           Heron::Odometry::Odometry *o = odometry.get();
           otosRestart = std::async(std::launch::async, [o] {
             o->stop();
@@ -528,6 +540,9 @@ int main(int argc, char **argv) {
                         p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
                         p.tiltWarning ? " TILT" : "");
           speedText = text;
+          if (p.epoch > 1) {  // the OTOS restarted: a new odom frame (I8)
+            speedText += "  epoch " + std::to_string(p.epoch);
+          }
           if (hold.holding()) {
             std::snprintf(text, sizeof(text), "  hold %+5.1f deg",
                           Heron::Geometry::wrapAngle(hold.targetRad() - p.newest.pose.heading) /
