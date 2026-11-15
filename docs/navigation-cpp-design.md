@@ -1330,38 +1330,45 @@ from the interfaces above:
 does not meet is reported OPEN at the same threshold and not counted, but
 each has a limit a little worse than its result here, and past the limit
 it fails, so a change that makes it clearly worse is caught: closest pass
-at least 10 cm; within 1.25 m of the line 2 m past the box; sliding over
-0.10 m/s; at the dead end Avoiding or Blocked, never Following or
-Stopped. The user chose OPEN with limits over failing, 2026-11-15):
+at least 10 cm; within 0.6 m of the line 2 m past the box (1.25 m
+before heading hold); at the dead end Avoiding or Blocked, never
+Following or Stopped. The user chose OPEN with limits over failing,
+2026-11-15). **Rebased on step 4 (2026-11-16), every scenario drive has
+heading hold and `CutHold`,** fed as `heron_robot`'s loop feeds them
+(not `MotionWatch`: the simulated OTOS is never lifted). In brackets,
+the results without them:
 
 | Scenario | Result |
 |---|---|
-| 1, Navigate at a box | Every run reached 4.5 m, 17 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 124 to 204 mm (three runs under 150); back within 10 cm of the line 2 m past it in 2 of 10 (76 and 83 mm; the rest 102 to 1088 mm off) |
-| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 97 mm, median at the end 147 mm |
-| 3, sliding along a wall | Closed to 69 mm, never touched. **Open:** stopped there, 0.14 m/s over the last 2 s (0.25 asked) |
-| 4, dead end | Stopped 249 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
+| 1, Navigate at a box | Every run reached 4.5 m, 18 to 22 s; the limiter cut none of the planner's choices. **Open:** closest 110 to 164 mm, five runs under 150 (124 to 204, three); back within 10 cm of the line 2 m past it in 5 of 10, the rest 115 to 474 mm off (2 of 10, up to 1088) |
+| 2, at a wall, 1000 runs | Never touched, never within 2 cm: closest 107 mm, median at the end 195 mm (97, 147) |
+| 3, sliding along a wall | Closed to 97 mm, never touched, and **kept sliding at 0.28 m/s** (stopped at 69 mm, 0.14 m/s): now a check, no longer open |
+| 4, dead end | Stopped 245 mm from the end, never within the margin. **Open:** the plan says Avoiding, not Blocked |
 | 5, LiDAR stops | Stopped 302 ms after the last scan (Stale), still 640 ms later |
 
 **Design questions from the open ones:**
 
-1. **Navigate needs heading hold (P14).** The table's drift turns Heron
-   (a diagonal right −0.07 rad/s; forward +0.02 to +0.05); past 10°
-   CourseKeeper re-anchors the line where Heron is (§8.1, "Heron turned
-   under it"), and the original line is lost: −0.5 to −1.1 m off in the
-   worst runs. `HeadingHold` is on `feature/navigation-heading-hold`;
-   Navigate in `heron_robot` (step 6) should use it, and the scenarios
-   with it.
+1. **Heading hold cannot act on the planner's 45° diagonals.** Without
+   the hold the table's drift turned Heron past 10° (a diagonal right
+   −0.07 rad/s; forward +0.02 to +0.05), CourseKeeper re-anchored the line
+   where Heron was (§8.1, "Heron turned under it"), and the original line
+   was lost, up to 1.1 m off. With it the worst is 474 mm, and the trace
+   shows why: to get round the box the planner picks exact 45° diagonals
+   (0.64, −0.64), where two wheels stand still and `holdFraction()` holds
+   nothing (step 4); the heading drifts to −12° and the line is
+   re-anchored. The choices: keep the planner's candidates off the exact
+   diagonals (35° or 55° hold), or have CourseKeeper not re-anchor while
+   avoiding.
 2. **Passing within 15 cm.** The planner's 15 cm is a preference
    (`preferredClearanceM`), and on the table the sideways moves are weak:
    a diagonal makes about half its sideways part, and the left side has no
    measured diagonal (interpolated between forward and a weak left).
    Measuring left diagonals, or raising the clearance weight, are the
    choices.
-3. **Sliding along a wall pushed diagonally into it** (scenario 3): no
-   command within 15° of the stick keeps off the wall, so Assisted stops
-   beside it, where the speed model slid. The 15° window was chosen after
-   check 1 so a substitute never swerves; a substitute that drops only the
-   part toward the obstacle (forward alone, here) would slide.
+3. **Sliding along a wall pushed diagonally into it** (scenario 3):
+   settled by heading hold. Without it, the drift turned Heron toward the
+   wall, no command within 15° of the stick kept off it, and Assisted
+   stopped beside it; held straight, it slides at 0.28 m/s.
 4. **Planner and limiter disagree at a dead end** (scenario 4): the
    planner keeps a small command whose imagined path keeps the margin; the
    limiter, told the table's speed × 1.2 and the brake, refuses it. Safe

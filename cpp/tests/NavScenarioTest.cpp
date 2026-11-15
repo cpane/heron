@@ -36,11 +36,12 @@
 // LocalPlanner runs it, and the control loop drives its command through
 // decide() as Assisted drives a stick: Clear as it is, otherwise the
 // nearest command the limiter allows within 15 degrees of it, or none
-// (navigation-cpp-design.md §7.5 as built, step 5). There is no heading
-// hold in Navigate yet (P14 is Assisted's on its own branch), so the
-// table's drift turns Heron as it goes. No threads, so
-// a run of seconds takes milliseconds and every run repeats. Same style
-// as the other tests: no framework.
+// (navigation-cpp-design.md §7.5 as built, step 5). Every drive, Navigate
+// and Assisted, has heading hold (P14) and CutHold as heron_robot's loop
+// feeds them; on an exact 45 degree diagonal the hold can do nothing, so
+// there the table's drift still turns Heron. No threads, so a run of
+// seconds takes milliseconds and every run repeats. Same style as the
+// other tests: no framework.
 //
 // An expectation the robot as measured does not meet yet, for a reason
 // that is a design question, is reported OPEN with the reason (open()),
@@ -200,14 +201,27 @@ struct Run {
   }
 
   /** decide() in Assisted, the stick in fractions, and the base given what
-   *  comes out: heron_robot's cycle. */
+   *  comes out: heron_robot's cycle, with heading hold (P14) and CutHold
+   *  fed as its loop feeds them. Not MotionWatch: the simulated OTOS is
+   *  never lifted, and pressed against a wall it would trip where the
+   *  floor has not shown it does. */
   Decision drive(const BodyVelocity &stick) {
-    const Twist measured = history.newest()->velocity;
+    const Heron::Pose::PoseSample newest = *history.newest();
     const Heron::Robot::AssistedInput assisted{
         &limiter, bench().geometry, bench().motion.get(),
-        LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, measured, now}, std::nullopt, false,
+        LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, newest.velocity, now}, std::nullopt, false,
         std::nullopt};
-    const Decision d = Heron::Robot::decide(Heron::Robot::Mode::Assisted, true, stick, &assisted);
+    Heron::Robot::AssistedInput in = assisted;
+    const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
+    const double stickTurn = Heron::Robot::toTwist(BodyVelocity{0.0, 0.0, stick.wz}, bench().geometry).wz;
+    const double drift = translating ? bench().motion->predict(stick.vx, stick.vy).wz : 0.0;
+    const double rate = hold.update(stickTurn, translating, newest.pose.heading, drift, 1);
+    if (hold.holding()) {
+      in.holdRadps = rate;
+    }
+    in.cutCeiling = cutHold.ceiling(stick);
+    const Decision d = Heron::Robot::decide(Heron::Robot::Mode::Assisted, true, stick, &in);
+    cutHold.update(stick, d);
     base.commandFractions(d.body.vx, d.body.vy, d.body.wz, now);
     return d;
   }
@@ -260,6 +274,8 @@ struct Run {
   std::optional<Scan> scan;
   bool lidarOn{true};
   Limiter limiter;
+  Heron::Robot::HeadingHold hold;
+  Heron::Robot::CutHold cutHold;
 };
 
 Heron::NavSim::World wallAcross(double x) {
@@ -489,7 +505,7 @@ int main() {
       spare = spare && b.closest >= 0.15;
       spareLimit = spareLimit && b.closest >= 0.10;  // 124 mm when opened
       back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
-      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 1.25;  // 1088 mm when opened
+      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 0.60;  // 474 mm with heading hold
       uncut = uncut && b.cut == 0;
     }
     check("every run reached 4.5 m along", reached);
@@ -498,9 +514,10 @@ int main() {
          "the planner's 15 cm is a preference, and on the table its sideways moves are weak "
          "(a diagonal makes half its sideways part, left has no measured diagonal)");
     open("back within 10 cm of the line 2 m past it, every run", back,
-         "within 1.25 m of it, every run", backLimit,
-         "no heading hold in Navigate yet (P14): the table's drift turns Heron past 10 degrees, "
-         "CourseKeeper re-anchors the line where Heron is, and the old line is lost");
+         "within 0.6 m of it, every run", backLimit,
+         "the planner avoids on exact 45 degree diagonals, where two wheels stand still and "
+         "heading hold can do nothing; the table's drift turns Heron past 10 degrees, CourseKeeper "
+         "re-anchors the line where Heron is, and the old line is lost");
     check("the limiter cut none of the planner's choices (I11)", uncut);
   }
 
@@ -624,11 +641,9 @@ int main() {
                 xAt6, 1000.0 * gap, 1000.0 * worst, (xAt6 - xAt4) / 2.0, backingOff);
     check("never touched the wall", worst > 0.0);
     check("closed in on it: within the 25 cm slow zone", gap < 0.25);
-    // 0.14 m/s when opened.
-    open("kept sliding: over 0.25 m/s along it over the last 2 s", (xAt6 - xAt4) / 2.0 > 0.25,
-         "over 0.10 m/s", (xAt6 - xAt4) / 2.0 > 0.10,
-         "pushed diagonally into the wall, no command within 15 degrees of the stick keeps off it "
-         "(each moves toward the wall), so Assisted stops beside it; the drift turns Heron toward it too");
+    // 0.14 m/s without heading hold: the drift turned Heron into the wall
+    // and Assisted stopped beside it. With the hold, 0.28.
+    check("kept sliding: over 0.25 m/s along it over the last 2 s", (xAt6 - xAt4) / 2.0 > 0.25);
   }
 
   std::printf("Scenario 4: Navigate into a dead end\n");

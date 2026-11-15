@@ -473,12 +473,19 @@ navigation, so SwC to Manual always takes over.
    diagonal slide along a wall; planner and limiter disagree at a dead
    end. Not yet run on the Pi.
 
-   **Next:** step 5 is rebased onto develop (step 4 merged,
-   PR #73): give Navigate in the scenarios heading hold, rerun
-   `nav_scenario_test`, and tighten scenario 1's back-to-the-line limit
-   (1.25 m, set without the hold) to the new numbers. Then step 5's
-   design questions (§7.5 "As built, §19.4 step 5") and step 6,
-   Navigate in `heron_robot`.
+   **Step 5 rebased onto develop 2026-11-16 (step 4 merged, PR #73),
+   not pushed:** every scenario drive now has heading hold and
+   `CutHold` as `heron_robot` feeds them. Scenario 3 slides at 0.28 m/s
+   and is a check again; scenario 1 ends within 10 cm of the line in 5
+   of 10 runs (was 2), the worst 474 mm off (was 1088), its limit
+   tightened to 0.6 m. Three expectations stay OPEN. The cause of the
+   rest of scenario 1: the planner avoids on exact 45° diagonals, where
+   heading hold can do nothing (§7.5 "As built, §19.4 step 5", question
+   1).
+
+   **Next:** push and merge step 5 (when the user asks); then its
+   design questions 1, 2 and 4 with the user (§7.5 "As built, §19.4
+   step 5"), and step 6, Navigate in `heron_robot`.
 
    Found 2026-11-16, for the LiDAR workstream (its Inbox): the A1M8
    twice refused to start Express (`cannot start scan mode 1`, every
