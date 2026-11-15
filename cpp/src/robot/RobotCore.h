@@ -70,6 +70,7 @@
 #ifndef HERON_ROBOT_ROBOT_CORE_H
 #define HERON_ROBOT_ROBOT_CORE_H
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -168,6 +169,138 @@ inline constexpr double kTableMargin = 1.2;
 
 // -- one cycle ----------------------------------------------------------------
 
+/**
+ * P14, heading hold (I20). With the turn stick centred and the robot told
+ * to translate, the turn rate that holds the heading taken when that
+ * began: the heading error times a gain, less the drift the table
+ * predicts, so the drift is cancelled before it shows. The turn stick
+ * overrides it, and letting the stick go takes the new heading. Standing
+ * still nothing is held, since a small turn alone would meet the motors'
+ * dead band and lurch (the turn's floor, header "Units", is about 1.3
+ * rad/s on the bench rig). A new pose epoch (I8) drops the heading held:
+ * the old one is in another frame.
+ *
+ * Measured reason (design §19.1): a full strafe on the hardwood turned the
+ * bench rig 8 to 12 degrees a second clockwise, and floor check 3 turned
+ * it 19 degrees on the way to a box.
+ *
+ * The rate it returns is rad/s; holdFraction() turns it into the mixing's
+ * wz for the translation actually driven.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class HeadingHold {
+  public:
+    struct Config {
+      double gainPerS{2.0};      // rad/s commanded per radian of error
+      double maxRateRadps{0.8};  // the most it turns, either way
+    };
+
+    HeadingHold() noexcept;  // Config's defaults
+    explicit HeadingHold(Config config) noexcept;
+
+    /**
+     * One cycle.
+     *
+     * @param turnStickRadps the turn stick as a rate; non-zero overrides
+     * @param translating whether the stick asks for any translation
+     * @param headingRad the pose's heading, odom frame
+     * @param driftRadps the table's predicted turn for this translation
+     * @param epoch the pose's epoch; a change drops the heading held
+     * @return the turn rate to command, rad/s: the stick's when it is
+     *         used, 0 standing still
+     */
+    double update(double turnStickRadps, bool translating, double headingRad, double driftRadps,
+                  std::uint64_t epoch) noexcept;
+
+    /** Drops the heading held: on leaving Assisted or Navigate, and on
+     *  disarming. */
+    void reset() noexcept;
+
+    /** @return whether a heading is held; targetRad() is then valid */
+    [[nodiscard]] bool holding() const noexcept { return m_holding; }
+
+    /** @return the heading held, odom frame */
+    [[nodiscard]] double targetRad() const noexcept { return m_target; }
+
+  private:
+    Config m_config;
+    bool m_holding{false};
+    double m_target{0.0};
+    std::uint64_t m_epoch{0};
+};
+
+/**
+ * A turn rate as the mixing's wz while translating (P14). With every
+ * wheel already turning, wz shifts them unevenly: each wheel's speed rises
+ * (max_speed - min_speed) per unit of command, so a rad/s is
+ * max_turn_rate x (1 - min_speed / max_speed) per unit of wz, not
+ * max_turn_rate. Held to half the slowest wheel's translation, so no wheel
+ * is pushed back toward the dead band or reversed; zero with no
+ * translation (two wheels stand still on a 45 degree diagonal, so nothing
+ * is held there either).
+ */
+[[nodiscard]] double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
+                                  const Profile::GeometryProfile &g) noexcept;
+
+/**
+ * "Commanded but not moving" (design §19.4 step 4, accepted 2026-11-15):
+ * the wheels driven with a command that, from rest, should move the robot
+ * at expectMps or more, while the OTOS reads under stillMps, for a whole
+ * window, trips it. It catches the robot lifted (floor check 4: a gentle
+ * lift raised TILT only and read exactly 0, so the pose stayed fresh and
+ * the wheels turned in the air) and wheels spinning while stuck.
+ *
+ * "From rest" is MotionTable::predictFromRest(), the points as measured:
+ * a command in the dead band, which cannot start a still robot, expects
+ * almost nothing and never trips it. The numbers are from the floor
+ * checks of 2026-11-14: from rest the bench rig reached 0.15 m/s within
+ * 0.2 s; standing on the hardwood the OTOS read within 0.01 m/s; lifted,
+ * exactly 0.
+ *
+ * Once tripped it stays tripped until the translation stick is centred,
+ * so a lifted robot does not pulse its wheels every window. Assisted
+ * stops while it is (Why::NotMoving). It is not the pose's freshness: the
+ * pose tracker cannot see what the wheels were told (I21).
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class MotionWatch {
+  public:
+    struct Config {
+      double expectMps{0.10};                    // the command should make at least this
+      double stillMps{0.01};                     // the OTOS reads under this
+      std::chrono::milliseconds window{500};     // both, this long
+    };
+
+    MotionWatch() noexcept;  // Config's defaults
+    explicit MotionWatch(Config config) noexcept;
+
+    /**
+     * One cycle.
+     *
+     * @param expectedMps what last cycle's driven command makes from rest
+     *        (predictFromRest()), speed over the floor; 0 without a table
+     * @param measuredMps the OTOS's speed over the floor
+     * @param translating whether the stick asks for any translation; once
+     *        tripped, false clears it
+     * @param now this cycle's time
+     * @return whether it is tripped
+     */
+    bool update(double expectedMps, double measuredMps, bool translating,
+                std::chrono::steady_clock::time_point now) noexcept;
+
+    /** Clears it: on leaving Assisted or Navigate, and on disarming. */
+    void reset() noexcept;
+
+    [[nodiscard]] bool tripped() const noexcept { return m_tripped; }
+
+  private:
+    Config m_config;
+    bool m_tripped{false};
+    std::optional<std::chrono::steady_clock::time_point> m_since;
+};
+
 /** What Assisted needs each cycle. Pointers are borrowed for the call. */
 struct AssistedInput {
   const Limiter::Limiter *limiter{nullptr};
@@ -177,6 +310,17 @@ struct AssistedInput {
   /** The scan, the pose history and freshness, the measured velocity and
    *  now; its command is ignored: decide() puts the stick's there. */
   Limiter::LimitInput limit{};
+  /** Heading hold's turn rate, rad/s, in place of the turn stick (P14):
+   *  set by the loop only with the turn stick centred and a translation
+   *  asked for. The limiter is told it; the wheels get holdFraction() of
+   *  it for the translation driven. */
+  std::optional<double> holdRadps;
+  /** MotionWatch tripped: the wheels were told to move and nothing moved. */
+  bool notMoving{false};
+  /** CutHold::ceiling(): while holding, last cycle's translation.
+   *  decide() drives nothing the table says makes more, Clear included
+   *  (the table's path only; without a table there are no substitutes). */
+  std::optional<Drive::BodyVelocity> cutCeiling;
 };
 
 /** Why the wheels are what they are this cycle. */
@@ -186,11 +330,12 @@ enum class Why : std::uint8_t {
   Limited,             // Assisted: the limiter's answer; see Decision::limited
   AssistedUnavailable, // Assisted but not ready: stopped
   PoseNotFresh,        // Assisted with the pose not fresh (P16): stopped
+  NotMoving,           // Assisted, told to move and nothing moved (MotionWatch): stopped
   NavigateNotBuilt     // Navigate, step 2: stopped
 };
 
-/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH" or
- *          "NAVIGATE_NOT_BUILT" */
+/** @return "DISARMED", "MANUAL", "LIMITED", "ASSISTED_UNAVAILABLE", "POSE_NOT_FRESH",
+ *          "NOT_MOVING" or "NAVIGATE_NOT_BUILT" */
 [[nodiscard]] const char *toString(Why why) noexcept;
 
 /** One cycle's choice. */
@@ -214,6 +359,48 @@ struct Decision {
  */
 [[nodiscard]] Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
                               const AssistedInput *assisted);
+
+/**
+ * While the limiter cuts, the command only falls (design §19.4 step 4,
+ * floor check 2 again, 2026-11-16). Driven at a box at full speed, the
+ * limiter's answer changed cycle to cycle with the OTOS's speed noise
+ * (about +-0.03 m/s forward and +-0.07 sideways at speed), so the command
+ * jumped between nothing and something (0.50, 0, 0.29, 0, 0.39, 0.30, 0),
+ * and once a substitute 15 degrees off asked for more than the cycle
+ * before (0.75, then 0.97 -0.26). The stop was where it should be; the
+ * wheels were pulsed.
+ *
+ * CutHold holds from the first Cut, keeping each cycle's translation as
+ * the next one's ceiling (AssistedInput::cutCeiling), until the limiter
+ * has been Clear for kReleaseCycles in a row, the translation stick is
+ * centred, or it points more than kSubstituteWidthRad from where it did
+ * when the hold began: pulling back to get away is never held to the way
+ * in. One Clear is not enough: the same noise gives a single Clear between
+ * Cuts (the replay in RobotTest), and a lower command than the limiter
+ * allows is always safe. Use: ceiling() before decide(), update() after.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class CutHold {
+  public:
+    /** Clear cycles in a row that end a hold: 0.1 s at the loop's 20 ms. */
+    static constexpr int kReleaseCycles = 5;
+
+    /** @return the ceiling for this stick while holding, else nullopt */
+    [[nodiscard]] std::optional<Drive::BodyVelocity> ceiling(const Drive::BodyVelocity &stick) const noexcept;
+    /** What decide() gave for this stick, this cycle. */
+    void update(const Drive::BodyVelocity &stick, const Decision &decision) noexcept;
+    void reset() noexcept;
+    [[nodiscard]] bool holding() const noexcept;
+
+  private:
+    [[nodiscard]] bool along(const Drive::BodyVelocity &stick) const noexcept;
+
+    bool m_holding{false};
+    double m_directionRad{0.0};  // the translation stick's, when the hold began
+    int m_clears{0};             // Clear cycles in a row while holding
+    Drive::BodyVelocity m_last{};
+};
 
 }  // namespace Heron::Robot
 

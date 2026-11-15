@@ -176,6 +176,78 @@ std::string assistedRefusal(const Profile::RigProfile &profile) {
   return Limiter::checkBlindSpot(toLimiterConfig(profile));
 }
 
+HeadingHold::HeadingHold() noexcept : HeadingHold(Config{}) {}
+
+HeadingHold::HeadingHold(Config config) noexcept : m_config(config) {}
+
+double HeadingHold::update(double turnStickRadps, bool translating, double headingRad, double driftRadps,
+                           std::uint64_t epoch) noexcept {
+  if (epoch != m_epoch) {
+    m_epoch = epoch;
+    m_holding = false;  // the heading held is in another frame (I8)
+  }
+  if (turnStickRadps != 0.0) {
+    m_holding = false;  // the stick turns; letting it go takes the new heading
+    return turnStickRadps;
+  }
+  if (!translating) {
+    m_holding = false;  // standing still nothing is held
+    return 0.0;
+  }
+  if (!m_holding) {
+    m_holding = true;
+    m_target = headingRad;
+  }
+  const double error = Geometry::wrapAngle(m_target - headingRad);
+  return std::clamp(m_config.gainPerS * error - driftRadps, -m_config.maxRateRadps, m_config.maxRateRadps);
+}
+
+void HeadingHold::reset() noexcept {
+  m_holding = false;
+}
+
+double holdFraction(double turnRadps, const Drive::BodyVelocity &translation,
+                    const Profile::GeometryProfile &g) noexcept {
+  const double slowest = std::min(std::abs(translation.vx - translation.vy),
+                                  std::abs(translation.vx + translation.vy));
+  const double perUnit = g.maxTurnRate * (1.0 - g.minSpeed / g.maxSpeed);
+  if (slowest <= 0.0 || !(perUnit > 0.0)) {
+    return 0.0;
+  }
+  return std::clamp(turnRadps / perUnit, -slowest / 2.0, slowest / 2.0);
+}
+
+MotionWatch::MotionWatch() noexcept : MotionWatch(Config{}) {}
+
+MotionWatch::MotionWatch(Config config) noexcept : m_config(config) {}
+
+bool MotionWatch::update(double expectedMps, double measuredMps, bool translating,
+                         std::chrono::steady_clock::time_point now) noexcept {
+  if (m_tripped) {
+    if (!translating) {
+      m_tripped = false;  // the stick centred: the driver has seen it
+      m_since.reset();
+    }
+    return m_tripped;
+  }
+  if (expectedMps >= m_config.expectMps && measuredMps < m_config.stillMps) {
+    if (!m_since) {
+      m_since = now;
+    }
+    if (now - *m_since >= m_config.window) {
+      m_tripped = true;
+    }
+  } else {
+    m_since.reset();
+  }
+  return m_tripped;
+}
+
+void MotionWatch::reset() noexcept {
+  m_tripped = false;
+  m_since.reset();
+}
+
 const char *toString(Why why) noexcept {
   switch (why) {
     case Why::Disarmed:
@@ -188,6 +260,8 @@ const char *toString(Why why) noexcept {
       return "ASSISTED_UNAVAILABLE";
     case Why::PoseNotFresh:
       return "POSE_NOT_FRESH";
+    case Why::NotMoving:
+      return "NOT_MOVING";
     case Why::NavigateNotBuilt:
       return "NAVIGATE_NOT_BUILT";
   }
@@ -215,15 +289,26 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
         decision.why = Why::PoseNotFresh;  // P16: a nonsense speed is not trusted
         return decision;
       }
+      if (assisted->notMoving) {
+        decision.why = Why::NotMoving;  // lifted, or stuck: told to move, nothing moved
+        return decision;
+      }
       Limiter::LimitInput input = assisted->limit;
       if (assisted->motion == nullptr) {
         input.command = toTwist(stick, assisted->geometry);
+        if (assisted->holdRadps) {
+          input.command.wz = *assisted->holdRadps;
+        }
         const Limiter::LimitResult limited = assisted->limiter->limit(input);
         // Under min_speed: up to it if only the slow zone lowered it (the
         // sweep found the faster command clear for T, so the slower one is
         // too); otherwise stop. Header, "Units".
         decision.body = toBodyVelocity(limited.command, assisted->geometry,
                                        limited.reason == Limiter::Reason::Slowed);
+        if (assisted->holdRadps) {
+          decision.body.wz = holdFraction(*assisted->holdRadps * limited.scale.wz, decision.body,
+                                          assisted->geometry);
+        }
         decision.why = Why::Limited;
         decision.limited = limited;
         break;
@@ -231,7 +316,10 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       // With the floor's table (design §19.2): the limiter is told what
       // the command really makes, kTableMargin faster, drift included.
       const Motion::MotionTable &table = *assisted->motion;
-      const double turnRate = toTwist(Drive::BodyVelocity{0.0, 0.0, stick.wz}, assisted->geometry).wz;
+      // The turn: heading hold's rate when it holds (P14), else the stick's.
+      const double turnRate = assisted->holdRadps
+                                  ? *assisted->holdRadps
+                                  : toTwist(Drive::BodyVelocity{0.0, 0.0, stick.wz}, assisted->geometry).wz;
       const auto told = [&](double vx, double vy, double turn) {
         const Geometry::Twist made = table.predict(vx, vy);
         return Geometry::Twist{made.vx * kTableMargin, made.vy * kTableMargin, turn + made.wz};
@@ -240,8 +328,38 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       const Limiter::LimitResult limited = assisted->limiter->limit(input);
       decision.why = Why::Limited;
       decision.limited = limited;
+      // While holding (CutHold), nothing that makes more than last cycle:
+      // last cycle's command if the limiter still passes it, else none.
+      const auto applyCeiling = [&]() {
+        if (!assisted->cutCeiling) {
+          return;
+        }
+        const auto speedOf = [&](double vx, double vy) {
+          const Geometry::Twist made = table.predict(vx, vy);
+          return std::hypot(made.vx, made.vy);
+        };
+        const Drive::BodyVelocity &ceiling = *assisted->cutCeiling;
+        if (speedOf(decision.body.vx, decision.body.vy) <= speedOf(ceiling.vx, ceiling.vy) + 1e-9) {
+          return;
+        }
+        decision.body.vx = 0.0;
+        decision.body.vy = 0.0;
+        if (ceiling.vx != 0.0 || ceiling.vy != 0.0) {
+          Limiter::LimitInput again = assisted->limit;
+          again.command = told(ceiling.vx, ceiling.vy, turnRate * limited.scale.wz);
+          const Limiter::Reason recheck = assisted->limiter->limit(again).reason;
+          if (recheck == Limiter::Reason::Clear || recheck == Limiter::Reason::Slowed) {
+            decision.body.vx = ceiling.vx;
+            decision.body.vy = ceiling.vy;
+          }
+        }
+      };
       if (limited.reason == Limiter::Reason::Clear) {
         decision.body = stick;
+        applyCeiling();
+        if (assisted->holdRadps) {
+          decision.body.wz = holdFraction(*assisted->holdRadps, decision.body, assisted->geometry);
+        }
         break;
       }
       // Limited: the turn by its scale; the translation the command nearest
@@ -267,6 +385,13 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
           decision.body.vy = command->second;
         }
       }
+      applyCeiling();
+      // Held, the turn rides on the translation driven: none, no turn, so
+      // a stopped robot never meets the turn's dead band and spins.
+      if (assisted->holdRadps) {
+        decision.body.wz = holdFraction(*assisted->holdRadps * limited.scale.wz, decision.body,
+                                        assisted->geometry);
+      }
       break;
     }
     case Mode::Navigate:
@@ -275,6 +400,56 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
   }
   decision.wheels = Drive::mix(decision.body);
   return decision;
+}
+
+bool CutHold::along(const Drive::BodyVelocity &stick) const noexcept {
+  return (stick.vx != 0.0 || stick.vy != 0.0) &&
+         std::abs(Geometry::wrapAngle(std::atan2(stick.vy, stick.vx) - m_directionRad)) <=
+             Motion::kSubstituteWidthRad + 1e-9;
+}
+
+std::optional<Drive::BodyVelocity> CutHold::ceiling(const Drive::BodyVelocity &stick) const noexcept {
+  if (!m_holding || !along(stick)) {
+    return std::nullopt;
+  }
+  return m_last;
+}
+
+void CutHold::update(const Drive::BodyVelocity &stick, const Decision &decision) noexcept {
+  const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
+  if (decision.why != Why::Limited || !decision.limited || !translating) {
+    reset();
+    return;
+  }
+  if (m_holding && !along(stick)) {
+    reset();  // turned away: a new hold only on a new Cut
+  }
+  if (decision.limited->reason == Limiter::Reason::Clear) {
+    if (!m_holding || ++m_clears >= kReleaseCycles) {
+      reset();
+      return;
+    }
+  } else {
+    m_clears = 0;
+  }
+  if (!m_holding) {
+    if (decision.limited->reason != Limiter::Reason::Cut) {
+      return;
+    }
+    m_holding = true;
+    m_directionRad = std::atan2(stick.vy, stick.vx);
+  }
+  m_last = Drive::BodyVelocity{decision.body.vx, decision.body.vy, 0.0};
+}
+
+void CutHold::reset() noexcept {
+  m_holding = false;
+  m_clears = 0;
+  m_last = Drive::BodyVelocity{};
+}
+
+bool CutHold::holding() const noexcept {
+  return m_holding;
 }
 
 }  // namespace Heron::Robot

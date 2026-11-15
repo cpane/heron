@@ -240,6 +240,17 @@ int main() {
     std::printf("        strafe right 0.2: (%.3f, %.3f, %.3f)\n", small.vx, small.vy, small.wz);
     check("strafe right at 0.2, a stall: lifted to near 0.4's point, moving right", small.vy < -0.04);
     check("left at 0.6: 0.04, not right's mirror", near(hw.predict(0.0, 0.6).vy, 0.04, 1e-9));
+
+    // predictFromRest(): the points as measured, for "commanded but not
+    // moving", which must not trip at the dead band.
+    const auto speed = [](const Twist &t) { return std::hypot(t.vx, t.vy); };
+    check("from rest, strafe right at 0.2 (a stall): under 0.10, so no trip",
+          speed(hw.predictFromRest(0.0, -0.2)) < 0.10);
+    check("from rest, the -45 diagonal at 0.3 (a stall, 0.01): under 0.10",
+          speed(hw.predictFromRest(0.21, -0.21)) < 0.10);
+    check("from rest, full strafe right: 0.27, over 0.10", speed(hw.predictFromRest(0.0, -1.0)) > 0.25);
+    check("from rest, forward at 0.6: as predict(), no stall there",
+          speed(hw.predictFromRest(0.6, 0.0)) == speed(hw.predict(0.6, 0.0)));
   }
 
   std::printf("\n%s: %d failure(s)\n", s_failures == 0 ? "OK" : "FAILED", s_failures);

@@ -19,7 +19,13 @@
 //   Assisted  the sticks through the safety limiter, against the newest
 //             LiDAR scan: anything that would bring a point inside the stop
 //             outline is slowed, cut or stopped, axis by axis, so sliding
-//             along a wall and backing away still work.
+//             along a wall and backing away still work. With the turn
+//             stick centred, heading hold keeps the heading while it
+//             moves (P14). Told to move while the OTOS sees nothing for
+//             half a second (lifted, or stuck), it stops (NOT_MOVING)
+//             until the stick is centred. Once the limiter cuts, the
+//             command only falls until it has been clear for 0.1 s
+//             (CutHold), so a noisy speed cannot pulse the wheels.
 //   Navigate  not built yet (step 2): stops.
 //
 // Its decisions are in src/robot/RobotCore.h, tested by robot_test; this
@@ -47,8 +53,10 @@
 //   stick and what went out (fractions of full drive), the four wheels,
 //   the measured speed from the OTOS (m/s, x forward, y left; rad/s,
 //   left positive), the heading since start-up (degrees, left positive),
-//   the OTOS's TRACKING and TILT warnings when set, and in Assisted the
-//   limiter's reason, the nearest point and the scan's age.
+//   the OTOS's TRACKING and TILT warnings when set, while heading hold
+//   holds the heading error it is correcting ("hold", degrees, held minus
+//   now), and in Assisted the limiter's reason, the nearest point and the
+//   scan's age.
 //   "out" x max_speed is the speed asked for; "speed" is what it did.
 //
 // Start-up
@@ -71,6 +79,7 @@
 
 #include <chrono>
 #include <cinttypes>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -252,6 +261,10 @@ int main(int argc, char **argv) {
   Heron::Drive::ArmGate gate;
   const Heron::Profile::GeometryProfile geometry =
       profile.geometry.value_or(Heron::Profile::GeometryProfile{});
+  Heron::Robot::HeadingHold hold;
+  Heron::Robot::MotionWatch watch;
+  Heron::Robot::CutHold cutHold;
+  Heron::Drive::BodyVelocity lastBody;  // what the wheels were told last cycle
   Mode shownMode = Mode::Manual;
   Why shownWhy = Why::Disarmed;
   bool first = true;
@@ -288,11 +301,37 @@ int main(int argc, char **argv) {
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
         assisted = Heron::Robot::AssistedInput{
             limiter.get(), geometry, motion ? &*motion : nullptr,
-            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}};
+            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt, false,
+            std::nullopt};
+        // Heading hold (P14): with the turn stick centred and a translation
+        // asked for, its rate stands in for the stick's turn.
+        const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
+        const double stickTurn = Heron::Robot::toTwist(Heron::Drive::BodyVelocity{0.0, 0.0, stick.wz}, geometry).wz;
+        const double drift = motion && translating ? motion->predict(stick.vx, stick.vy).wz : 0.0;
+        const double rate = hold.update(stickTurn, translating, p.newest.pose.heading, drift, p.epoch);
+        if (armed && hold.holding()) {
+          assisted.holdRadps = rate;
+        }
+        // Commanded but not moving: last cycle's command, from rest,
+        // against what the OTOS reads now (design §19.4 step 4).
+        const Heron::Geometry::Twist expected =
+            motion ? motion->predictFromRest(lastBody.vx, lastBody.vy) : Heron::Geometry::Twist{};
+        assisted.notMoving = watch.update(std::hypot(expected.vx, expected.vy),
+                                          std::hypot(p.newest.velocity.vx, p.newest.velocity.vy),
+                                          translating, now);
+        // While the limiter cuts, the command only falls (CutHold).
+        assisted.cutCeiling = cutHold.ceiling(stick);
+      }
+      if (!armed || mode != Mode::Assisted || !ready) {
+        hold.reset();
+        watch.reset();
+        cutHold.reset();
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
+      cutHold.update(stick, d);
 
+      lastBody = armed && d.why == Why::Limited ? d.body : Heron::Drive::BodyVelocity{};
       if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {
         ++driving;
         if (motors) {
@@ -345,6 +384,12 @@ int main(int argc, char **argv) {
                         p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
                         p.tiltWarning ? " TILT" : "");
           speedText = text;
+          if (hold.holding()) {
+            std::snprintf(text, sizeof(text), "  hold %+5.1f deg",
+                          Heron::Geometry::wrapAngle(hold.targetRad() - p.newest.pose.heading) /
+                              Heron::Geometry::kDegToRad);
+            speedText += text;
+          }
         }
         std::string motorText = "dry run";
         if (motors) {
