@@ -151,6 +151,7 @@ Plan Planner::plan(const PlanInput &input) {
     // Commands (P15): every direction and size, imagined as the table
     // predicts; header.
     const Motion::MotionTable &table = *cfg.motion;
+    const bool nearlyStill = std::hypot(input.measured.vx, input.measured.vy) < kNearlyStillMps;
     const int directions = std::max(1, static_cast<int>(std::lround(2.0 * kPi / cfg.commandStepRad)));
     const int sizes = std::max(1, static_cast<int>(std::lround(1.0 / cfg.commandSizeStep)));
     for (int d = 0; d < directions; ++d) {
@@ -164,6 +165,12 @@ Plan Planner::plan(const PlanInput &input) {
         const double speed = std::hypot(made.vx, made.vy);
         if (speed < kStillMps) {
           continue;
+        }
+        if (nearlyStill) {  // must start a still robot (header)
+          const Geometry::Twist start = table.predictFromRest(cx, cy);
+          if (std::hypot(start.vx, start.vy) < Motion::kStallMps) {
+            continue;
+          }
         }
         const bool smallest = !moved;
         moved = true;

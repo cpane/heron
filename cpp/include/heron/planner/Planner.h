@@ -48,8 +48,14 @@
 // of the measured speed on each axis. A direction's smallest command that
 // moves is kept whatever the window says: from rest the motors' dead band
 // makes even the smallest command faster than the window reaches (forward
-// 0.19 m/s, against 0.18), and without it Heron could never start. The
-// plan then carries the command chosen (I19), and Navigate drives that.
+// 0.19 m/s, against 0.18), and without it Heron could never start.
+// Nearly still (measured under kNearlyStillMps), a command must also start
+// the robot from rest (MotionTable::predictFromRest(), the points as
+// measured, stalls included): rolling, a small command keeps the robot
+// going, but from rest it may not move it at all, and on 2026-11-16
+// Navigate slowed onto small left commands the robot could not start
+// from, and stood with the stick held. The plan then carries the command
+// chosen (I19), and Navigate drives that.
 // "Straight" is any candidate whose predicted motion runs within 5 degrees
 // of the course. Without a table, as above.
 //
@@ -93,6 +99,10 @@ namespace Heron::Planner {
 /** How short of the field's clearance the true one can be (I11): two half
  *  diagonals of a 5 cm cell and half the 2.5 cm spacing round the edge. */
 inline constexpr double kCellSlackM = 0.0833;
+
+/** Measured slower than this, m/s, Heron is nearly still: with a table,
+ *  only commands that start it from rest are candidates (header). */
+inline constexpr double kNearlyStillMps = 0.05;
 
 /** Design §8.2's starting weights; tuned in the simulator (design §18, 3). */
 struct ScoreWeights {
