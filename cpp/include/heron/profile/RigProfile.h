@@ -106,6 +106,30 @@
 // wheelbase) join it when the mixing needs them, so max_speed is held once
 // (decided 2026-11-11).
 //
+// Surfaces (navigation design §19, P18): the numbers that depend on the
+// floor, one named set per floor, any number of them:
+//
+//   [rig]        drive          optional: the drive's name (motors, wheels,
+//                               controller), as the library's folder
+//                surface        optional: the default surface's name
+//   [surface.<name>]            <name> as a rig name; every key optional
+//                max_speed, min_speed, max_turn_rate, brake  override
+//                               [geometry]'s, same ranges (min_speed 0..5)
+//                linear_scalar, angular_scalar  override [odometry]'s
+//                mirror         0 or 1: whether left may be taken as right
+//                               mirrored where only one side was measured
+//                p<n>           the motion table, one point a key:
+//                               <direction deg -180..180> <size 0..1.5>
+//                               <vx -5..5> <vy -5..5> <wz -20..20>
+//   [surface.<name>.calibration] free text, as the others; needs its surface
+//
+// Known surfaces also live in a library, one file each:
+// profiles/surfaces/<drive>/<name>.conf, holding "format = 1", one
+// [surface.<name>] and its record (parseSurfaceFile()). loadRigProfile()
+// adds every surface of the rig's drive from the library, after the rig's
+// own (which win on a name), and checks [rig] surface names one of them.
+// onSurface() gives the profile as seen on one floor (I22).
+//
 // Strict on purpose: a misspelt key that was silently ignored would leave a
 // motor running on a default. A new section is added here, with its
 // checks.
@@ -210,6 +234,33 @@ struct NavigationProfile {
 /** A [<section>.calibration]: key and value, in file order. */
 using CalibrationRecord = std::vector<std::pair<std::string, std::string>>;
 
+/** One point of a surface's motion table: a command and what it made.
+ *  Plain numbers here; heron_motion's MotionTable reads them (I18). */
+struct SurfacePoint {
+  double directionDeg{0.0};  // the command's, counterclockwise from forward
+  double size{0.0};          // its length, fractions of full drive
+  double vx{0.0};            // m/s, robot frame: what the robot made
+  double vy{0.0};            // m/s
+  double wz{0.0};            // rad/s
+};
+
+/** A [surface.<name>]: one floor's numbers (design §19, P18). A set value
+ *  overrides [geometry]'s or [odometry]'s on that floor; points empty means
+ *  no motion table. */
+struct SurfaceProfile {
+  std::string name;
+  std::string source;                // the file it came from
+  std::vector<SurfacePoint> points;  // p01, p02, ... in file order
+  bool mirror{false};                // mirror = 1; off unless said
+  std::optional<double> maxSpeed;
+  std::optional<double> minSpeed;
+  std::optional<double> maxTurnRate;
+  std::optional<double> brake;
+  std::optional<double> linearScalar;
+  std::optional<double> angularScalar;
+  CalibrationRecord calibration;     // [surface.<name>.calibration]
+};
+
 /**
  * One rig's profile, every value checked. The optional sections are empty
  * when the file has none; a program that needs one says so (heron_robot
@@ -219,6 +270,12 @@ struct RigProfile {
   std::string source;    // where it was read from, for messages
   std::string name;      // [rig] name
   std::string platform;  // [rig] platform, one of kKnownPlatforms
+  std::string drive;     // [rig] drive, or empty: its surfaces' library folder
+  std::string surface;   // [rig] surface, or empty: the default surface
+  /** The rig's own [surface.*], then its drive's library's (loadRigProfile()). */
+  std::vector<SurfaceProfile> surfaces;
+  /** The surface onSurface() applied, or empty. */
+  std::string activeSurface;
   MotorProfile motor;
   std::optional<GeometryProfile> geometry;
   std::optional<LidarProfile> lidar;
@@ -252,6 +309,26 @@ struct RigProfile {
  * @throws std::runtime_error if the file cannot be read or breaks a rule
  */
 [[nodiscard]] RigProfile loadRigProfile(const std::filesystem::path &file);
+
+/**
+ * Parses a library surface file: "format = 1", one [surface.<name>] and
+ * optionally its [surface.<name>.calibration]; nothing else.
+ *
+ * @throws std::runtime_error naming source and line, for any broken rule
+ */
+[[nodiscard]] SurfaceProfile parseSurfaceFile(std::string_view text, const std::string &source);
+
+/** @return The surface of that name, or nullptr. */
+[[nodiscard]] const SurfaceProfile *findSurface(const RigProfile &profile, std::string_view name);
+
+/**
+ * The profile as seen on one floor (I22): [geometry] and [odometry] with
+ * the surface's values in place, activeSurface set. Sections the profile
+ * lacks stay absent.
+ *
+ * @throws std::invalid_argument if the profile has no surface of that name
+ */
+[[nodiscard]] RigProfile onSurface(const RigProfile &profile, const std::string &name);
 
 /**
  * @return true if name is a valid rig name: 1 to 32 of a-z, 0-9 and "-",
