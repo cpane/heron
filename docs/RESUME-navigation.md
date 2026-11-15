@@ -1,9 +1,9 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: design §19.4 step 4 (heading hold,
-"commanded but not moving", and `CutHold`) floor-checked on the bench
-rig and ready to merge; step 5 (the simulator and planner on the motion
-table) built on its own branch, to rebase after it. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16: design §19.4 steps 4 (heading hold,
+"commanded but not moving", `CutHold`; floor-checked) and 5 (the
+simulator and planner on the motion table; left diagonals measured)
+merged; next, step 6, Navigate in `heron_robot`. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -133,6 +133,14 @@ navigation, so SwC to Manual always takes over.
   (Chris, after the full-speed log showed the flicker). Kept although
   it stops about 9 cm earlier at full speed: none at 0.29 m/s, and
   re-centring the stick allows a creep.
+- **Step 5's design questions** (Chris, `navigation-cpp-design.md` §7.5
+  "As built, §19.4 step 5"): (1) `CourseKeeper` re-anchors only when the
+  right stick moves more than 10°, or the heading more than 10° after
+  the turn stick was used, never for drift (done); (2) measure the left
+  diagonals before weighing the clearance weight (measured the same
+  day; the weight is still to weigh); (4) step 6's Navigate loop shows
+  BLOCKED when the limiter has stopped the plan's command for more than
+  0.5 s, the planner and limiter unchanged.
 
 ## Picking up
 
@@ -444,71 +452,55 @@ navigation, so SwC to Manual always takes over.
    throttle scales the stick, so `stick +0.58` at throttle 0.6 is full
    stick. **Step 3 is done.**
 
-   **Step 4, built 2026-11-15 and floor-checked 2026-11-16, on
-   `feature/navigation-heading-hold`:** heading hold (P14,
+   **Step 4, merged 2026-11-16 (PR #73):** heading hold (P14,
    `HeadingHold`), "commanded but not moving" (`MotionWatch`,
-   `predictFromRest()`, `NOT_MOVING`; I23), and, after diagnosing the
-   flicker, `CutHold` (I24: while the limiter cuts, the command only
-   falls). `navigation-cpp-design.md` §7.5 "As built, §19.4 step 4"
-   has the numbers: a full strafe held within ±2.7° (Manual +9 to
-   +12°); strafing at a box, 22 cm at front and back wheels (was 10 and
-   12); on a block, `NOT_MOVING` 0.5 s after the first touch of the
-   stick; at a box at full speed 22.5 cm with no flicker (13 cm before,
-   with it), at 0.29 m/s 15 cm (14 before). All 26 host tests pass,
-   and every test on the Pi. **Step 4 is done.**
+   `predictFromRest()`, `NOT_MOVING`; I23), and `CutHold` (I24: while
+   the limiter cuts, the command only falls). Floor-checked on the
+   bench rig: a full strafe held within ±2.7° (Manual +9 to +12°);
+   strafing at a box, 22 cm at front and back wheels (was 10 and 12);
+   on a block, `NOT_MOVING` 0.5 s after the first touch of the stick;
+   at a box at full speed 22.5 cm with no flicker (13 cm before, with
+   it), at 0.29 m/s 15 cm (14 before). Numbers in
+   `navigation-cpp-design.md` §7.5 "As built, §19.4 step 4".
 
-   **Step 5, built on the host 2026-11-15 (`feature/navigation-sim-table`,
-   from develop, not pushed):** the simulated base moves by the table
-   (P17, `Base::commandFractions()`), the planner chooses commands (P15,
-   `PlannerConfig::motion`, `Plan::commandVx/Vy`), and the scenarios run
-   against the bench rig's hardwood (`tests/BenchTable.h`), Assisted
-   through `decide()` itself. All 26 host tests pass. Scenarios 2 and 5
-   pass as before; **four expectations are OPEN** (reported, not
-   counted, each with a limit a little worse than today that fails;
-   the user's choice, 2026-11-15): scenario 1's 15 cm and back-to-the-line, scenario 3's
-   sliding, scenario 4's Blocked. Each is a design question in
-   `navigation-cpp-design.md` §7.5 "As built, §19.4 step 5": Navigate
-   needs heading hold (P14, on `feature/navigation-heading-hold`); weak
-   sideways moves on the table; the 15° substitute window stops a
-   diagonal slide along a wall; planner and limiter disagree at a dead
-   end. Not yet run on the Pi.
+   **Step 5, merged 2026-11-16 (PR #74), host only:** the simulated
+   base moves by the table (P17), the planner chooses commands (P15),
+   the scenarios run against the hardwood (`tests/BenchTable.h`) with
+   heading hold and `CutHold` as `heron_robot` feeds them;
+   `CourseKeeper` re-anchors only for the right stick or after the turn
+   stick, never for drift (question 1, decided); the left diagonals
+   measured (`hardwood-1.conf` p23 to p26: forward-left drives forward
+   at forward's speeds, 0.03 m/s left, turning left about 8°/s).
+   Scenario results and the open questions: §7.5 "As built, §19.4 step
+   5". Three expectations print OPEN, each with a limit that fails if
+   it gets clearly worse: scenario 1's 15 cm pass (closest 109 mm) and
+   back-to-the-line (passed on the right, up to 412 mm off: left moves
+   are weak on this floor), scenario 4's Blocked. Note for measuring:
+   `heron_robot` prints the speed already in the robot frame
+   (PoseTracker); do not turn it by the heading again.
 
-   **Step 5 rebased onto develop 2026-11-16 (step 4 merged, PR #73),
-   not pushed:** every scenario drive now has heading hold and
-   `CutHold` as `heron_robot` feeds them. Scenario 3 slides at 0.28 m/s
-   and is a check again; scenario 1 ends within 10 cm of the line in 5
-   of 10 runs (was 2), the worst 474 mm off (was 1088), its limit
-   tightened to 0.6 m. Three expectations stay OPEN. The cause of the
-   rest of scenario 1: the planner avoids on exact 45° diagonals, where
-   heading hold can do nothing (§7.5 "As built, §19.4 step 5", question
-   1).
+   **Next, step 6: Navigate in `heron_robot`** (below, "Step 2,
+   Navigate", the original numbering): `CourseKeeper` and
+   `LocalPlanner` into the loop with SwC down, the plan's command
+   through `decide()`'s Assisted path as in `NavScenarioTest`'s
+   `NavRun::cycle` (heading hold and `CutHold` included, as in
+   `Run::drive`), and **BLOCKED on the status line when the limiter has
+   stopped the plan's command for more than 0.5 s** (question 4,
+   decided). Host first (tests in `robot_test`), then the Pi tests
+   (`scripts/deploy_cpp.sh <user>@<pi>`, no binary; then run each
+   `~/heron/bin/*_test`), then the floor (round a box and back to the
+   course, design §15), which needs the robot on and the user at it.
+   Before or alongside: question 2's clearance weight, on measured
+   numbers now, and how Navigate comes back left on a floor whose left
+   moves are weak (§7.5 step 5, questions 1 and 2) [design, with the
+   user].
 
-   Its design questions, decided 2026-11-16 (Chris): (1) `CourseKeeper`
-   re-anchors only for the right stick or after the turn stick, never
-   for drift: done, scenario 1's worst now 267 mm off (limit 0.35 m);
-   (2) measure the left diagonals before tuning the clearance weight;
-   (4) step 6's loop shows BLOCKED when the limiter has stopped the
-   plan's command for 0.5 s.
-
-   **Left diagonals measured 2026-11-16** (`hardwood-1.conf` p23 to
-   p26, log `captures/left-diagonals-hardwood-1-2026-11-16.log`):
-   forward-left drives forward at forward's speeds, 0.03 m/s left, and
-   turns left about 8°/s (Chris saw it curve left, about 45° a run).
-   Rerun: passing the box improved (closest 109 mm), coming back left
-   after passing on the right got worse (up to 412 mm off, limit reset
-   to 0.5 m); scenarios 2 and 3 improved. Note: `heron_robot` prints
-   the speed already in the robot frame (PoseTracker), so do not turn
-   it by the heading again.
-
-   **Next:** push and merge step 5 (when the user asks). Then question
-   2's clearance weight, now on measured numbers, and how Navigate
-   comes back left on a floor whose left moves are weak; then step 6,
-   Navigate in `heron_robot`, with BLOCKED as decided.
-
-   Found 2026-11-16, for the LiDAR workstream (its Inbox): the A1M8
-   twice refused to start Express (`cannot start scan mode 1`, every
-   program) while answering GET_INFO and health Good; one Standard scan
-   (`lidar_nearest --mode 0`) cleared it.
+   Before any floor session: `heron_teleop`'s autostart off
+   (`scripts/teleop_autostart.sh <user>@<pi> off`, the user runs it,
+   sudo), and check `heron_robot`'s start-up says `Assisted: ready`:
+   on 2026-11-16 the LiDAR sometimes refused Express and the OTOS once
+   failed to start after boot (both in their workstreams' Inboxes);
+   starting again cleared each.
 
    **Step 2, Navigate** (`navigation-cpp-design.md` §7, §8.7), after §19:
    `CourseKeeper` and `LocalPlanner` into `heron_robot`, SwC down; the
@@ -619,6 +611,24 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **Perception can skip a cell a ray crosses** (Bresenham from cell to
   cell, §8.9): seen only with rays started 0.2 m out, in a test; rays
   from one point covered every cell [unverified on recordings].
+- **Left moves are weak on the hardwood** (measured 2026-11-16): the
+  left diagonal makes 0.03 m/s left and turns left about 8°/s, the left
+  strafe moves only near full stick. How Navigate comes back left after
+  passing a box on its right is open (§7.5 step 5, questions 1 and 2).
+- **The clearance weight** (question 2) is to weigh on the measured
+  table; closest pass now 109 mm against the 15 cm preference.
+- **Heading hold cannot act on an exact 45° diagonal** (two wheels
+  stand still); the planner picks such diagonals to avoid. With the new
+  re-anchor rule the course is kept, but the heading drifts while on
+  one [unverified on the floor: seen in simulation].
+- **`CutHold` stops about 9 cm earlier at full speed** (22.5 against
+  13 cm, 2026-11-16), none at 0.29 m/s; once stopped, re-centring the
+  stick allows a creep. Accepted by the user.
+- **Step 5's code has not run on the Pi** [unverified]: host tests
+  only (26 pass); step 6 deploys it.
+- **The scenarios leave out `MotionWatch`:** the simulated OTOS is
+  never lifted, and pressed against a wall it might trip where the
+  floor has not shown it does [unverified].
 - **The simulated no-returns are random; real ones cluster** (runs of
   4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).
