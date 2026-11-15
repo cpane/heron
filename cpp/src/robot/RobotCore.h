@@ -317,6 +317,10 @@ struct AssistedInput {
   std::optional<double> holdRadps;
   /** MotionWatch tripped: the wheels were told to move and nothing moved. */
   bool notMoving{false};
+  /** CutHold::ceiling(): while holding, last cycle's translation.
+   *  decide() drives nothing the table says makes more, Clear included
+   *  (the table's path only; without a table there are no substitutes). */
+  std::optional<Drive::BodyVelocity> cutCeiling;
 };
 
 /** Why the wheels are what they are this cycle. */
@@ -355,6 +359,48 @@ struct Decision {
  */
 [[nodiscard]] Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
                               const AssistedInput *assisted);
+
+/**
+ * While the limiter cuts, the command only falls (design §19.4 step 4,
+ * floor check 2 again, 2026-11-16). Driven at a box at full speed, the
+ * limiter's answer changed cycle to cycle with the OTOS's speed noise
+ * (about +-0.03 m/s forward and +-0.07 sideways at speed), so the command
+ * jumped between nothing and something (0.50, 0, 0.29, 0, 0.39, 0.30, 0),
+ * and once a substitute 15 degrees off asked for more than the cycle
+ * before (0.75, then 0.97 -0.26). The stop was where it should be; the
+ * wheels were pulsed.
+ *
+ * CutHold holds from the first Cut, keeping each cycle's translation as
+ * the next one's ceiling (AssistedInput::cutCeiling), until the limiter
+ * has been Clear for kReleaseCycles in a row, the translation stick is
+ * centred, or it points more than kSubstituteWidthRad from where it did
+ * when the hold began: pulling back to get away is never held to the way
+ * in. One Clear is not enough: the same noise gives a single Clear between
+ * Cuts (the replay in RobotTest), and a lower command than the limiter
+ * allows is always safe. Use: ceiling() before decide(), update() after.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class CutHold {
+  public:
+    /** Clear cycles in a row that end a hold: 0.1 s at the loop's 20 ms. */
+    static constexpr int kReleaseCycles = 5;
+
+    /** @return the ceiling for this stick while holding, else nullopt */
+    [[nodiscard]] std::optional<Drive::BodyVelocity> ceiling(const Drive::BodyVelocity &stick) const noexcept;
+    /** What decide() gave for this stick, this cycle. */
+    void update(const Drive::BodyVelocity &stick, const Decision &decision) noexcept;
+    void reset() noexcept;
+    [[nodiscard]] bool holding() const noexcept;
+
+  private:
+    [[nodiscard]] bool along(const Drive::BodyVelocity &stick) const noexcept;
+
+    bool m_holding{false};
+    double m_directionRad{0.0};  // the translation stick's, when the hold began
+    int m_clears{0};             // Clear cycles in a row while holding
+    Drive::BodyVelocity m_last{};
+};
 
 }  // namespace Heron::Robot
 

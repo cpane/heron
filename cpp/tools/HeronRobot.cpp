@@ -23,7 +23,9 @@
 //             stick centred, heading hold keeps the heading while it
 //             moves (P14). Told to move while the OTOS sees nothing for
 //             half a second (lifted, or stuck), it stops (NOT_MOVING)
-//             until the stick is centred.
+//             until the stick is centred. Once the limiter cuts, the
+//             command only falls until it has been clear for 0.1 s
+//             (CutHold), so a noisy speed cannot pulse the wheels.
 //   Navigate  not built yet (step 2): stops.
 //
 // Its decisions are in src/robot/RobotCore.h, tested by robot_test; this
@@ -261,6 +263,7 @@ int main(int argc, char **argv) {
       profile.geometry.value_or(Heron::Profile::GeometryProfile{});
   Heron::Robot::HeadingHold hold;
   Heron::Robot::MotionWatch watch;
+  Heron::Robot::CutHold cutHold;
   Heron::Drive::BodyVelocity lastBody;  // what the wheels were told last cycle
   Mode shownMode = Mode::Manual;
   Why shownWhy = Why::Disarmed;
@@ -298,7 +301,8 @@ int main(int argc, char **argv) {
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
         assisted = Heron::Robot::AssistedInput{
             limiter.get(), geometry, motion ? &*motion : nullptr,
-            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt};
+            Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt, false,
+            std::nullopt};
         // Heading hold (P14): with the turn stick centred and a translation
         // asked for, its rate stands in for the stick's turn.
         const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
@@ -315,13 +319,17 @@ int main(int argc, char **argv) {
         assisted.notMoving = watch.update(std::hypot(expected.vx, expected.vy),
                                           std::hypot(p.newest.velocity.vx, p.newest.velocity.vy),
                                           translating, now);
+        // While the limiter cuts, the command only falls (CutHold).
+        assisted.cutCeiling = cutHold.ceiling(stick);
       }
       if (!armed || mode != Mode::Assisted || !ready) {
         hold.reset();
         watch.reset();
+        cutHold.reset();
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, stick, ready ? &assisted : nullptr);
+      cutHold.update(stick, d);
 
       lastBody = armed && d.why == Why::Limited ? d.body : Heron::Drive::BodyVelocity{};
       if (armed && (d.why == Why::Manual || d.why == Why::Limited)) {

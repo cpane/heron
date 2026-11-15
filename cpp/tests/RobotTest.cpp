@@ -28,6 +28,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -258,7 +259,8 @@ int main() {
   const Scan far = wallAhead(3.0, lidarAt, t0);
   const auto assistedWith = [&](const Scan *scan) {
     return AssistedInput{&limiter, geometry, nullptr,
-                         Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}, std::nullopt};
+                         Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}, std::nullopt, false,
+                         std::nullopt};
   };
 
   std::printf("Manual is heron_teleop (D5)\n");
@@ -373,7 +375,8 @@ int main() {
 
     const auto through = [&](const Scan *scan, bool fresh) {
       return AssistedInput{&limiter, hw.geometry.value(), &*table,
-                           Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}, std::nullopt};
+                           Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}, std::nullopt,
+                           false, std::nullopt};
     };
     const AssistedInput open = through(&far, true);
     Decision d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &open);
@@ -467,6 +470,113 @@ int main() {
       d = decide(Mode::Assisted, true, BodyVelocity{0.5, 0.0, 0.0}, &heldBare);
       check("no table: the hold's turn as well",
             near(d.body.wz, holdFraction(0.3, d.body, heldBare.geometry), 1e-12) && d.body.wz > 0.0);
+    }
+
+    std::printf("While cutting, the command only falls (CutHold, 2026-11-16)\n");
+    {
+      const auto limitedBy = [](Heron::Limiter::Reason reason, BodyVelocity body) {
+        Decision out;
+        out.body = body;
+        out.why = Why::Limited;
+        out.limited = Heron::Limiter::LimitResult{};
+        out.limited->reason = reason;
+        return out;
+      };
+      const BodyVelocity forward{1.0, 0.0, 0.0};
+      CutHold cut;
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Slowed, BodyVelocity{0.6, 0.0, 0.0}));
+      check("Slowed alone: no hold", !cut.holding() && !cut.ceiling(forward));
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Cut, BodyVelocity{0.75, 0.0, 0.0}));
+      check("the first Cut: holds, last cycle's translation the ceiling",
+            cut.holding() && cut.ceiling(forward) && same(*cut.ceiling(forward), BodyVelocity{0.75, 0.0, 0.0}, 1e-12));
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Slowed, BodyVelocity{0.5, 0.0, 0.0}));
+      check("  Slowed after it: still holds, the new ceiling", cut.holding() && near(cut.ceiling(forward)->vx, 0.5, 1e-12));
+      check("  a stick 10 degrees off: the same ceiling",
+            cut.ceiling(BodyVelocity{std::cos(0.17), std::sin(0.17), 0.0}).has_value());
+      check("  pulled back (180 degrees): no ceiling", !cut.ceiling(BodyVelocity{-0.5, 0.0, 0.0}));
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Clear, BodyVelocity{0.5, 0.0, 0.0}));
+      check("one Clear between Cuts: still holds", cut.holding());
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Cut, BodyVelocity{0.5, 0.0, 0.0}));
+      for (int i = 0; i < CutHold::kReleaseCycles - 1; ++i) {
+        cut.update(forward, limitedBy(Heron::Limiter::Reason::Clear, BodyVelocity{0.5, 0.0, 0.0}));
+      }
+      check("  Clear 4 cycles in a row: still holds", cut.holding());
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Clear, BodyVelocity{0.5, 0.0, 0.0}));
+      check("  the 5th (0.1 s): let go", !cut.holding());
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Cut, BodyVelocity{0.4, 0.0, 0.0}));
+      cut.update(BodyVelocity{}, limitedBy(Heron::Limiter::Reason::Cut, BodyVelocity{}));
+      check("the translation stick centred: let go", !cut.holding());
+      cut.update(forward, limitedBy(Heron::Limiter::Reason::Cut, BodyVelocity{0.4, 0.0, 0.0}));
+      cut.update(BodyVelocity{0.0, -1.0, 0.0}, limitedBy(Heron::Limiter::Reason::Slowed, BodyVelocity{0.0, -0.5, 0.0}));
+      check("turned 90 degrees and only Slowed: let go", !cut.holding());
+
+      const Scan box = wallAhead(0.45, lidarAt, t0);
+      AssistedInput toBox = through(&box, true);
+      toBox.limit.measured = Twist{0.36, 0.0, 0.0};
+      const Decision free = decide(Mode::Assisted, true, forward, &toBox);
+      toBox.cutCeiling = BodyVelocity{0.0, 0.0, 0.0};
+      d = decide(Mode::Assisted, true, forward, &toBox);
+      check("box at 0.45 m, the ceiling nothing: stopped, still LIMITED",
+            stopped(d.wheels) && d.why == Why::Limited);
+      toBox.cutCeiling = BodyVelocity{0.25, 0.0, 0.0};
+      d = decide(Mode::Assisted, true, forward, &toBox);
+      const auto speedOf = [&](const BodyVelocity &b) {
+        const Twist m = table->predict(b.vx, b.vy);
+        return std::hypot(m.vx, m.vy);
+      };
+      std::printf("        box at 0.45 m doing 0.36: %s, free (%.2f, %.2f) makes %.3f; ceiling 0.25 gives (%.2f, %.2f)\n",
+                  Heron::Limiter::toString(free.limited->reason), free.body.vx, free.body.vy, speedOf(free.body),
+                  d.body.vx, d.body.vy);
+      check("  a ceiling below what it would drive: the ceiling's command, or nothing",
+            speedOf(d.body) <= speedOf(BodyVelocity{0.25, 0.0, 0.0}) + 1e-9);
+      AssistedInput openCeiling = through(&far, true);
+      openCeiling.cutCeiling = BodyVelocity{0.5, 0.0, 0.0};
+      d = decide(Mode::Assisted, true, forward, &openCeiling);
+      check("Clear while holding: held to the ceiling too",
+            d.limited->reason == Heron::Limiter::Reason::Clear && same(d.body, BodyVelocity{0.5, 0.0, 0.0}, 1e-12));
+      openCeiling.cutCeiling.reset();
+      d = decide(Mode::Assisted, true, forward, &openCeiling);
+      check("  no hold: the stick as it is", same(d.body, forward, 1e-12));
+
+      // Check 2 again (2026-11-16) replayed: full forward at a box, closing
+      // 1 cm a cycle from 0.60 m, the OTOS's speed alternating 0.33 and 0.39
+      // as it read. Without the hold the output rose again while cutting;
+      // with it, it only falls.
+      const auto approach = [&](bool withHold) {
+        CutHold replay;
+        int rises = 0;
+        double last = -1.0;
+        bool cutting = false;
+        for (int i = 0; i <= 40; ++i) {
+          const Scan at = wallAhead(0.60 - 0.01 * i, lidarAt, t0);
+          AssistedInput in = through(&at, true);
+          in.limit.measured = Twist{(i % 2 == 0) ? 0.33 : 0.39, (i % 2 == 0) ? 0.05 : -0.05, 0.0};
+          if (withHold) {
+            in.cutCeiling = replay.ceiling(forward);
+          }
+          const Decision step = decide(Mode::Assisted, true, forward, &in);
+          replay.update(forward, step);
+          cutting = cutting || step.limited->reason == Heron::Limiter::Reason::Cut;
+          const double now = speedOf(step.body);
+          if (std::getenv("HERON_CUT_TRACE") != nullptr) {
+            std::printf("          %d %.2f m  %s  (%.2f, %.2f) makes %.3f%s\n", withHold ? 1 : 0, 0.60 - 0.01 * i,
+                        Heron::Limiter::toString(step.limited->reason), step.body.vx, step.body.vy, now,
+                        in.cutCeiling ? " ceiling" : "");
+          }
+          if (cutting && last >= 0.0 && now > last + 1e-9) {
+            ++rises;
+          }
+          if (cutting) {
+            last = now;
+          }
+        }
+        return rises;
+      };
+      const int risesBefore = approach(false);
+      const int risesAfter = approach(true);
+      std::printf("        replay of check 2: %d rises while cutting without the hold, %d with it\n", risesBefore,
+                  risesAfter);
+      check("check 2 replayed: once cutting, the command never rises", risesAfter == 0);
     }
 
     std::printf("Commanded but not moving (design §19.4 step 4)\n");
