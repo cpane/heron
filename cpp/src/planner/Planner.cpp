@@ -168,7 +168,7 @@ Plan Planner::plan(const PlanInput &input) {
         }
         if (nearlyStill) {  // must start a still robot (header)
           const Geometry::Twist start = table.predictFromRest(cx, cy);
-          if (std::hypot(start.vx, start.vy) < Motion::kStallMps) {
+          if (std::hypot(start.vx, start.vy) < kStartMps) {
             continue;
           }
         }
@@ -176,7 +176,10 @@ Plan Planner::plan(const PlanInput &input) {
         moved = true;
         const bool reachable = std::abs(made.vx - input.measured.vx) <= reach + 1e-9 &&
                                std::abs(made.vy - input.measured.vy) <= reach + 1e-9;
-        if (speed > speedCap + 1e-9 || !(reachable || smallest)) {
+        // Nearly still, a direction's smallest command that starts it may
+        // be faster than the course asks: nothing slower can (header).
+        const bool overCap = speed > speedCap + 1e-9 && !(nearlyStill && smallest);
+        if (overCap || !(reachable || smallest)) {
           continue;
         }
         Candidate c{Geometry::Twist{made.vx, made.vy, course.turnRateRadps + made.wz}, cx, cy};

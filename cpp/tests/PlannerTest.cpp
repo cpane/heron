@@ -512,9 +512,9 @@ int main() {
     const Twist start = table->predictFromRest(plan.commandVx, plan.commandVy);
     std::printf("        command (%.2f, %.2f), from rest %.3f m/s\n", plan.commandVx, plan.commandVy,
                 std::hypot(start.vx, start.vy));
-    check("still: the command chosen starts the robot from rest",
+    check("still: the command chosen starts the robot from rest, at kStartMps or more",
           (plan.commandVx != 0.0 || plan.commandVy != 0.0) &&
-              std::hypot(start.vx, start.vy) >= Heron::Motion::kStallMps);
+              std::hypot(start.vx, start.vy) >= Heron::Planner::kStartMps);
     Planner rolling(still);
     plan = rolling.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.06, 0.0}));
     print("a slow course to the left, rolling at 0.06", plan);

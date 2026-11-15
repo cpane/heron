@@ -50,11 +50,16 @@
 // makes even the smallest command faster than the window reaches (forward
 // 0.19 m/s, against 0.18), and without it Heron could never start.
 // Nearly still (measured under kNearlyStillMps), a command must also start
-// the robot from rest (MotionTable::predictFromRest(), the points as
-// measured, stalls included): rolling, a small command keeps the robot
-// going, but from rest it may not move it at all, and on 2026-11-16
-// Navigate slowed onto small left commands the robot could not start
-// from, and stood with the stick held. The plan then carries the command
+// the robot from rest at kStartMps or more (MotionTable::predictFromRest(),
+// the points as measured, stalls included): rolling, a small command keeps
+// the robot going, but from rest it may not move it at all, and on
+// 2026-11-16 Navigate slowed onto small left commands the robot could not
+// start from, and stood with the stick held; then, with only "moves at
+// all" required, onto right at 0.4, measured at 0.08 m/s, and stood again.
+// Nearly still, a direction's smallest such command is kept even when it is
+// faster than the course asks (I13's one exception, as forward's dead band
+// already makes 0.19 m/s of any stick): a slow course would otherwise
+// leave nothing, and Heron would stand. The plan then carries the command
 // chosen (I19), and Navigate drives that.
 // "Straight" is any candidate whose predicted motion runs within 5 degrees
 // of the course. Without a table, as above.
@@ -103,6 +108,13 @@ inline constexpr double kCellSlackM = 0.0833;
 /** Measured slower than this, m/s, Heron is nearly still: with a table,
  *  only commands that start it from rest are candidates (header). */
 inline constexpr double kNearlyStillMps = 0.05;
+
+/** Nearly still, a candidate must start Heron from rest at this, m/s, or
+ *  more (MotionTable::predictFromRest()): a command measured just above
+ *  the dead band does not start it every time (2026-11-16: right at 0.4,
+ *  measured 0.08 m/s, left it standing). The same speed as MotionWatch's
+ *  expectMps. */
+inline constexpr double kStartMps = 0.10;
 
 /** Design §8.2's starting weights; tuned in the simulator (design §18, 3). */
 struct ScoreWeights {
