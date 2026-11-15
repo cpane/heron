@@ -45,7 +45,9 @@
 // An expectation the robot as measured does not meet yet, for a reason
 // that is a design question, is reported OPEN with the reason (open()),
 // at the same threshold, and not counted as a failure; the summary counts
-// them. Everything about safety stays a check.
+// them. Each OPEN also has a limit a little worse than today's result,
+// and past the limit it fails: a change that makes it clearly worse is
+// caught, not printed. Everything about safety stays a check.
 //
 // To look into a run: HERON_SCENARIO_DEBUG=1 lists scenario 2's runs that
 // came within 3 cm, with their start; HERON_SCENARIO_TRACE=<run> prints
@@ -108,12 +110,20 @@ std::int32_t s_open = 0;
 
 /** A scenario's expectation that the robot as measured does not meet yet,
  *  for a reason that is a design question (navigation-cpp-design.md §7.5
- *  as built, step 5): checked against the same threshold, printed PASS or
- *  OPEN, never counted as a failure. Each says why it is open. */
-void open(const char *what, bool ok, const char *why) {
+ *  as built, step 5): checked against the same threshold and printed PASS
+ *  or OPEN, not counted as a failure. Each says why it is open, and has a
+ *  limit, set a little worse than the result when it was opened: past the
+ *  limit it is a FAIL. */
+void open(const char *what, bool ok, const char *limit, bool withinLimit, const char *why) {
+  if (!withinLimit) {
+    std::printf("  FAIL  %s, and past its limit: %s\n", what, limit);
+    ++s_failures;
+    return;
+  }
   std::printf("  %s  %s\n", ok ? "PASS" : "OPEN", what);
   if (!ok) {
     std::printf("        open: %s\n", why);
+    std::printf("        limit: %s\n", limit);
     ++s_open;
   }
 }
@@ -469,19 +479,25 @@ int main() {
     }
     bool reached = true;
     bool spare = true;
+    bool spareLimit = true;
     bool back = true;
+    bool backLimit = true;
     bool uncut = true;
     for (const BoxRun &b : runs) {
       reached = reached && b.reached;
       spare = spare && b.closest >= 0.15;
+      spareLimit = spareLimit && b.closest >= 0.10;  // 124 mm when opened
       back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
+      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 1.25;  // 1088 mm when opened
       uncut = uncut && b.cut == 0;
     }
     check("every run reached 4.5 m along", reached);
     open("passed the box with at least 15 cm to spare, every run", spare,
+         "at least 10 cm, every run", spareLimit,
          "the planner's 15 cm is a preference, and on the table its sideways moves are weak "
          "(a diagonal makes half its sideways part, left has no measured diagonal)");
     open("back within 10 cm of the line 2 m past it, every run", back,
+         "within 1.25 m of it, every run", backLimit,
          "no heading hold in Navigate yet (P14): the table's drift turns Heron past 10 degrees, "
          "CourseKeeper re-anchors the line where Heron is, and the old line is lost");
     check("the limiter cut none of the planner's choices (I11)", uncut);
@@ -607,7 +623,9 @@ int main() {
                 xAt6, 1000.0 * gap, 1000.0 * worst, (xAt6 - xAt4) / 2.0, backingOff);
     check("never touched the wall", worst > 0.0);
     check("closed in on it: within the 25 cm slow zone", gap < 0.25);
+    // 0.14 m/s when opened.
     open("kept sliding: over 0.25 m/s along it over the last 2 s", (xAt6 - xAt4) / 2.0 > 0.25,
+         "over 0.10 m/s", (xAt6 - xAt4) / 2.0 > 0.10,
          "pushed diagonally into the wall, no command within 15 degrees of the stick keeps off it "
          "(each moves toward the wall), so Assisted stops beside it; the drift turns Heron toward it too");
   }
@@ -638,7 +656,10 @@ int main() {
                 "%d plans blocked\n",
                 Heron::Planner::toString(last), 1000.0 * gap, nav.run.speed(), 1000.0 * closest,
                 nav.blocked);
+    // AVOIDING when opened.
     open("Blocked", last == Heron::Planner::State::Blocked,
+         "Avoiding or Blocked, never Following or Stopped",
+         last == Heron::Planner::State::Blocked || last == Heron::Planner::State::Avoiding,
          "the planner keeps a small command it imagines safe, and the limiter, told the table's "
          "speed x 1.2, refuses it: stopped, but the plan says Avoiding; the dead band leaves "
          "nothing slow enough to creep on");

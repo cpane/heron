@@ -1327,7 +1327,12 @@ from the interfaces above:
   part up to ±0.35, scenario 3 holds (0.9, 0.4), scenario 5 0.8.
 
 **Results** (`nav_scenario_test`; an expectation the robot as measured
-does not meet is reported OPEN at the same threshold and not counted):
+does not meet is reported OPEN at the same threshold and not counted, but
+each has a limit a little worse than its result here, and past the limit
+it fails, so a change that makes it clearly worse is caught: closest pass
+at least 10 cm; within 1.25 m of the line 2 m past the box; sliding over
+0.10 m/s; at the dead end Avoiding or Blocked, never Following or
+Stopped. The user chose OPEN with limits over failing, 2026-11-15):
 
 | Scenario | Result |
 |---|---|

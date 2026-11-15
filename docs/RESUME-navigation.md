@@ -118,6 +118,14 @@ navigation, so SwC to Manual always takes over.
   library of known surfaces. I17 to I22 (the interfaces) accepted the
   same day, I18 revised to points as measured. Reviewed on https://claude.ai/artifact/ECtmNj6ostveAPR7jyvpBU.
 
+## Decided (2026-11-15)
+
+- **The scenarios' unmet expectations print OPEN, each with a limit**
+  (Chris): reported at their threshold and not counted, so the suite
+  stays green, but past a limit a little worse than today's result
+  they fail (`navigation-cpp-design.md` §7.5, "As built, §19.4 step
+  5"). Chosen over letting them fail until fixed.
+
 ## Decided (2026-11-16)
 
 - **`CutHold` (I24):** while the limiter cuts, the command only falls,
@@ -456,7 +464,8 @@ navigation, so SwC to Manual always takes over.
    against the bench rig's hardwood (`tests/BenchTable.h`), Assisted
    through `decide()` itself. All 26 host tests pass. Scenarios 2 and 5
    pass as before; **four expectations are OPEN** (reported, not
-   counted): scenario 1's 15 cm and back-to-the-line, scenario 3's
+   counted, each with a limit a little worse than today that fails;
+   the user's choice, 2026-11-15): scenario 1's 15 cm and back-to-the-line, scenario 3's
    sliding, scenario 4's Blocked. Each is a design question in
    `navigation-cpp-design.md` §7.5 "As built, §19.4 step 5": Navigate
    needs heading hold (P14, on `feature/navigation-heading-hold`); weak
