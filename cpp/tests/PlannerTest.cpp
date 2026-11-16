@@ -296,7 +296,13 @@ int main() {
     ObstacleMap map = emptyMap();
     seeFree(map);
     seeBox(map, centre, 0.3, 0.3);
-    Planner planner(config);
+    // Design §8.2's starting weights: the defaults were tuned with the
+    // hardwood's table (2026-11-16), and with them this speeds-only plan,
+    // used by no rig with a table, slows straight at the box instead.
+    PlannerConfig starting = config;
+    starting.weights.offLine = 1.0;
+    starting.weights.change = 0.5;
+    Planner planner(starting);
     const Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3), Twist{0.3, 0.0, 0.0}));
     print("box ahead", plan);
     const double truth = trueClearance(plan, body, boxPoints(centre, 0.3, 0.3));
