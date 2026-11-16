@@ -178,9 +178,16 @@ navigation, so SwC to Manual always takes over.
       (`navigate-smooth*-2026-11-16.log`): the first swung between
       commands 0.1 and 1.0 (fixed); the second crawled under 0.15 m/s for
       about 5 s, the plan changing direction every cycle, and ran out of
-      room past the box. If the crawl stays, the next suspect is the
-      change score's weight. Boot service off first
-      (`scripts/robot_autostart.sh <user>@<pi> off`), on again after.
+      room past the box. **Driven 2026-11-16 with the fresh table**
+      (`navigate-fresh2-2026-11-16.log`, box centred): from rest at 0.4,
+      0.50 m/s within a second; round the box on its right at full
+      speed, the plan's clearance 5 to 8 cm; on past a second object;
+      never Blocked. One hesitation left: about 1.5 s nearly still in
+      front of the box, choosing between a right and a left strafe; the
+      change score's weight is the suspect [unverified]. A run before it
+      (`navigate-fresh-…`) is void: the OTOS restarted while the robot
+      was carried (1, below). Still to do: the box 10 cm left of the line
+      (the side the simulator passes closest).
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
