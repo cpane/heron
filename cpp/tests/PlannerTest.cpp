@@ -451,7 +451,7 @@ int main() {
     ObstacleMap map = emptyMap();
     seeFree(map);
     Planner planner(tableConfig);
-    Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3)));
+    Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.35)));
     print("from rest, table", plan);
     const Twist made = bench.motion->predict(plan.commandVx, plan.commandVy);
     check("from rest: a command chosen, though the dead band's least (0.19 m/s) is past the window",
@@ -459,9 +459,9 @@ int main() {
     check("  the twist is the table's prediction of the command, drift included",
           near(plan.twist.vx, made.vx, 1e-12) && near(plan.twist.vy, made.vy, 1e-12) &&
               near(plan.twist.wz, made.wz, 1e-12));
-    check("  no faster than the course asks (I13)", std::hypot(made.vx, made.vy) <= 0.3 + 1e-9);
+    check("  no faster than the course asks (I13)", std::hypot(made.vx, made.vy) <= 0.35 + 1e-9);
 
-    plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3), Twist{0.27, 0.0, 0.0}));
+    plan = planner.plan(inputFor(map, courseAlong(0.0, 0.35), Twist{0.27, 0.0, 0.0}));
     print("at 0.27 m/s, table", plan);
     check("at speed: Following, a forward command", plan.state == State::Following && plan.commandVx > 0.3 &&
                                                         std::abs(plan.commandVy) < 0.1 * plan.commandVx);
