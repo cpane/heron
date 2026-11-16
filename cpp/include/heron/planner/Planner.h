@@ -45,10 +45,15 @@
 // Directions every 15 degrees, sizes 0.1 to 1.0 in 0.1, each imagined as
 // the table predicts it, drift and all, plus the course's turn rate; kept
 // if no faster than the course asks (I13) and within accelMps2 x windowS
-// of the measured speed on each axis. A direction's smallest command that
-// moves is kept whatever the window says: from rest the motors' dead band
-// makes even the smallest command faster than the window reaches (forward
-// 0.19 m/s, against 0.18), and without it Heron could never start.
+// of the measured speed on each axis. A command short of the first size
+// measured to move in its direction is never a candidate, rolling or
+// still: the table lifts it to that size's motion (for the limiter), so it
+// looks as good, and on 2026-11-16 Navigate chose left at 0.1 rolling and
+// 1.0 nearly still, swinging between them round a box. A direction's
+// smallest command that moves is kept whatever the window says: from rest
+// the motors' dead band makes even the smallest command faster than the
+// window reaches (forward 0.19 m/s, against 0.18), and without it Heron
+// could never start.
 // Nearly still (the OTOS's velocity, or the pose's movement over
 // kMovedWindow, under kNearlyStillMps), a command must also start
 // the robot from rest at kStartMps or more (MotionTable::predictFromRest(),

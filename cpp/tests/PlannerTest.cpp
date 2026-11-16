@@ -526,6 +526,10 @@ int main() {
     print("a slow course to the left, rolling at 0.20", plan);
     check("  rolling: a small command that would not start it is still allowed",
           plan.commandVy > 0.0 && plan.commandVy <= 0.6 + 1e-9);
+    // Short of the left's first size seen to move (0.6), the lifted
+    // prediction reads 0.6's motion: on the floor (2026-11-16) Navigate then
+    // chose 0.1, and swung between it and 1.0 as it crossed kNearlyStillMps.
+    check("  but never short of the size measured to move (0.6)", plan.commandVy >= 0.6 - 1e-9);
     // The OTOS reading a speed with the robot standing (2026-11-16): the
     // pose not moving says still.
     Planner phantom(still);
