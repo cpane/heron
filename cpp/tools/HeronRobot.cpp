@@ -343,6 +343,7 @@ int main(int argc, char **argv) {
   Heron::Planner::CourseKeeper keeper;
   Heron::Robot::BlockedWatch blockedWatch;
   Heron::Robot::OtosRecovery otosRecovery;
+  Heron::Robot::LidarStill lidarStill;  // for OtosRecovery: still by the LiDAR
   std::future<bool> otosRestart;  // valid while a restart runs, off the loop
   bool coursing = false;                // a course was last given to the planner
   Mode lastMode = Mode::Manual;         // last cycle's, to start afresh on a change
@@ -442,12 +443,19 @@ int main(int argc, char **argv) {
           std::printf("-- OTOS restart %s%s\n", ok ? "done" : "FAILED: ",
                       ok ? "" : odometry->getHealth().lastError.c_str());
         }
-        const bool centred = stick.vx == 0.0 && stick.vy == 0.0 && stick.wz == 0.0;
+        const Heron::Pose::PoseSnapshot p = pose->getLatest();
+        Heron::Robot::OtosRecovery::Input in;
+        in.poseFresh = p.fresh;
+        in.tilt = p.tiltWarning;
+        in.turnRadps = p.newest.velocity.wz;
+        in.sticksCentred = stick.vx == 0.0 && stick.vy == 0.0 && stick.wz == 0.0;
+        // No LiDAR: centred sticks stand in for still, as before.
+        in.still = lidar ? lidarStill.update(lidar->getLatest()) : true;
         const bool forced = forcedRestartAt && now >= *forcedRestartAt;
-        if ((otosRecovery.update(pose->getLatest().fresh, centred, now) || forced) && !otosRestart.valid()) {
+        if ((otosRecovery.update(in, now) || forced) && !otosRestart.valid()) {
           forcedRestartAt.reset();
           std::printf("-- OTOS: %s, restarting it (keep the robot still)\n",
-                      forced ? "--test-otos-restart" : "pose not fresh for 2 s");
+                      forced ? "--test-otos-restart" : otosRecovery.why());
           Heron::Odometry::Odometry *o = odometry.get();
           otosRestart = std::async(std::launch::async, [o] {
             o->stop();
@@ -541,6 +549,9 @@ int main(int argc, char **argv) {
                         p.fresh ? "" : " (not fresh)", p.trackingWarning ? " TRACKING" : "",
                         p.tiltWarning ? " TILT" : "");
           speedText = text;
+          if (lidar && !lidarStill.still()) {  // OtosRecovery waits for still
+            speedText += "  view moving";
+          }
           if (p.epoch > 1) {  // the OTOS restarted: a new odom frame (I8)
             speedText += "  epoch " + std::to_string(p.epoch);
           }

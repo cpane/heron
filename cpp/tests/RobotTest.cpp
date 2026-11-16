@@ -710,45 +710,110 @@ int main() {
     check("  cleared when the plan asks for nothing", !watch.update(false, false, t0 + 2000ms));
   }
 
+  std::printf("Still by the LiDAR (2026-11-16)\n");
+  {
+    const auto scanAt = [](double dx, std::uint64_t seq, TimePoint end) {
+      Scan scan = wallAhead(1.0, Vec2{dx, 0.0}, end);
+      scan.seq = seq;
+      return std::make_shared<const Scan>(scan);
+    };
+    const std::optional<double> moved = scanChange(*scanAt(0.0, 1, t0), *scanAt(0.05, 2, t0));
+    check("scanChange: the wall 5 cm nearer reads about 5 cm", moved && near(*moved, 0.05, 0.005));
+    Scan few;
+    few.points.push_back(Heron::Point{0.0f, 1.0f});
+    check("  too few sectors to compare: nothing", !scanChange(few, few));
+
+    LidarStill none;
+    check("no scan: not still", !none.update(nullptr));
+    LidarStill standing;
+    bool at900 = true;
+    bool at1100 = false;
+    for (std::uint64_t k = 0; k <= 8; ++k) {  // a scan every 137 ms, 1 mm of noise
+      const bool s = standing.update(scanAt(k % 2 == 0 ? 0.0 : 0.001, k + 1, t0 + k * 137ms));
+      at900 = k == 6 ? s : at900;   // 822 ms after the first
+      at1100 = k == 8 ? s : at1100; // 1096 ms
+    }
+    check("standing: not still before 1 s of scans", !at900);
+    check("  still after it", at1100);
+    check("  the same scan again changes nothing", standing.update(scanAt(0.001, 9, t0 + 8 * 137ms)));
+    LidarStill carried;
+    bool any = false;
+    for (std::uint64_t k = 0; k <= 30; ++k) {  // 1 cm a scan, about 0.07 m/s, for 4 s
+      any = carried.update(scanAt(0.01 * static_cast<double>(k), k + 1, t0 + k * 137ms)) || any;
+    }
+    check("carried slowly: never still (each scan against the first of the run)", !any);
+  }
+
   std::printf("The OTOS restarted after a lift (2026-11-16)\n");
   {
+    using In = OtosRecovery::Input;
+    const In healthy{true, false, 0.0, true, true};
     OtosRecovery r;
     bool any = false;
-    for (int i = 0; i < 100; ++i) {  // 2 s: fresh throughout
-      any = r.update(true, true, t0 + i * 20ms) || any;
+    for (int i = 0; i < 300; ++i) {  // 6 s: fresh and still throughout
+      any = r.update(healthy, t0 + i * 20ms) || any;
     }
-    check("fresh: never", !any);
+    check("fresh, still, no turn read: never", !any);
     OtosRecovery lift;
     any = false;
     for (int i = 0; i <= 15; ++i) {  // not fresh 0.3 s, as earlier lifts cleared
-      any = lift.update(false, true, t0 + i * 20ms) || any;
+      any = lift.update(In{false, false, 0.0, true, true}, t0 + i * 20ms) || any;
     }
     for (int i = 16; i < 200; ++i) {
-      any = lift.update(true, true, t0 + i * 20ms) || any;
+      any = lift.update(healthy, t0 + i * 20ms) || any;
     }
     check("not fresh 0.3 s, then fresh: never", !any);
     OtosRecovery stuck;
     int firstAt = -1;
     int count = 0;
-    for (int i = 0; i <= 600; ++i) {  // 12 s not fresh, sticks centred
-      if (stuck.update(false, true, t0 + i * 20ms)) {
+    for (int i = 0; i <= 600; ++i) {  // 12 s not fresh, sticks centred, still
+      if (stuck.update(In{false, false, 0.0, true, true}, t0 + i * 20ms)) {
         firstAt = firstAt < 0 ? i : firstAt;
         ++count;
       }
     }
-    check("not fresh 2 s, sticks centred: restarts at 2 s", firstAt == 100);
+    check("not fresh 2 s, sticks centred, still: restarts at 2 s", firstAt == 100);
     check("  then no more than one every 5 s (at 2, 7, 12 s)", count == 3);
     OtosRecovery driving;
     any = false;
     for (int i = 0; i <= 300; ++i) {  // 6 s not fresh, a stick held
-      any = driving.update(false, false, t0 + i * 20ms) || any;
+      any = driving.update(In{false, false, 0.0, false, true}, t0 + i * 20ms) || any;
     }
     check("a stick held: never", !any);
     int at = -1;
     for (int i = 301; i <= 400 && at < 0; ++i) {
-      at = driving.update(false, true, t0 + i * 20ms) ? i : -1;
+      at = driving.update(In{false, false, 0.0, true, true}, t0 + i * 20ms) ? i : -1;
     }
     check("  centred: after 1 s of it", at == 351);
+    // navigate-fresh-2026-11-16: not fresh while carried, sticks centred.
+    OtosRecovery carried;
+    any = false;
+    for (int i = 0; i <= 300; ++i) {  // 6 s carried
+      any = carried.update(In{false, false, 0.0, true, false}, t0 + i * 20ms) || any;
+    }
+    check("carried (the LiDAR not still), sticks centred: never", !any);
+    check("  put down and still: at once", carried.update(In{false, false, 0.0, true, true}, t0 + 6020ms));
+    // ...where the first version restarted, and the OTOS came back reading
+    // a turn of -0.19 rad/s, and TILT, standing.
+    OtosRecovery badStart;
+    at = -1;
+    for (int i = 0; i <= 100 && at < 0; ++i) {
+      at = badStart.update(In{true, false, -0.19, true, true}, t0 + i * 20ms) ? i : -1;
+    }
+    check("fresh but a turn of -0.19 rad/s read standing: restarts after 1 s", at == 50);
+    check("  says why", std::string(badStart.why()).find("turn") != std::string::npos);
+    OtosRecovery tilted;
+    at = -1;
+    for (int i = 0; i <= 100 && at < 0; ++i) {
+      at = tilted.update(In{true, true, 0.0, true, true}, t0 + i * 20ms) ? i : -1;
+    }
+    check("TILT standing: restarts after 1 s", at == 50);
+    OtosRecovery turning;
+    any = false;
+    for (int i = 0; i <= 300; ++i) {  // a real turn, or TILT while driving: the LiDAR not still
+      any = turning.update(In{true, true, -0.8, true, false}, t0 + i * 20ms) || any;
+    }
+    check("a turn or TILT while the LiDAR sees motion: never", !any);
   }
 
   std::printf("Disarmed\n");
