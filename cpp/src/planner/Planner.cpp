@@ -165,14 +165,15 @@ Plan Planner::plan(const PlanInput &input) {
         const double cy = std::sin(a) * size;
         const Geometry::Twist made = table.predict(cx, cy);
         const double speed = std::hypot(made.vx, made.vy);
-        if (speed < kStillMps) {
+        const Geometry::Twist start = table.predictFromRest(cx, cy);
+        const double startSpeed = std::hypot(start.vx, start.vy);
+        // Short of a size measured to move: the lifted prediction makes it
+        // look as good as that size, but it is not (header).
+        if (speed < kStillMps || startSpeed < kStillMps) {
           continue;
         }
-        if (nearlyStill) {  // must start a still robot (header)
-          const Geometry::Twist start = table.predictFromRest(cx, cy);
-          if (size < kStartSize - 1e-9 || std::hypot(start.vx, start.vy) < kStartMps) {
-            continue;
-          }
+        if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps)) {
+          continue;  // must start a still robot (header)
         }
         const bool smallest = !moved;
         moved = true;

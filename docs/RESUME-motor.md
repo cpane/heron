@@ -481,3 +481,15 @@ made 0.19 m/s. 0.4 started it at once. The table's smallest points, and
 `min_duty`, are only as good as the batteries they were measured on.
 For the Maker Faire: fresh cells or NiMH, and spares.
 
+### From navigation, 2026-11-16: fresh alkalines, measured
+
+[ours, one set of runs; `captures/low-end-2026-11-16.log` on the Pi,
+write-up in `navigation-cpp-design.md` §7.5, "Fresh batteries"] The same
+day, on fresh motor alkalines, `heron_robot` Manual, from rest: forward
+0.4 made 0.31 m/s (0.27 on 2026-11-14), and up-left at 0.5 of full drive
+(wheels −0.26 and +0.71) made 0.17 m/s, where the run-down cells
+stalled. The full-drive speed barely changed (0.37 to 0.40 m/s). The
+weak directions, where two wheels oppose, lose the most. Navigation now
+measures its tables on fresh cells; a battery voltage reading
+(Status, "no divider fitted") would show when to swap.
+

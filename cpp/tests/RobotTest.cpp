@@ -386,7 +386,7 @@ int main() {
           bench.surface == "hardwood-1" && hw.activeSurface == "hardwood-1" &&
               near(hw.geometry->brake, 0.7, 1e-12) && near(hw.odometry->linearScalar, 0.908, 1e-12));
     const std::optional<Heron::Motion::MotionTable> table = toMotionTable(hw);
-    check("  its motion table: 31 points in 8 columns", table && table->columns() == 8);
+    check("  its motion table: 32 points in 8 columns", table && table->columns() == 8);
     check("  Assisted not refused", assistedRefusal(hw).empty());
     check("no surface: no table", !toMotionTable(bench));
     Heron::Profile::RigProfile bare = bench;
@@ -410,8 +410,8 @@ int main() {
           d.why == Why::Limited && d.limited->reason == Heron::Limiter::Reason::Clear &&
               same(d.body, BodyVelocity{0.6, 0.0, 0.0}, 1e-12));
     const Twist told = d.limited->command;
-    check("  the limiter told 0.31 x 1.2 m/s forward, the drift's turn included",
-          near(told.vx, 0.31 * kTableMargin, 1e-9) && near(told.wz, 0.05, 1e-9));
+    check("  the limiter told 0.36 x 1.2 m/s forward, the drift's turn included",
+          near(told.vx, 0.36 * kTableMargin, 1e-9) && near(told.wz, 0.07, 1e-9));
     const AssistedInput wall = through(&close, true);
     d = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &wall);
     const Twist made = table->predict(d.body.vx, d.body.vy);
