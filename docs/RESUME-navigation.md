@@ -208,6 +208,24 @@ navigation, so SwC to Manual always takes over.
       stuck state itself did not come back in four lifts that day (one of
       them held 10 to 20 cm up for about 5 s): no TILT or TRACKING, the
       pose fresh throughout [the real case still unseen].
+      **Seen for real the same evening, and the rule changed**
+      (`navigate-fresh-2026-11-16.log`): carried to another room, the
+      OTOS stuck, and the restart fired with the sticks centred but the
+      robot in hand; it came back with TILT and a turn of −0.19 rad/s
+      standing, the heading 11°/s adrift, and Navigate veered left. Now
+      (`LidarStill`, `OtosRecovery`, `RobotCore.h`) it restarts only once
+      the LiDAR's view has held within 2 cm for 1 s, and a pose that is
+      fresh but reads TILT or a turn over 0.05 rad/s with the LiDAR still,
+      for 1 s, is trouble too, so a bad restart is retried. The status
+      line says `view moving` until the view holds. On the Pi, standing:
+      still about 1 s after the LiDAR's first scans, and no false
+      `view moving` in 9 s. **Carried, checked** (Chris,
+      `otos-carry-2026-11-16.log`): `view moving` throughout 11 s in
+      hand, no restart; put down, the OTOS stuck on TILT, fresh, the
+      heading still (the old rule, on freshness alone, would never have
+      restarted it); once the view held, one restart, "TILT or a turn
+      read standing still", and then no TILT, the heading steady at 0.0
+      for 11 s.
    2. **The LiDAR that stopped answering** (2026-11-16): three start
       attempts failed (Express refused, once no answer to GET_INFO), then
       `lidar_info` got nothing, the head spinning; a replug of its USB

@@ -215,3 +215,14 @@ speed (this Inbox, 2026-11-14) is in the velocity registers only, and it
 reached −0.07, past the −0.05 seen before. Navigation now takes the
 robot as still when either says so.
 
+### From navigation, 2026-11-16: a restart on a moving robot leaves a gyro offset
+
+[ours, one run; `captures/navigate-fresh-2026-11-16.log` on the Pi,
+write-up in `RESUME-navigation.md`, "Picking up" 0.1] `heron_robot`
+restarted the OTOS (`Odometry::stop()` then `start()`) while the robot
+was carried. It came back reading a turn of −0.19 rad/s and TILT with
+the robot standing on the floor, steady for minutes: the heading ran
+round about 11°/s. A restart of the program, the robot still, cured it.
+The start-up's gyro calibration is the likely cause [unverified].
+Navigation now restarts only when the LiDAR says still, and retries
+when the OTOS reads TILT or a turn standing.

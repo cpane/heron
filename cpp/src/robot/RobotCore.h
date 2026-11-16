@@ -474,6 +474,44 @@ class BlockedWatch {
 };
 
 /**
+ * How much the LiDAR's view changed between two scans, metres: the median,
+ * over the kSectorDeg sectors with a return in both, of the change in the
+ * nearest range in each. Standing still the A1M8 repeats a range to a
+ * millimetre or two (RESUME-lidar.md's Inbox, 2026-11-14); carried, or
+ * driven at a crawl over a second, the view moves by centimetres.
+ *
+ * @return the change; nullopt with fewer than kMinSectors in common
+ */
+[[nodiscard]] std::optional<double> scanChange(const Scan &from, const Scan &to);
+
+/**
+ * Whether the robot is still, by the LiDAR alone (2026-11-16): the OTOS
+ * cannot say so while it is the thing in doubt. Still when every scan for
+ * kFor has stayed within kChangeM of the first of them (scanChange()); a
+ * scan that moved starts the count again from it. Comparing against that
+ * first scan, not the last one, catches a slow drift.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class LidarStill {
+  public:
+    static constexpr double kChangeM{0.02};
+    static constexpr std::chrono::milliseconds kFor{1000};
+
+    /**
+     * @param scan the newest scan; nullptr (none yet) is not still
+     * @return whether the view has held for kFor, up to this scan
+     */
+    bool update(const std::shared_ptr<const Scan> &scan);
+    [[nodiscard]] bool still() const noexcept { return m_still; }
+
+  private:
+    std::shared_ptr<const Scan> m_from;  // the first scan of the still run
+    std::uint64_t m_lastSeq{0};
+    bool m_still{false};
+};
+
+/**
  * When to restart the OTOS (2026-11-16): picked up while heron_robot ran,
  * the bench rig's OTOS raised TRACKING and read about -3 m/s with the robot
  * back on the floor and still, for over a minute, until the program ended;
@@ -482,30 +520,50 @@ class BlockedWatch {
  * odometry recovers it (and starts a new epoch, I8: the map, the course and
  * heading hold start afresh).
  *
- * Restart when the pose has not been fresh for kNotFresh, the sticks have
- * been centred for kCentred (the OTOS calibrates its gyro as it starts, so
- * the robot should be still and no one driving it), and not within
- * kBetween of the last restart.
+ * The OTOS calibrates its gyro as it starts, so it must restart on a still
+ * robot. The first version took centred sticks for still, and the same day
+ * restarted while the robot was carried: it came back with TILT and a
+ * turn of -0.19 rad/s standing, the heading 11 deg/s adrift, and Navigate
+ * veered left after it (navigate-fresh-2026-11-16.log). Now:
+ *
+ *   - Trouble: the pose not fresh for kNotFresh, or, the LiDAR saying still,
+ *     the OTOS reading TILT or a turn over kSuspectRadps for kSuspect (a
+ *     restart that calibrated on a moving robot).
+ *   - Then restart once the LiDAR says still (LidarStill) and the sticks
+ *     have been centred for kCentred, and not within kBetween of the last
+ *     restart; a bad restart is trouble again, so it is retried.
  *
  * Thread Safety: Not thread-safe; one control loop owns it.
  */
 class OtosRecovery {
   public:
     static constexpr std::chrono::milliseconds kNotFresh{2000};
+    static constexpr std::chrono::milliseconds kSuspect{1000};
+    static constexpr double kSuspectRadps{0.05};
     static constexpr std::chrono::milliseconds kCentred{1000};
     static constexpr std::chrono::milliseconds kBetween{5000};
 
-    /**
-     * @param poseFresh the pose's freshness this cycle
-     * @param sticksCentred every stick centred this cycle
-     * @return whether to restart the OTOS now; true starts kBetween
-     */
-    bool update(bool poseFresh, bool sticksCentred, std::chrono::steady_clock::time_point now) noexcept;
+    /** One cycle's readings. */
+    struct Input {
+      bool poseFresh{false};
+      bool tilt{false};          // the OTOS's TILT warning
+      double turnRadps{0.0};     // the OTOS's turn rate
+      bool sticksCentred{false};
+      bool still{false};         // LidarStill
+    };
+
+    /** @return whether to restart the OTOS now; true starts kBetween */
+    bool update(const Input &in, std::chrono::steady_clock::time_point now) noexcept;
+
+    /** @return why the last restart, for the status line */
+    [[nodiscard]] const char *why() const noexcept { return m_why; }
 
   private:
     std::optional<std::chrono::steady_clock::time_point> m_notFreshSince;
+    std::optional<std::chrono::steady_clock::time_point> m_suspectSince;
     std::optional<std::chrono::steady_clock::time_point> m_centredSince;
     std::optional<std::chrono::steady_clock::time_point> m_lastRestart;
+    const char *m_why{""};
 };
 
 }  // namespace Heron::Robot

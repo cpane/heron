@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace Heron::Robot {
 
@@ -451,22 +452,86 @@ void BlockedWatch::reset() noexcept {
   m_since.reset();
 }
 
-bool OtosRecovery::update(bool poseFresh, bool sticksCentred, std::chrono::steady_clock::time_point now) noexcept {
-  if (poseFresh) {
-    m_notFreshSince.reset();
-  } else if (!m_notFreshSince) {
-    m_notFreshSince = now;
+namespace {
+
+constexpr double kSectorDeg = 2.0;
+constexpr std::size_t kSectors = 180;  // 360 / kSectorDeg
+constexpr std::size_t kMinSectors = 20;
+
+// The nearest range in each sector; 0 where nothing returned.
+std::vector<float> nearestBySector(const Scan &scan) {
+  std::vector<float> nearest(kSectors, 0.0f);
+  for (const Point &p : scan.points) {
+    const double deg = p.bearingRad / Geometry::kDegToRad + 180.0;
+    const auto i = static_cast<std::size_t>(std::clamp(static_cast<int>(deg / kSectorDeg), 0,
+                                                       static_cast<int>(kSectors) - 1));
+    if (nearest[i] == 0.0f || p.rangeM < nearest[i]) {
+      nearest[i] = p.rangeM;
+    }
   }
-  if (!sticksCentred) {
-    m_centredSince.reset();
-  } else if (!m_centredSince) {
-    m_centredSince = now;
+  return nearest;
+}
+
+}  // namespace
+
+std::optional<double> scanChange(const Scan &from, const Scan &to) {
+  const std::vector<float> a = nearestBySector(from);
+  const std::vector<float> b = nearestBySector(to);
+  std::vector<double> change;
+  for (std::size_t i = 0; i < kSectors; ++i) {
+    if (a[i] > 0.0f && b[i] > 0.0f) {
+      change.push_back(std::abs(static_cast<double>(a[i]) - b[i]));
+    }
   }
-  if (!m_notFreshSince || !m_centredSince || now - *m_notFreshSince < kNotFresh ||
-      now - *m_centredSince < kCentred || (m_lastRestart && now - *m_lastRestart < kBetween)) {
+  if (change.size() < kMinSectors) {
+    return std::nullopt;
+  }
+  const auto middle = change.begin() + static_cast<std::ptrdiff_t>(change.size() / 2);
+  std::nth_element(change.begin(), middle, change.end());
+  return *middle;
+}
+
+bool LidarStill::update(const std::shared_ptr<const Scan> &scan) {
+  if (!scan) {
+    m_from.reset();
+    m_still = false;
+    return m_still;
+  }
+  if (m_from && scan->seq == m_lastSeq) {
+    return m_still;  // no new scan this cycle
+  }
+  m_lastSeq = scan->seq;
+  const std::optional<double> change = m_from ? scanChange(*m_from, *scan) : std::nullopt;
+  if (!change || *change > kChangeM) {
+    m_from = scan;  // moved, or nothing to compare: count again from here
+    m_still = false;
+    return m_still;
+  }
+  m_still = scan->tEnd - m_from->tEnd >= kFor;
+  return m_still;
+}
+
+bool OtosRecovery::update(const Input &in, std::chrono::steady_clock::time_point now) noexcept {
+  const auto since = [now](std::optional<std::chrono::steady_clock::time_point> &t, bool on) {
+    if (!on) {
+      t.reset();
+    } else if (!t) {
+      t = now;
+    }
+  };
+  since(m_notFreshSince, !in.poseFresh);
+  // A turn or TILT counts only on a robot the LiDAR says is still.
+  since(m_suspectSince, in.poseFresh && in.still && (in.tilt || std::abs(in.turnRadps) > kSuspectRadps));
+  since(m_centredSince, in.sticksCentred);
+  const bool notFresh = m_notFreshSince && now - *m_notFreshSince >= kNotFresh;
+  const bool suspect = m_suspectSince && now - *m_suspectSince >= kSuspect;
+  if (!(notFresh || suspect) || !in.still || !m_centredSince || now - *m_centredSince < kCentred ||
+      (m_lastRestart && now - *m_lastRestart < kBetween)) {
     return false;
   }
   m_lastRestart = now;
+  m_why = notFresh ? "pose not fresh for 2 s" : "TILT or a turn read standing still";
+  m_suspectSince.reset();
   return true;
 }
 
