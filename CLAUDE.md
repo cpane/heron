@@ -287,6 +287,7 @@ scripts/build_firmware.sh                               # Arduino firmware, in a
 scripts/flash_firmware.sh  <user>@<pi>         # avrdude on the Pi
 scripts/set_rig.sh         <user>@<pi> <rig>   # once per Pi: which profile
 scripts/teleop_autostart.sh <user>@<pi> on|off|status  # heron_teleop at boot
+scripts/robot_autostart.sh  <user>@<pi> on|off|status  # heron_robot at boot, in its place
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
 builder/wheel_check.sh     <user>@<pi>         # each wheel and stick, by eye
 scripts/inbox_status.sh                        # what waits in every Inbox
