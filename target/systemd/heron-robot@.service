@@ -1,0 +1,48 @@
+# heron_robot at boot: Manual, Assisted and Navigate with the remote, no
+# laptop needed (docs/navigation-design.md §9).
+#
+# A template unit, as heron-teleop@.service: the part after the @ is the
+# user whose ~/heron holds the deployed binaries and the rig profile
+# (deploy_cpp.sh, set_rig.sh), so no user name is written into the
+# repository. Installed and enabled by
+#
+#   scripts/robot_autostart.sh <user>@<pi> on
+#
+# which makes it heron-robot@<user>.service and turns heron-teleop@<user>
+# off: both own /dev/arduino and /dev/serial0. Off by default.
+#
+# Safe to start unattended: the motors move only once the remote is armed
+# (SwA down) and the throttle has been at the bottom since, as in
+# heron_teleop. Keep the robot still while it starts: the OTOS calibrates
+# its gyro then. A sensor that does not start in three tries leaves Manual
+# only, for that run (cpp/tools/HeronRobot.cpp, "Start-up"). Its output is
+# in the journal:
+#
+#   journalctl -u heron-robot@<user> -f
+
+[Unit]
+Description=Heron: the robot program (heron_robot, user %i)
+# No limit on restarts: the Arduino or the receiver may come up after it,
+# and a robot left on should keep trying rather than give up.
+StartLimitIntervalSec=0
+Conflicts=heron-teleop@%i.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/heron
+# Up to 30 s for the LiDAR and the Arduino to appear after power-on: a
+# LiDAR that is late would leave Assisted and Navigate unavailable for the
+# whole run. Starts anyway after that, for Manual.
+ExecStartPre=/bin/sh -c 'i=0; while [ $i -lt 30 ]; do [ -e /dev/rplidar ] && [ -e /dev/arduino ] && exit 0; i=$((i+1)); sleep 1; done; exit 0'
+ExecStart=/home/%i/heron/bin/heron_robot
+# A failed start (no Arduino, no remote, no profile) or an exit: try again
+# shortly. systemctl stop is not restarted.
+Restart=always
+RestartSec=3
+# SIGTERM is caught: heron_robot sends Stop to the Arduino on the way out.
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
