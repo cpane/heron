@@ -219,9 +219,13 @@ navigation, so SwC to Manual always takes over.
       for 1 s, is trouble too, so a bad restart is retried. The status
       line says `view moving` until the view holds. On the Pi, standing:
       still about 1 s after the LiDAR's first scans, and no false
-      `view moving` in 9 s. **Still to check (Chris, hands on):** carry
-      it with `heron_robot` running, put it down; expect `view moving`
-      while carried, no restart until it is down, then a clean one.
+      `view moving` in 9 s. **Carried, checked** (Chris,
+      `otos-carry-2026-11-16.log`): `view moving` throughout 11 s in
+      hand, no restart; put down, the OTOS stuck on TILT, fresh, the
+      heading still (the old rule, on freshness alone, would never have
+      restarted it); once the view held, one restart, "TILT or a turn
+      read standing still", and then no TILT, the heading steady at 0.0
+      for 11 s.
    2. **The LiDAR that stopped answering** (2026-11-16): three start
       attempts failed (Express refused, once no answer to GET_INFO), then
       `lidar_info` got nothing, the head spinning; a replug of its USB
