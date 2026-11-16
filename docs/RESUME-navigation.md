@@ -160,6 +160,10 @@ navigation, so SwC to Manual always takes over.
 - **No command short of the first size measured to move** (Chris, "go
   ahead with the fix"): rolling, the table lifted left at 0.1 to the 0.7
   point's motion, and the planner swung between 0.1 and 1.0 round a box.
+- **Tune Navigate for full stick, not cap it at 0.3 m/s** (Chris,
+  2026-11-16): the planner now applies the limiter's test, turn
+  included, and the score weights changed (§7.5, "As built: full
+  stick").
 - **Motion tables are measured on fresh batteries** (Chris): the motor
   batteries move the slow end most; the robot gets fresh cells at the
   Faire, on a schedule, and the from-rest margins stay.
@@ -186,8 +190,14 @@ navigation, so SwC to Manual always takes over.
       front of the box, choosing between a right and a left strafe; the
       change score's weight is the suspect [unverified]. A run before it
       (`navigate-fresh-…`) is void: the OTOS restarted while the robot
-      was carried (1, below). Still to do: the box 10 cm left of the line
-      (the side the simulator passes closest).
+      was carried (1, below). The box 10 cm left of the line, driven
+      (`navigate-left10-2026-11-16.log`): round it on its right as
+      expected, back to FOLLOWING about 4 s past it, never Blocked; one
+      cycle of a left strafe (a near-stop let past the window, fixed).
+      **Next: the full-stick tuning on the floor** (§7.5, "As built: full
+      stick"; deployed, not yet driven): the same two box runs, centred
+      and 10 cm left. Expect no `limiter CUT` while passing, no swap of
+      sides, and the robot back near the line within a few metres.
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
