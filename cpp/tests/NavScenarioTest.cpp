@@ -387,6 +387,15 @@ struct NavRun {
       }
       blocked += plan->state == Heron::Planner::State::Blocked ? 1 : 0;
       avoiding += plan->state == Heron::Planner::State::Avoiding ? 1 : 0;
+      // A side flip: a sideways command of at least kSideCommand the
+      // other way from the last one, before flipsBeforeX (2026-11-16: on
+      // the floor, Navigate swapped between a right and a left strafe in
+      // front of a box).
+      if (run.base.truePose().x < flipsBeforeX && std::abs(plan->commandVy) >= kSideCommand) {
+        const int side = plan->commandVy > 0.0 ? 1 : -1;
+        flips += lastSide != 0 && side != lastSide ? 1 : 0;
+        lastSide = side;
+      }
     }
     // The plan's command (I19), if it is for this course and fresh,
     // through decide() as a stick: the limiter told what the table says
@@ -415,6 +424,10 @@ struct NavRun {
   std::int32_t cut{0};       // ...of which the limiter cut (Cut, BackingOff)
   std::int32_t slowed{0};    // ...or only slowed, in its slow zone
   bool trace{false};         // print every plan
+  static constexpr double kSideCommand = 0.2;
+  double flipsBeforeX{-1e9};  // count side flips until here (true x)
+  std::int32_t flips{0};
+  int lastSide{0};
 };
 
 }  // namespace
@@ -437,6 +450,7 @@ int main() {
       std::int32_t driven{0};
       std::int32_t cut{0};
       std::int32_t slowed{0};
+      std::int32_t flips{0};
     };
     std::vector<BoxRun> runs;
     std::uint32_t seed = 100;
@@ -459,6 +473,7 @@ int main() {
       const std::vector<Vec2> box = pointsOf(boxOnly.segments);
       NavRun nav(std::move(world), Pose2{}, b.seed);
       nav.trace = traceRun != nullptr && static_cast<std::size_t>(std::atoi(traceRun)) == r;
+      nav.flipsBeforeX = b.box.x + 0.15;  // until past the box
       const Twist stick{0.3, 0.0, 0.0};
       std::int32_t c = 0;
       for (; c < 1500 && nav.run.base.truePose().x < 4.5; ++c) {
@@ -475,6 +490,7 @@ int main() {
       b.driven = nav.driven;
       b.cut = nav.cut;
       b.slowed = nav.slowed;
+      b.flips = nav.flips;
     };
     const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
     std::vector<std::thread> threads;
@@ -490,9 +506,9 @@ int main() {
     }
     for (const BoxRun &b : runs) {
       std::printf("        box at (%.2f, %+.2f): %.1f s; closest %.0f mm; widest %.0f mm off the "
-                  "line, %.0f mm 2 m past; limiter cut %d, slowed %d of %d\n",
+                  "line, %.0f mm 2 m past; limiter cut %d, slowed %d of %d; side flips %d\n",
                   b.box.x, b.box.y, b.seconds, 1000.0 * b.closest, 1000.0 * b.widest,
-                  b.yAfter ? 1000.0 * *b.yAfter : -1.0, b.cut, b.slowed, b.driven);
+                  b.yAfter ? 1000.0 * *b.yAfter : -1.0, b.cut, b.slowed, b.driven, b.flips);
     }
     bool reached = true;
     bool spare = true;

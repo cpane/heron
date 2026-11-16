@@ -175,13 +175,15 @@ Plan Planner::plan(const PlanInput &input) {
         if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps)) {
           continue;  // must start a still robot (header)
         }
-        const bool smallest = !moved;
+        // The smallest gets past the window only nearly still, where the
+        // dead band needs it (header); rolling, it is a near-stop.
+        const bool smallest = !moved && nearlyStill;
         moved = true;
         const bool reachable = std::abs(made.vx - input.measured.vx) <= reach + 1e-9 &&
                                std::abs(made.vy - input.measured.vy) <= reach + 1e-9;
         // Nearly still, a direction's smallest command that starts it may
         // be faster than the course asks: nothing slower can (header).
-        const bool overCap = speed > speedCap + 1e-9 && !(nearlyStill && smallest);
+        const bool overCap = speed > speedCap + 1e-9 && !smallest;
         if (overCap || !(reachable || smallest)) {
           continue;
         }

@@ -484,6 +484,31 @@ int main() {
                 plan.commandVx, plan.commandVy);
     check("box ahead: Avoiding by a command whose predicted motion goes round it, margin kept",
           plan.state == State::Avoiding && truth >= tableConfig.stopMarginM);
+
+    // Rolling at the floor's full speed at a box (2026-11-16,
+    // navigate-left10): the planner chose left at 0.6, predicted 0.04 m/s,
+    // a near-stop, kept past the window as a direction's smallest command.
+    const double reach = tableConfig.accelMps2 * tableConfig.windowS;
+    bool inWindow = true;
+    for (const double y : {-0.10, 0.0, 0.10}) {
+      for (const double x : {0.85, 1.0, 1.15}) {
+        ObstacleMap at = emptyMap();
+        seeFree(at);
+        seeBox(at, Vec2{x, y}, 0.3, 0.3);
+        Planner fast(tableConfig);
+        const Twist rolling{0.40, -0.05, 0.0};
+        const Plan p = fast.plan(inputFor(at, courseAlong(0.0, 0.42), rolling));
+        const Twist m = bench.motion->predict(p.commandVx, p.commandVy);
+        const bool ok = p.state == State::Blocked ||
+                        (std::abs(m.vx - rolling.vx) <= reach + 1e-9 && std::abs(m.vy - rolling.vy) <= reach + 1e-9);
+        if (!ok) {
+          std::printf("        box at (%.2f, %+.2f): command (%.2f, %.2f) makes (%.2f, %.2f)\n", x, y, p.commandVx,
+                      p.commandVy, m.vx, m.vy);
+        }
+        inWindow = inWindow && ok;
+      }
+    }
+    check("rolling at 0.40 m/s at a box: every command chosen within the window, no near-stop", inWindow);
   }
 
   std::printf("Nearly still: only commands that start the robot from rest (2026-11-16)\n");

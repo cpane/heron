@@ -49,11 +49,13 @@
 // measured to move in its direction is never a candidate, rolling or
 // still: the table lifts it to that size's motion (for the limiter), so it
 // looks as good, and on 2026-11-16 Navigate chose left at 0.1 rolling and
-// 1.0 nearly still, swinging between them round a box. A direction's
-// smallest command that moves is kept whatever the window says: from rest
-// the motors' dead band makes even the smallest command faster than the
-// window reaches (forward 0.19 m/s, against 0.18), and without it Heron
-// could never start.
+// 1.0 nearly still, swinging between them round a box. Nearly still, a
+// direction's smallest command that moves is kept whatever the window
+// says: from rest the motors' dead band makes even the smallest command
+// faster than the window reaches (forward 0.19 m/s, against 0.18), and
+// without it Heron could never start. Rolling, it is not: left at 0.6
+// makes 0.04 m/s, and kept past the window it was a near-stop the planner
+// jumped to for a cycle or two in front of a box (2026-11-16).
 // Nearly still (the OTOS's velocity, or the pose's movement over
 // kMovedWindow, under kNearlyStillMps), a command must also start
 // the robot from rest at kStartMps or more (MotionTable::predictFromRest(),
