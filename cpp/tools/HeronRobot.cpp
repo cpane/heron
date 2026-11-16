@@ -515,13 +515,14 @@ int main(int argc, char **argv) {
           }
         }
         if (mode == Mode::Navigate && plan) {
-          char text[128];
-          std::snprintf(text, sizeof(text), "  plan %s%s%s clear %.2f m  %lld ms old%s",
+          char text[160];
+          std::snprintf(text, sizeof(text), "  plan %s%s%s clear %.2f m  %lld ms old%s  moved %.2f m/s%s",
                         Heron::Planner::toString(plan->state),
                         plan->reason == Heron::Planner::Reason::None ? "" : " ",
                         plan->reason == Heron::Planner::Reason::None ? "" : Heron::Planner::toString(plan->reason),
                         plan->clearanceM, static_cast<long long>(duration_cast<milliseconds>(now - plan->time).count()),
-                        course && plan->courseSeq != course->seq ? " (older course)" : "");
+                        course && plan->courseSeq != course->seq ? " (older course)" : "", plan->movedMps,
+                        plan->nearlyStill ? " STILL" : "");
           limitText += text;
         }
         if (blocked) {

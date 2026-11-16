@@ -202,3 +202,16 @@ program did. Earlier lifts (2026-11-14, in this Inbox) cleared in about
 the scalars read back 0x00 0x00 for 0xA4 0xF7 (the first, 2026-11-14,
 read 0xA4 0x00); `heron_robot` now retries the start. Write-up:
 `RESUME-navigation.md`, "Picking up" 0.
+
+### From navigation, 2026-11-16: the phantom speed does not move the position
+
+[ours, two runs; write-up in `navigation-cpp-design.md` §7.5, "As built:
+starting from rest"] On the bench rig, hardwood, `heron_robot --lines 10`
+in Navigate: standing still after a run, the OTOS's velocity read
+−0.07 m/s (x) for several seconds in one run and −0.05 in another, the
+LiDAR's nearest point unchanged; in the second, the pose's position moved
+0.00 m/s over 0.5 s throughout (`PlanInput::movedMps`). So the phantom
+speed (this Inbox, 2026-11-14) is in the velocity registers only, and it
+reached −0.07, past the −0.05 seen before. Navigation now takes the
+robot as still when either says so.
+

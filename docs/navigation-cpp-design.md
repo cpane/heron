@@ -1451,6 +1451,42 @@ predicts), and cut short by the second obstacle; not yet seen to finish.
 An earlier run in a smaller room went round the box the same way and
 stopped for an unrelated obstacle as it turned back.
 
+**As built: starting from rest (2026-11-16).** After step 6, Navigate
+stood still with the stick held, five times in a row, each for a
+different reason, each found in a floor log (`captures/navigate-left*.log`
+on the Pi). The planner chose commands the table said would move the
+robot and the floor said would not. What changed, in `Planner.cpp`
+(header in `Planner.h`) and `MotionTable::predictFromRest()`:
+
+| Seen on the floor | Rule now |
+|---|---|
+| Shrank its left commands 0.97 → 0.39 and stopped: below the smallest left point the table read the smallest | Nearly still, a candidate must start the robot from rest by `predictFromRest()` |
+| Up-left at 0.60, between a stall (0.5) and a move (0.7, 0.13 m/s): the blend read 0.07 m/s | From rest, below the first size in a column seen to move, the table reads nothing, not a blend and not that point |
+| Right at 0.4, measured once at 0.08 m/s: it hummed | From rest, at least `kStartMps` (0.10 m/s, `MotionWatch`'s `expectMps`); the smallest such command may be faster than the course asks (I13's one exception), or a slow course leaves nothing |
+| The OTOS read −0.07 m/s with the robot standing (the LiDAR's nearest point unchanged), so it was "rolling" and small commands were allowed | Nearly still is the OTOS's speed **or** the pose's movement over `kMovedWindow` (0.5 s), whichever says still; `LocalPlanner` fills `PlanInput::movedMps`. Seen again at −0.05 m/s with `moved 0.00`: the OTOS's position does not drift with its phantom speed [ours, one run] |
+| Forward at 0.2, measured 0.19 m/s on 2026-11-14, only hummed (four AA alkalines after a day of runs) | From rest, at least `kStartSize` (0.4 of full drive) |
+| Round a box in pulses: small commands while crawling, a stop, a kick | `kNearlyStillMps` 0.05 → 0.15 m/s: a crawl is planned as a start [not yet on the floor] |
+
+Rolling (over `kNearlyStillMps` by both tests) the rules are as before:
+small commands keep a moving robot going (check 1, 2026-11-14). The
+plan carries `nearlyStill` and `movedMps`, and the status line prints
+`moved <m/s>` and `STILL`.
+
+The left side of the hardwood table was measured for this
+(`hardwood-1.conf` p27 to p31): left stalls at 0.4 and makes 0.16 m/s at
+0.8, turning left about 8°/s; the stick at 10 o'clock (52° to 61°, one
+column at 55°) stalls at 0.5 and makes about 0.13 m/s up-left at 0.7 and
+above.
+
+**Floor check** [ours, hardwood, throttle full, right stick held forward,
+`captures/navigate-left6-2026-11-16.log`, before the 0.15 change]: from
+rest a 0.4 command, moving in 0.3 s, 0.34 to 0.43 m/s; round a box on its
+left with stop-and-go; full speed again for about a metre; then
+**BLOCKED NOTHING_SAFE** before a second obstacle on its right, stopped
+25 cm from it. In simulation the dead end now reports Blocked as well
+(step 5's open item); two box runs take about 3 s longer (21.8 against
+18.5 s).
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

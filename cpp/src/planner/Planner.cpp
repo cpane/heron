@@ -142,6 +142,9 @@ Plan Planner::plan(const PlanInput &input) {
   //    the course asks (I13), and the straight one.
   const double reach = cfg.accelMps2 * cfg.windowS;
   const double speedCap = std::min(course.speedMps, cfg.maxSpeedMps);
+  // Either says still: the OTOS's velocity can read a speed standing (header).
+  const bool nearlyStill = std::hypot(input.measured.vx, input.measured.vy) < kNearlyStillMps ||
+                           (input.movedMps >= 0.0 && input.movedMps < kNearlyStillMps);
   const Geometry::Vec2 dirOdom{std::cos(course.headingRad), std::sin(course.headingRad)};
   const Geometry::Vec2 dir = Geometry::rotate(dirOdom, -pose.heading);  // robot frame
   std::vector<Candidate> candidates;  // the straight one first: it wins a tie
@@ -165,11 +168,20 @@ Plan Planner::plan(const PlanInput &input) {
         if (speed < kStillMps) {
           continue;
         }
+        if (nearlyStill) {  // must start a still robot (header)
+          const Geometry::Twist start = table.predictFromRest(cx, cy);
+          if (size < kStartSize - 1e-9 || std::hypot(start.vx, start.vy) < kStartMps) {
+            continue;
+          }
+        }
         const bool smallest = !moved;
         moved = true;
         const bool reachable = std::abs(made.vx - input.measured.vx) <= reach + 1e-9 &&
                                std::abs(made.vy - input.measured.vy) <= reach + 1e-9;
-        if (speed > speedCap + 1e-9 || !(reachable || smallest)) {
+        // Nearly still, a direction's smallest command that starts it may
+        // be faster than the course asks: nothing slower can (header).
+        const bool overCap = speed > speedCap + 1e-9 && !(nearlyStill && smallest);
+        if (overCap || !(reachable || smallest)) {
           continue;
         }
         Candidate c{Geometry::Twist{made.vx, made.vy, course.turnRateRadps + made.wz}, cx, cy};
@@ -289,6 +301,8 @@ Plan Planner::plan(const PlanInput &input) {
   Plan plan;
   plan.courseSeq = course.seq;
   plan.time = input.now;
+  plan.nearlyStill = nearlyStill;
+  plan.movedMps = input.movedMps;
   plan.candidatesTried = static_cast<int>(candidates.size());
   plan.candidatesPassed = static_cast<int>(passed.size());
   if (passed.empty()) {

@@ -469,3 +469,15 @@ file's "At boot" note and its first steps name only
 `teleop_autostart.sh`: with the robot service on, bench work needs
 `robot_autostart.sh ... off` first. Checked once: running 12 s after
 power-on, all three modes driven.
+
+### From navigation, 2026-11-16: run-down alkalines raise the dead band
+
+[ours, one run; the cause unverified; write-up in
+`navigation-cpp-design.md` §7.5, "As built: starting from rest"] On the
+bench rig, hardwood, `heron_robot` in Navigate, motor supply four AA
+alkalines "in for a while": forward at 0.2 of full drive (wheels 0.13 to
+0.26) hummed and did not move the robot; on 2026-11-14 the same command
+made 0.19 m/s. 0.4 started it at once. The table's smallest points, and
+`min_duty`, are only as good as the batteries they were measured on.
+For the Maker Faire: fresh cells or NiMH, and spares.
+

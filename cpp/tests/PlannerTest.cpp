@@ -486,6 +486,58 @@ int main() {
           plan.state == State::Avoiding && truth >= tableConfig.stopMarginM);
   }
 
+  std::printf("Nearly still: only commands that start the robot from rest (2026-11-16)\n");
+  {
+    // Forward, and a left strafe that from rest moves nothing at 0.4 and
+    // little at 0.6, as the hardwood's left is weak; a right strafe to
+    // close the columns round.
+    using Heron::Motion::MotionPoint;
+    const auto table = std::make_shared<const Heron::Motion::MotionTable>(
+        std::vector<MotionPoint>{
+            MotionPoint{0.0, 0.2, Twist{0.19, 0.0, 0.0}}, MotionPoint{0.0, 1.0, Twist{0.39, 0.0, 0.0}},
+            MotionPoint{kPi / 2.0, 0.4, Twist{0.0, 0.0, 0.0}}, MotionPoint{kPi / 2.0, 0.6, Twist{0.0, 0.04, 0.0}},
+            MotionPoint{kPi / 2.0, 1.0, Twist{0.0, 0.25, 0.0}}, MotionPoint{-kPi / 2.0, 0.4, Twist{0.0, -0.06, 0.0}},
+            MotionPoint{-kPi / 2.0, 1.0, Twist{0.0, -0.27, 0.0}}, MotionPoint{kPi, 0.6, Twist{-0.31, 0.0, 0.0}}},
+        false);
+    PlannerConfig still = config;
+    still.motion = table;
+    still.maxSpeedMps = 0.42;
+    ObstacleMap map = emptyMap();
+    seeFree(map);
+    Planner planner(still);
+    // A slow course: only the weak left commands are slow enough (I13),
+    // as when Navigate eased back onto its line.
+    Plan plan = planner.plan(inputFor(map, courseAlong(kPi / 2.0, 0.045), Twist{}));
+    print("a slow course to the left, still", plan);
+    const Twist start = table->predictFromRest(plan.commandVx, plan.commandVy);
+    std::printf("        command (%.2f, %.2f), from rest %.3f m/s\n", plan.commandVx, plan.commandVy,
+                std::hypot(start.vx, start.vy));
+    check("still: the command chosen starts the robot from rest, at kStartMps or more",
+          (plan.commandVx != 0.0 || plan.commandVy != 0.0) &&
+              std::hypot(start.vx, start.vy) >= Heron::Planner::kStartMps);
+    check("  and is at least kStartSize", std::hypot(plan.commandVx, plan.commandVy) >= kStartSize - 1e-9);
+    Planner forward(still);
+    plan = forward.plan(inputFor(map, courseAlong(0.0, 0.42), Twist{}));
+    print("full speed ahead, still", plan);
+    check("  straight ahead from rest: forward, at least kStartSize, not the 0.2 point",
+          plan.commandVx >= kStartSize - 1e-9);
+    Planner rolling(still);
+    plan = rolling.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.20, 0.0}));
+    print("a slow course to the left, rolling at 0.20", plan);
+    check("  rolling: a small command that would not start it is still allowed",
+          plan.commandVy > 0.0 && plan.commandVy <= 0.6 + 1e-9);
+    // The OTOS reading a speed with the robot standing (2026-11-16): the
+    // pose not moving says still.
+    Planner phantom(still);
+    PlanInput standing = inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.07, 0.0});
+    standing.movedMps = 0.0;
+    plan = phantom.plan(standing);
+    print("a slow course to the left, the OTOS reading 0.07, the pose not moving", plan);
+    const Twist from = table->predictFromRest(plan.commandVx, plan.commandVy);
+    check("  the pose not moving: planned as still, a command that starts it",
+          plan.nearlyStill && std::hypot(from.vx, from.vy) >= kStartMps);
+  }
+
   std::printf("Time\n");
   {
     ObstacleMap map = emptyMap();

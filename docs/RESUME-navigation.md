@@ -1,10 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: design §19.4 step 6, Navigate in
-`heron_robot`, built and floor-checked (round a box: passed), with
-start-up retries for the OTOS and LiDAR; next, keeping `heron_robot`
-running at a Maker Faire stand (the OTOS after a lift, the LiDAR that
-needed a replug, booting into `heron_robot`). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16: Navigate starts from rest reliably (the
+planner's from-rest rules, `navigation-cpp-design.md` §7.5, "As built:
+starting from rest"), and `heron_robot` runs at boot; next, the
+stop-and-go fix on the floor, then the rest of the Faire list ("Picking
+up" 0). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -152,11 +152,24 @@ navigation, so SwC to Manual always takes over.
 - **Step 6's floor check passed** (Chris, "go ahead and merge"): round a
   box at about 16 cm; the return to the line is to be seen on the rubber
   floor check, where the table changes anyway.
+- **Navigate from rest** (Chris, "go ahead with the fix", then "smooth
+  out the stop-and-go"): change the planner's rules for a still robot and
+  measure the table's left side, rather than tune the table point by
+  point; `kStartSize` 0.4, `kStartMps` 0.10, `kNearlyStillMps` 0.15,
+  still by the pose's movement as well as the OTOS's speed (§7.5).
 
 ## Picking up
 
 0. **Before the Faire, in this order** (each needs the robot on; Chris
    drives):
+   0. **The stop-and-go fix on the floor** (`kNearlyStillMps` 0.15,
+      deployed, not yet driven): Navigate round a box on the hardwood,
+      throttle full, stick forward, with **fresh motor batteries**. Expect
+      no pulses round the box; watch `moved` and `STILL` in the status
+      line. Fresh cells make the motors stronger than in every run of
+      2026-11-16, so watch the start too (a jump at 0.4). Turn the boot
+      service off first (`scripts/robot_autostart.sh <user>@<pi> off`),
+      on again after.
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
@@ -225,7 +238,9 @@ navigation, so SwC to Manual always takes over.
    5. **The rubber floor** (a mat or tiles beforehand): the OTOS's
       tracking (a false `NOT_MOVING` would stop the robot mid-demo),
       stopping distances, a few table points, and Navigate back to the
-      line.
+      line. The from-rest constants (`kStartSize`, `kStartMps`,
+      `kNearlyStillMps`) were set on the hardwood with run-down cells:
+      check a start from rest there too.
    6. **A rehearsal:** both robots, a full battery, power cycles, picked
       up and put down, all three modes.
 
@@ -723,6 +738,15 @@ Settled 2026-11-04: the bench rig carries navigation.
   planner follows the line in odom, so the path is right, but the robot
   points off it. The 45° diagonals, where heading hold cannot act, are
   the likely cause [unverified].
+- **The motor batteries set the dead band:** four AA alkalines, after a
+  day of runs, no longer started the robot at forward 0.2 (0.19 m/s two
+  days before) [ours, one run; the cause unverified]. The table's
+  smallest points are only as good as the batteries they were measured
+  on; the from-rest rules leave a margin (`kStartSize` 0.4). For the
+  Faire: fresh cells or NiMH, and spares.
+- **The simulator has no dead band step:** the from-rest rules changed
+  nothing there except the dead end (now Blocked) and two box runs about
+  3 s slower; the floor is the only check of them.
 - **The scenarios leave out `MotionWatch`:** the simulated OTOS is
   never lifted, and pressed against a wall it might trip where the
   floor has not shown it does [unverified].
