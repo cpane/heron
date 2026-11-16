@@ -1465,10 +1465,12 @@ robot and the floor said would not. What changed, in `Planner.cpp`
 | Right at 0.4, measured once at 0.08 m/s: it hummed | From rest, at least `kStartMps` (0.10 m/s, `MotionWatch`'s `expectMps`); the smallest such command may be faster than the course asks (I13's one exception), or a slow course leaves nothing |
 | The OTOS read −0.07 m/s with the robot standing (the LiDAR's nearest point unchanged), so it was "rolling" and small commands were allowed | Nearly still is the OTOS's speed **or** the pose's movement over `kMovedWindow` (0.5 s), whichever says still; `LocalPlanner` fills `PlanInput::movedMps`. Seen again at −0.05 m/s with `moved 0.00`: the OTOS's position does not drift with its phantom speed [ours, one run] |
 | Forward at 0.2, measured 0.19 m/s on 2026-11-14, only hummed (four AA alkalines after a day of runs) | From rest, at least `kStartSize` (0.4 of full drive) |
-| Round a box in pulses: small commands while crawling, a stop, a kick | `kNearlyStillMps` 0.05 → 0.15 m/s: a crawl is planned as a start [not yet on the floor] |
+| Round a box in pulses: small commands while crawling, a stop, a kick | `kNearlyStillMps` 0.05 → 0.15 m/s: a crawl is planned as a start (on the floor: the next row) |
+| Round a box, rolling: left at 0.1 (+0.05 +0.09), lifted by `predict()` to the 0.7 point's motion, then 1.0 once nearly still, swinging between them every half second (up-left's 0.13 m/s sits at `kNearlyStillMps`) | Rolling or still, no command short of the first size measured to move in its direction is a candidate; the limiter still reads the lifted table |
 
-Rolling (over `kNearlyStillMps` by both tests) the rules are as before:
-small commands keep a moving robot going (check 1, 2026-11-14). The
+Rolling (over `kNearlyStillMps` by both tests) commands smaller than
+`kStartSize` are allowed: they keep a moving robot going (check 1,
+2026-11-14), down to the first size measured to move. The
 plan carries `nearlyStill` and `movedMps`, and the status line prints
 `moved <m/s>` and `STILL`.
 
@@ -1486,6 +1488,20 @@ left with stop-and-go; full speed again for about a metre; then
 25 cm from it. In simulation the dead end now reports Blocked as well
 (step 5's open item); two box runs take about 3 s longer (21.8 against
 18.5 s).
+
+**Fresh batteries** (2026-11-16, Chris: "the batteries make a big
+difference"; `captures/low-end-2026-11-16.log`, Manual, from rest): the
+table is now measured on fresh motor alkalines. Forward 0.4 to 0.6 made
+0.31 to 0.36 m/s (0.27 to 0.31 before); the stick's forward-left corner
+0.32 to 0.37 m/s, turning left 0.35 to 0.42 rad/s; 10 o'clock (sent at
+62° to 68°, one column at 65°) 0.10, 0.17 and 0.19 m/s at 0.41, 0.54 and
+0.67, where the run-down batteries stalled at 0.5. Up-left is slow to
+start too: 0.7 to 1.1 s to reach 0.10 m/s, against 0.2 to 0.3 s forward.
+Two box runs on the floor before the change
+(`navigate-smooth*-2026-11-16.log`) crawled in front of the box, the
+plan changing direction every cycle so the robot never got going
+[unverified as the cause]; the room ran out past the box, where the
+return to the line found a wall and stopped Blocked.
 
 ## 8. `heron_planner`: the local planner (N5)
 

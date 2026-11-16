@@ -1,10 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: Navigate starts from rest reliably (the
-planner's from-rest rules, `navigation-cpp-design.md` §7.5, "As built:
-starting from rest"), and `heron_robot` runs at boot; next, the
-stop-and-go fix on the floor, then the rest of the Faire list ("Picking
-up" 0). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16: Navigate starts from rest; the planner no
+longer picks commands short of the first size measured to move, and the
+hardwood table is re-measured on fresh motor batteries
+(`navigation-cpp-design.md` §7.5); next, a box run with room past the
+box, then the rest of the Faire list ("Picking up" 0). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -157,19 +157,30 @@ navigation, so SwC to Manual always takes over.
   measure the table's left side, rather than tune the table point by
   point; `kStartSize` 0.4, `kStartMps` 0.10, `kNearlyStillMps` 0.15,
   still by the pose's movement as well as the OTOS's speed (§7.5).
+- **No command short of the first size measured to move** (Chris, "go
+  ahead with the fix"): rolling, the table lifted left at 0.1 to the 0.7
+  point's motion, and the planner swung between 0.1 and 1.0 round a box.
+- **Motion tables are measured on fresh batteries** (Chris): the motor
+  batteries move the slow end most; the robot gets fresh cells at the
+  Faire, on a schedule, and the from-rest margins stay.
 
 ## Picking up
 
 0. **Before the Faire, in this order** (each needs the robot on; Chris
    drives):
-   0. **The stop-and-go fix on the floor** (`kNearlyStillMps` 0.15,
-      deployed, not yet driven): Navigate round a box on the hardwood,
-      throttle full, stick forward, with **fresh motor batteries**. Expect
-      no pulses round the box; watch `moved` and `STILL` in the status
-      line. Fresh cells make the motors stronger than in every run of
-      2026-11-16, so watch the start too (a jump at 0.4). Turn the boot
-      service off first (`scripts/robot_autostart.sh <user>@<pi> off`),
-      on again after.
+   0. **A box run with the fresh-battery table** (deployed with the
+      measured-size rule, not yet driven): Navigate round a box on the
+      hardwood, throttle full, stick forward, fresh motor batteries, and
+      **room**: in simulation it swings 0.4 to 0.6 m out and is back on
+      the line about 2 m past the box, so 0.6 m clear to each side and
+      2 m past it. Expect no 0.1-size commands and no crawl in front of
+      the box. Two runs on 2026-11-16 before the table change
+      (`navigate-smooth*-2026-11-16.log`): the first swung between
+      commands 0.1 and 1.0 (fixed); the second crawled under 0.15 m/s for
+      about 5 s, the plan changing direction every cycle, and ran out of
+      room past the box. If the crawl stays, the next suspect is the
+      change score's weight. Boot service off first
+      (`scripts/robot_autostart.sh <user>@<pi> off`), on again after.
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
@@ -742,8 +753,16 @@ Settled 2026-11-04: the bench rig carries navigation.
   day of runs, no longer started the robot at forward 0.2 (0.19 m/s two
   days before) [ours, one run; the cause unverified]. The table's
   smallest points are only as good as the batteries they were measured
-  on; the from-rest rules leave a margin (`kStartSize` 0.4). For the
-  Faire: fresh cells or NiMH, and spares.
+  on; the from-rest rules leave a margin (`kStartSize` 0.4). Measured
+  on fresh cells the same day, up-left at 0.5 went from a stall to
+  0.17 m/s, forward 0.4 from 0.27 to 0.31 m/s (§7.5) [ours, one set].
+  The tables are measured fresh (Decided); how fast the slow end fades
+  over a day of runs is unmeasured. For the Faire: fresh cells, spares,
+  a swap schedule.
+- **The planner chose a path with no clearance near a wall** (2026-11-16,
+  `navigate-smooth2`, line 101: `clear -0.00`, the limiter cut it):
+  the limiter did its job; look into it only if it shows up in open
+  space [unverified].
 - **The simulator has no dead band step:** the from-rest rules changed
   nothing there except the dead end (now Blocked) and two box runs about
   3 s slower; the floor is the only check of them.
