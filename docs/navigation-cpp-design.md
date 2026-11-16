@@ -1520,8 +1520,11 @@ In simulation (30 runs per speed): at 0.42 the limiter cuts nothing,
 the closest pass is 147 mm, the worst return 0.47 m off the line 2 m past
 (0.91 before; no weighting brought any within 10 cm, so that check is
 0.5 m at full stick); at 0.3, every run back within 10 cm, the closest
-pass 126 mm (137 before). Scenario 1 now runs at both speeds. Not yet on
-the floor.
+pass 126 mm (137 before). Scenario 1 now runs at both speeds. On the
+floor (2026-11-16, `navigate-fullstick-2026-11-16.log`): no limiter cuts
+passing, but late braking before the box and, once, a 9 s deadlock on a
+right strafe at 0.5 that did not move the robot; the weights are to go
+back (RESUME-navigation, "Picking up" 0.0).
 
 ## 8. `heron_planner`: the local planner (N5)
 

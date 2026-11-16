@@ -1,10 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: Navigate starts from rest; the planner no
-longer picks commands short of the first size measured to move, and the
-hardwood table is re-measured on fresh motor batteries
-(`navigation-cpp-design.md` §7.5); next, a box run with room past the
-box, then the rest of the Faire list ("Picking up" 0). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-16 (late): full-stick tuning half done on
+`feature/navigation-planner-side-commit` (unpushed, deployed to the bench
+rig): the limiter's test in the planner works on the floor (no cuts
+passing a box), the new score weights do not (late braking, and once a
+9 s deadlock); next, "Picking up" 0.0. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -194,10 +194,32 @@ navigation, so SwC to Manual always takes over.
       (`navigate-left10-2026-11-16.log`): round it on its right as
       expected, back to FOLLOWING about 4 s past it, never Blocked; one
       cycle of a left strafe (a near-stop let past the window, fixed).
-      **Next: the full-stick tuning on the floor** (§7.5, "As built: full
-      stick"; deployed, not yet driven): the same two box runs, centred
-      and 10 cm left. Expect no `limiter CUT` while passing, no swap of
-      sides, and the robot back near the line within a few metres.
+      **The full-stick tuning, driven 2026-11-16**
+      (`navigate-fullstick-2026-11-16.log`, both box runs in one log):
+      no `limiter CUT` while passing, in either run (the limiter's
+      test works). But worse than before it: straight at the box,
+      braking 0.5 → 0.1 m/s, before choosing a side (about 0.45 m out,
+      0.65 before), one cycle of left then right, a crawl round the
+      corner; after the centred box 8 s of (+0.87 +0.50), which makes
+      almost no sideways motion, never back to the line. The box-left
+      run **stuck for about 9 s** (log lines 885–981): a right strafe at
+      0.5, the limiter SLOWED, the robot not moving (0.03 m/s, the
+      phantom); `MotionWatch` did not trip, the table predicting
+      0.11 m/s against its 0.10. **Tomorrow, in order:**
+      1. Put `ScoreWeights` back to offLine 1.0, change 0.5 (the late
+         commitment is the likely cause [unverified]); keep the
+         near-stop fix and the limiter's test. Rerun the box scenarios at
+         both speeds, and see what the old weights do at 0.42 with the
+         limiter's test in (not yet tried together).
+      2. Re-measure the right strafe from rest on these batteries, as the
+         left was: throttle 0.4, 0.5, 0.6, 0.8, stick fully right, 3 to
+         4 s each (`heron_robot --lines 10`, Manual, tee to
+         `~/heron/captures/right-2026-11-17.log`); replace p15 to p19.
+      3. A guard against the deadlock: commanded and not moving for about
+         1 s, the planner drops that size in that direction and steps up
+         (or `MotionWatch` trips with a margin over the table, not at
+         it). At the Faire this is the robot that sits and hums.
+      4. The two box runs again, full stick, room past the box.
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
@@ -794,6 +816,10 @@ Settled 2026-11-04: the bench rig carries navigation.
   The tables are measured fresh (Decided); how fast the slow end fades
   over a day of runs is unmeasured. For the Faire: fresh cells, spares,
   a swap schedule.
+- **The box scenarios' sideways is kinder than the floor's** (2026-11-16):
+  weights that halved the drift off the line in simulation made the
+  floor brake late and once deadlock; the simulator has no dead band
+  and the table's right strafe is from 11-14 [ours, one pair of runs].
 - **The planner chose a path with no clearance near a wall** (2026-11-16,
   `navigate-smooth2`, line 101: `clear -0.00`, the limiter cut it):
   the limiter did its job; look into it only if it shows up in open
