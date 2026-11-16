@@ -205,6 +205,19 @@ navigation, so SwC to Manual always takes over.
       like `heron-teleop@.service`, and the autostart script taking
       which program. Builder's and motor's scripts are involved; check
       their docs first.
+      **Built 2026-11-16** as its own unit and script rather than a
+      program argument to teleop's: `target/systemd/heron-robot@.service`
+      (`Conflicts=heron-teleop@%i`; waits up to 30 s for `/dev/rplidar`
+      and `/dev/arduino`, then starts anyway, for Manual; `Restart=always`)
+      and `scripts/robot_autostart.sh <user>@<pi> on|off|status` (`on`
+      turns teleop's service off, installs, enables and restarts; `off`
+      leaves both off; both need sudo). **Checked on the bench rig** [ours,
+      one power cycle]: running 12 s after power-on; the OTOS failed its
+      first start and passed the retry, the LiDAR started first time;
+      Chris drove Manual, Assisted and Navigate with the remote. Turn it
+      off before a `heron_robot` run from a terminal (both want the
+      Arduino). Motor and builder have Inbox entries:
+      `builder/wheel_check.sh` stops only teleop's service.
    4. **Mini robot 2:** a copy of `bench.conf` as its own profile, then
       spot checks (dead band, OTOS, LiDAR yaw) against robot 1's
       numbers. Its bring-up is motor's and builder's work; Navigate needs

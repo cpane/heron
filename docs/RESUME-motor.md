@@ -457,3 +457,15 @@ not move, though a motor sound could be heard. Nothing on the Pi's side can tell
 the motors have no power, so a builder or a robot program would drive
 on believing them. Whether the shield offers a way to sense the motor
 supply is yours to weigh.
+
+### From navigation, 2026-11-16: heron_robot can now be the boot service
+
+[ours, bench rig; write-up in `RESUME-navigation.md`, "Picking up" 0.3]
+`target/systemd/heron-robot@.service`, installed by
+`scripts/robot_autostart.sh <user>@<pi> on|off|status`, runs `heron_robot`
+at boot in place of `heron_teleop` (`on` turns teleop's service off; the
+units conflict, both owning `/dev/arduino` and `/dev/serial0`). This
+file's "At boot" note and its first steps name only
+`teleop_autostart.sh`: with the robot service on, bench work needs
+`robot_autostart.sh ... off` first. Checked once: running 12 s after
+power-on, all three modes driven.

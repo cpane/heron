@@ -72,3 +72,14 @@ armed with the throttle up, nothing moves: the builder brings the throttle
 to the bottom, then drives as normal. Before 2026-11-08 (PR #46) it showed
 `motors NOT OK` until the Pi was rebooted or the service restarted, so a
 Pi with older binaries needs `scripts/deploy_cpp.sh` first.
+
+### From navigation, 2026-11-16: heron_robot can now be the boot service
+
+[ours, bench rig; write-up in `RESUME-navigation.md`, "Picking up" 0.3]
+`scripts/robot_autostart.sh <user>@<pi> on|off|status` installs
+`target/systemd/heron-robot@.service`, which runs `heron_robot` (Manual,
+Assisted and Navigate on SwC) at boot in place of `heron_teleop`; `on`
+turns `heron-teleop@<user>` off, and the two units conflict.
+`builder/wheel_check.sh` checks and stops only `heron-teleop@<user>`, so
+with the robot service running it would find the Arduino busy. Worth a
+check of either service, and a line in the guide, once builders use it.
