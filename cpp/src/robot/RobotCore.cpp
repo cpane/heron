@@ -156,6 +156,12 @@ Planner::PlannerConfig toPlannerConfig(const Profile::RigProfile &profile,
   config.stopMarginM = profile.navigation->stopMargin;
   config.maxSpeedMps = profile.geometry->maxSpeed;
   config.accelMps2 = profile.geometry->accel;
+  // The limiter's test (Planner.h): its brake, and told the table's
+  // prediction kTableMargin faster, as decide() tells it.
+  config.limiterBrakeMps2 = profile.geometry->brake;
+  config.limiterScale = motion ? kTableMargin : 1.0;
+  config.holdGainPerS = HeadingHold::Config{}.gainPerS;
+  config.holdMaxRadps = HeadingHold::Config{}.maxRateRadps;
   config.motion = std::move(motion);
   return config;
 }

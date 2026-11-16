@@ -77,6 +77,22 @@
 // "Straight" is any candidate whose predicted motion runs within 5 degrees
 // of the course. Without a table, as above.
 //
+// The limiter's test (limiterBrakeMps2 set): the limiter sweeps each axis
+// of a command alone, forward and sideways, for as long as it takes to
+// stop from the measured speed plus its blind time, and cuts an axis whose
+// sweep comes inside the stop margin (Limiter.h). A diagonal past a box
+// can clear it while its forward part alone does not; at 0.42 m/s that
+// sweep is about 0.37 m on the hardwood, and the box scenarios driven at
+// full stick saw the limiter cut the planner's choice in 6 runs of 10
+// (2026-11-16). So a candidate is also rejected if any axis alone, or the
+// whole, told to the limiter limiterScale faster, would come inside the
+// margin (I12's floor) within that time. The turn is the one the limiter
+// is told: holding a heading (Course::holdHeadingRad), heading hold's rate
+// plus the drift, which is the error times holdGainPerS; else the
+// candidate's own. That turn is what made the remaining cuts: the left
+// diagonal turns Heron 18 degrees, and hold swinging it back beside the
+// box swept the body's corner into it.
+//
 // The cell slack, kCellSlackM: the map is 5 cm cells, so true clearance
 // can fall short of what the field says by half a cell's diagonal for
 // where the hit lies in its cell, as much again for reading the field at a
@@ -141,13 +157,16 @@ inline constexpr double kStartMps = 0.10;
  *  (measured 0.19 m/s on 2026-11-14) only hummed. 0.4 is twice that. */
 inline constexpr double kStartSize = 0.4;
 
-/** Design §8.2's starting weights; tuned in the simulator (design §18, 3). */
+/** Design §8.2's starting weights, tuned in the simulator (design §18, 3);
+ *  offLine and change raised for full stick (2026-11-16: from 1.0 and 0.5,
+ *  the box scenarios at 0.42 m/s strayed up to 0.91 m off the line, now
+ *  0.47 m, and at 0.3 m/s every run is back within 10 cm). */
 struct ScoreWeights {
   double clearance{1.0};
   double way{1.0};  // the free way ahead, out to lookAheadM
   double progress{2.0};
-  double offLine{1.0};
-  double change{0.5};
+  double offLine{2.0};
+  double change{2.5};
 };
 
 /** The planner's settings, filled by heron_robot from the profile (I6). */
@@ -176,6 +195,13 @@ struct PlannerConfig {
   std::shared_ptr<const Motion::MotionTable> motion;
   double commandStepRad{15.0 * Geometry::kDegToRad};  // with a table: directions this far apart
   double commandSizeStep{0.1};                         // and sizes this far apart, up to 1
+  /** The limiter's per-axis test, applied to each candidate (header):
+   *  the brake, m/s^2, that sets the limiter's horizon; 0: off. */
+  double limiterBrakeMps2{0.0};
+  double limiterReactionS{0.25};  // its blind time: a scan's age and a revolution
+  double limiterScale{1.0};       // what it is told, against the table's prediction
+  double holdGainPerS{2.0};       // heading hold's (RobotCore.h), for the turn
+  double holdMaxRadps{0.8};       // the limiter is told while it holds
 };
 
 enum class State : std::uint8_t {

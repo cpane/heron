@@ -66,6 +66,10 @@ struct Course {
   double headingRad{0.0};     // ...in this direction
   double speedMps{0.0};       // the stick's size x throttle x max_speed (I13)
   double turnRateRadps{0.0};  // the left stick's, as in Manual (I16)
+  /** The heading heading hold holds, odom frame, filled by the loop (not
+   *  CourseKeeper): the planner works out the turn the limiter is told
+   *  from it (Planner.h, "The limiter's test"). None: not holding. */
+  std::optional<double> holdHeadingRad;
 };
 
 struct CourseConfig {

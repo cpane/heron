@@ -403,6 +403,9 @@ int main(int argc, char **argv) {
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
         if (mode == Mode::Navigate && armed) {
           course = keeper.update(Heron::Robot::toTwist(stick, geometry), p.newest.pose, p.epoch);
+          if (course && hold.holding()) {  // last cycle's: the turn the limiter is told (Planner.h)
+            course->holdHeadingRad = hold.targetRad();
+          }
           planner->setCourse(course);
           coursing = true;
           plan = planner->getLatest();
