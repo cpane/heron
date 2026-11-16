@@ -58,7 +58,10 @@
 // start from, and stood with the stick held; then, with only "moves at
 // all" required, onto right at 0.4, measured at 0.08 m/s, and stood again.
 // It must also be at least kStartSize: the smallest measured points stop
-// starting the robot as the battery runs down.
+// starting the robot as the battery runs down. kNearlyStillMps is well
+// above a stop (0.15): at 0.05, Navigate round a box (2026-11-16) chose
+// small commands while crawling, slowed to a stop, kicked with a large
+// one, and went round in pulses; a crawl is now planned as a start.
 // Nearly still, a direction's smallest such command is kept even when it is
 // faster than the course asks (I13's one exception, as forward's dead band
 // already makes 0.19 m/s of any stick): a slow course would otherwise
@@ -110,7 +113,7 @@ inline constexpr double kCellSlackM = 0.0833;
 
 /** Measured slower than this, m/s, Heron is nearly still: with a table,
  *  only commands that start it from rest are candidates (header). */
-inline constexpr double kNearlyStillMps = 0.05;
+inline constexpr double kNearlyStillMps = 0.15;
 
 /** The pose's movement over this long is the second test of nearly still:
  *  the OTOS's velocity can read a speed with the robot standing (2026-11-16:

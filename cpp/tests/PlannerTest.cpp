@@ -522,8 +522,8 @@ int main() {
     check("  straight ahead from rest: forward, at least kStartSize, not the 0.2 point",
           plan.commandVx >= kStartSize - 1e-9);
     Planner rolling(still);
-    plan = rolling.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.06, 0.0}));
-    print("a slow course to the left, rolling at 0.06", plan);
+    plan = rolling.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.20, 0.0}));
+    print("a slow course to the left, rolling at 0.20", plan);
     check("  rolling: a small command that would not start it is still allowed",
           plan.commandVy > 0.0 && plan.commandVy <= 0.6 + 1e-9);
     // The OTOS reading a speed with the robot standing (2026-11-16): the
