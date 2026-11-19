@@ -1503,6 +1503,29 @@ plan changing direction every cycle so the robot never got going
 [unverified as the cause]; the room ran out past the box, where the
 return to the line found a wall and stopped Blocked.
 
+**As built: full stick (2026-11-16).** The floor is driven at full stick,
+0.42 m/s on the hardwood; the box scenarios held 0.3. Run at 0.42, the
+limiter cut the planner's choice in 6 runs of 10, and runs ended up to
+0.9 m off the line. Chris chose tuning for full speed over capping
+Navigate at 0.3. What changed:
+
+| Seen | Change |
+|---|---|
+| Rolling at 0.33 m/s at a box, the plan jumped to left at 0.6 (0.04 m/s), a near-stop kept past the window as that direction's smallest command (`navigate-left10`) | The smallest command passes the window only nearly still, where the dead band needs it |
+| The limiter cut diagonals whose forward part alone, swept for its stopping time (about 0.37 m at 0.42), reached the box | The planner applies the limiter's test to each candidate: each axis alone, and the whole, told 1.2 × the table's motion, for the limiter's horizon (`limiterBrakeMps2`, from `[geometry] brake`) |
+| The remaining cuts: the left diagonal turned Heron 18°, and heading hold, swinging it back beside the box, swept the body's corner into it | The turn swept is the one the limiter is told: hold's gain × the heading error (`Course::holdHeadingRad`, filled by the loop) |
+| Off the line after a box: coming back sideways is slow on this floor | Score weights `offLine` 1 → 2, `change` 0.5 → 2.5, chosen over 30 runs per speed |
+
+In simulation (30 runs per speed): at 0.42 the limiter cuts nothing,
+the closest pass is 147 mm, the worst return 0.47 m off the line 2 m past
+(0.91 before; no weighting brought any within 10 cm, so that check is
+0.5 m at full stick); at 0.3, every run back within 10 cm, the closest
+pass 126 mm (137 before). Scenario 1 now runs at both speeds. On the
+floor (2026-11-16, `navigate-fullstick-2026-11-16.log`): no limiter cuts
+passing, but late braking before the box and, once, a 9 s deadlock on a
+right strafe at 0.5 that did not move the robot; the weights are to go
+back (RESUME-navigation, "Picking up" 0.0).
+
 ## 8. `heron_planner`: the local planner (N5)
 
 **Accepted 2026-11-09** (I10 to I16 below, as proposed). Design §8 and P9

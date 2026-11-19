@@ -172,16 +172,19 @@ Plan Planner::plan(const PlanInput &input) {
         if (speed < kStillMps || startSpeed < kStillMps) {
           continue;
         }
-        if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps)) {
+        if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps ||
+                            Motion::isDead(course.dead, cx, cy))) {
           continue;  // must start a still robot (header)
         }
-        const bool smallest = !moved;
+        // The smallest gets past the window only nearly still, where the
+        // dead band needs it (header); rolling, it is a near-stop.
+        const bool smallest = !moved && nearlyStill;
         moved = true;
         const bool reachable = std::abs(made.vx - input.measured.vx) <= reach + 1e-9 &&
                                std::abs(made.vy - input.measured.vy) <= reach + 1e-9;
         // Nearly still, a direction's smallest command that starts it may
         // be faster than the course asks: nothing slower can (header).
-        const bool overCap = speed > speedCap + 1e-9 && !(nearlyStill && smallest);
+        const bool overCap = speed > speedCap + 1e-9 && !smallest;
         if (overCap || !(reachable || smallest)) {
           continue;
         }
@@ -247,6 +250,37 @@ Plan Planner::plan(const PlanInput &input) {
   const Geometry::Vec2 carrot = course.anchor + (along + cfg.lookAheadM) * dirOdom;
   const Geometry::Vec2 toCarrot =
       (1.0 / std::max(1e-9, Geometry::norm(carrot - from))) * (carrot - from);
+  // The limiter's horizon, as Limiter::limit() works it out (header).
+  const double limitS =
+      cfg.limiterBrakeMps2 > 0.0
+          ? std::hypot(input.measured.vx, input.measured.vy) / cfg.limiterBrakeMps2 + cfg.limiterReactionS
+          : 0.0;
+  const auto sweepClear = [&](const Geometry::Twist &t) {
+    if (std::abs(t.vx) + std::abs(t.vy) + std::abs(t.wz) < 1e-9) {
+      return true;
+    }
+    const int limitSteps = std::max(1, static_cast<int>(std::ceil(limitS / cfg.stepS - 1e-9)));
+    for (int k = 1; k <= limitSteps; ++k) {
+      const Geometry::Pose2 on = Geometry::integrate(pose, t, limitS * k / limitSteps);
+      if (clearanceAt(field, m_edge, on) - kCellSlackM < floor - kSameM) {
+        return false;
+      }
+    }
+    return true;
+  };
+  // Each axis alone, then the whole, as the limiter tells them (header).
+  const auto limiterPasses = [&](const Geometry::Twist &c) {
+    const double drift = c.wz - course.turnRateRadps;
+    double turn = c.wz;
+    if (course.holdHeadingRad) {
+      const double error = Geometry::wrapAngle(*course.holdHeadingRad - pose.heading);
+      turn = std::clamp(cfg.holdGainPerS * error - drift, -cfg.holdMaxRadps, cfg.holdMaxRadps) + drift;
+    }
+    const double vx = c.vx * cfg.limiterScale;
+    const double vy = c.vy * cfg.limiterScale;
+    return sweepClear(Geometry::Twist{vx, 0.0, 0.0}) && sweepClear(Geometry::Twist{0.0, vy, 0.0}) &&
+           sweepClear(Geometry::Twist{0.0, 0.0, turn}) && sweepClear(Geometry::Twist{vx, vy, turn});
+  };
   std::vector<Candidate> passed;
   for (Candidate &c : candidates) {
     const double speed = std::hypot(c.twist.vx, c.twist.vy);
@@ -265,6 +299,9 @@ Plan Planner::plan(const PlanInput &input) {
     }
     if (!ok) {
       continue;
+    }
+    if (cfg.limiterBrakeMps2 > 0.0 && !limiterPasses(c.twist)) {
+      continue;  // the limiter would cut it (header)
     }
     const Geometry::Vec2 to{end.x, end.y};
     c.clearance = least;

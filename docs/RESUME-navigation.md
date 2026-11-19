@@ -1,10 +1,12 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16: Navigate starts from rest; the planner no
-longer picks commands short of the first size measured to move, and the
-hardwood table is re-measured on fresh motor batteries
-(`navigation-cpp-design.md` §7.5); next, a box run with room past the
-box, then the rest of the Faire list ("Picking up" 0). Started 2026-11-04. **Every navigation library
+Last updated 2026-11-18: full-stick tuning done on
+`feature/navigation-planner-side-commit` (unpushed, deployed to the bench
+rig): round the box at full stick, centred and 10 cm left, both on
+course again, no cuts, no deadlock; the right strafe re-measured, a
+guard against commands that do not start the robot (`StallWatch`), score
+weights offLine 1.5, change 0.75; next, push and merge, then "Picking
+up" 0.0's Faire list. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -160,15 +162,26 @@ navigation, so SwC to Manual always takes over.
 - **No command short of the first size measured to move** (Chris, "go
   ahead with the fix"): rolling, the table lifted left at 0.1 to the 0.7
   point's motion, and the planner swung between 0.1 and 1.0 round a box.
+- **Tune Navigate for full stick, not cap it at 0.3 m/s** (Chris,
+  2026-11-16): the planner now applies the limiter's test, turn
+  included, and the score weights changed (§7.5, "As built: full
+  stick").
 - **Motion tables are measured on fresh batteries** (Chris): the motor
   batteries move the slow end most; the robot gets fresh cells at the
   Faire, on a schedule, and the from-rest margins stay.
+
+## Decided (2026-11-18)
+
+- **Full-stick tuning finished** (Chris's go-ahead for the four steps;
+  Claude chose the weights in simulation; Chris drove the check): score
+  weights 1.5 and 0.75, the right strafe re-measured, `StallWatch`.
+  Both box runs went round and resumed course.
 
 ## Picking up
 
 0. **Before the Faire, in this order** (each needs the robot on; Chris
    drives):
-   0. **A box run with the fresh-battery table** (deployed with the
+   0. **Done 2026-11-18: a box run with the fresh-battery table** (deployed with the
       measured-size rule, not yet driven): Navigate round a box on the
       hardwood, throttle full, stick forward, fresh motor batteries, and
       **room**: in simulation it swings 0.4 to 0.6 m out and is back on
@@ -186,8 +199,50 @@ navigation, so SwC to Manual always takes over.
       front of the box, choosing between a right and a left strafe; the
       change score's weight is the suspect [unverified]. A run before it
       (`navigate-fresh-…`) is void: the OTOS restarted while the robot
-      was carried (1, below). Still to do: the box 10 cm left of the line
-      (the side the simulator passes closest).
+      was carried (1, below). The box 10 cm left of the line, driven
+      (`navigate-left10-2026-11-16.log`): round it on its right as
+      expected, back to FOLLOWING about 4 s past it, never Blocked; one
+      cycle of a left strafe (a near-stop let past the window, fixed).
+      **The full-stick tuning, driven 2026-11-16**
+      (`navigate-fullstick-2026-11-16.log`, both box runs in one log):
+      no `limiter CUT` while passing, in either run (the limiter's
+      test works). But worse than before it: straight at the box,
+      braking 0.5 → 0.1 m/s, before choosing a side (about 0.45 m out,
+      0.65 before), one cycle of left then right, a crawl round the
+      corner; after the centred box 8 s of (+0.87 +0.50), which makes
+      almost no sideways motion, never back to the line. The box-left
+      run **stuck for about 9 s** (log lines 885–981): a right strafe at
+      0.5, the limiter SLOWED, the robot not moving (0.03 m/s, the
+      phantom); `MotionWatch` did not trip, the table predicting
+      0.11 m/s against its 0.10. **Fixed and driven 2026-11-18**
+      (`navigate-2026-11-18.log`, Chris driving, fresh batteries, both
+      box runs in one log; "both runs the robot went around the
+      obstacle and resumed course"):
+      - Weights back from 2 and 2.5, but not to 1 and 0.5: over 1.5,
+        offLine itself slows straight at a box (PlannerTest's "box
+        ahead"), and 1 and 0.5 left 5 to 6 simulated full-stick runs
+        in 30 over 0.5 m off the line. **1.5 and 0.75** (Planner.h
+        says why; 1.5 and 1 stood one run in 30 inside the margin
+        with the new strafe).
+      - The right strafe re-measured from rest on fresh batteries
+        (`captures/right-2026-11-18.log`): 0.12, 0.14, 0.17, 0.23 m/s
+        at 0.4, 0.5, 0.6, 0.77, turning right about 10°/s; 0.4 now
+        starts it (the 11-14 points: 0.06 at 0.4).
+      - `StallWatch` (`RobotCore.h`): the wheels driven with one
+        translation for 1 s, the pose moving under 0.03 m/s, makes that
+        command dead until disarmed or the mode changes; nearly still,
+        the planner's candidates and the limiter's substitute pass over
+        it and smaller ones within 15°. Not seen to trigger on the
+        floor yet [unverified there; robot_test and planner_test].
+      - On the floor, both runs (log lines 358–471, 882–998): 0.45 m/s
+        to the box, a side chosen about 0.6 m out at 0.35 m/s (the
+        night before: braking to 0.1 at 0.45 m), right round it; beside
+        it about 1 s at 0.07 to 0.15 m/s, the limiter SLOWED, then on
+        at 0.35 to 0.40; back left with (+0.87 +0.50) for 4 to 5 s.
+        No `limiter CUT`, no deadlock, never BLOCKED while driven, no
+        dead command found. Still AVOIDING when the stick was let go:
+        the left diagonal makes 0.00 to 0.05 m/s sideways, so the
+        return to the line is slow (Chris saw it resume course).
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
@@ -784,6 +839,10 @@ Settled 2026-11-04: the bench rig carries navigation.
   The tables are measured fresh (Decided); how fast the slow end fades
   over a day of runs is unmeasured. For the Faire: fresh cells, spares,
   a swap schedule.
+- **The box scenarios' sideways is kinder than the floor's** (2026-11-16):
+  weights that halved the drift off the line in simulation made the
+  floor brake late and once deadlock; the simulator has no dead band
+  and the table's right strafe is from 11-14 [ours, one pair of runs].
 - **The planner chose a path with no clearance near a wall** (2026-11-16,
   `navigate-smooth2`, line 101: `clear -0.00`, the limiter cut it):
   the limiter did its job; look into it only if it shows up in open
@@ -794,6 +853,19 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **The scenarios leave out `MotionWatch`:** the simulated OTOS is
   never lifted, and pressed against a wall it might trip where the
   floor has not shown it does [unverified].
+- **Standing for good inside the margin** (2026-11-18, simulation
+  only): with the re-measured strafe and weights 1.5 and 1, one box run
+  in 30 at 0.3 m/s turned back toward the box at 6 cm, went BLOCKED,
+  coasted to 4 cm and never moved again: inside the margin, the floor
+  is the clearance now, and every command on this floor turns the robot,
+  so the planner's limiter test passes none (28 of 64 rejected by it,
+  33 by the path). The weights make it rare, not impossible;
+  `StallWatch` does not cover it (BLOCKED drives nothing). Not seen on
+  the floor [unverified].
+- **The return to the line is slow at full stick** (2026-11-18): the
+  left diagonal the planner returns with makes almost no sideways
+  motion on the hardwood; seen on the floor, never back to FOLLOWING
+  within about 5 s past the box [ours, two runs].
 - **The simulated no-returns are random; real ones cluster** (runs of
   4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).

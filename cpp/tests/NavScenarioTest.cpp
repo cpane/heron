@@ -63,6 +63,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -210,7 +211,7 @@ struct Run {
     const Heron::Robot::AssistedInput assisted{
         &limiter, bench().geometry, bench().motion.get(),
         LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, newest.velocity, now}, std::nullopt, false,
-        std::nullopt};
+        std::nullopt, {}};
     Heron::Robot::AssistedInput in = assisted;
     const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
     const double stickTurn = Heron::Robot::toTwist(BodyVelocity{0.0, 0.0, stick.wz}, bench().geometry).wz;
@@ -349,6 +350,28 @@ struct NavRun {
     config.maxSpeedMps = bench().geometry.maxSpeed;
     config.accelMps2 = Heron::NavSim::BaseConfig{}.accel;
     config.motion = bench().motion;  // commands, as the table predicts (P15)
+    config.limiterBrakeMps2 = scenarioConfig().brakeMps2;  // the limiter's test (Planner.h)
+    config.limiterScale = Heron::Robot::kTableMargin;
+    // For tuning only: HERON_PLANNER_TUNE="offLine=2,lookAhead=1.5,..."
+    if (const char *tune = std::getenv("HERON_PLANNER_TUNE")) {
+      std::string all(tune);
+      std::size_t at = 0;
+      while (at < all.size()) {
+        const std::size_t end = std::min(all.find(',', at), all.size());
+        const std::string item = all.substr(at, end - at);
+        const std::size_t eq = item.find('=');
+        const std::string key = item.substr(0, eq);
+        const double v = std::atof(item.substr(eq + 1).c_str());
+        if (key == "clearance") config.weights.clearance = v;
+        if (key == "way") config.weights.way = v;
+        if (key == "progress") config.weights.progress = v;
+        if (key == "offLine") config.weights.offLine = v;
+        if (key == "change") config.weights.change = v;
+        if (key == "lookAhead") config.lookAheadM = v;
+        if (key == "horizon") config.horizonS = v;
+        at = end + 1;
+      }
+    }
     return config;
   }
 
@@ -366,7 +389,10 @@ struct NavRun {
       }
     }
     const Pose2 pose = run.history.at(run.now).pose;
-    const std::optional<Heron::Planner::Course> course = keeper.update(stick, pose, 1);
+    std::optional<Heron::Planner::Course> course = keeper.update(stick, pose, 1);
+    if (course && run.hold.holding()) {  // as heron_robot's loop fills it
+      course->holdHeadingRad = run.hold.targetRad();
+    }
     if (course && (!plan || plan->courseSeq != course->seq || run.now - plan->time >= 100ms)) {
       Heron::Planner::PlanInput input;
       input.map = &map;
@@ -387,6 +413,15 @@ struct NavRun {
       }
       blocked += plan->state == Heron::Planner::State::Blocked ? 1 : 0;
       avoiding += plan->state == Heron::Planner::State::Avoiding ? 1 : 0;
+      // A side flip: a sideways command of at least kSideCommand the
+      // other way from the last one, before flipsBeforeX (2026-11-16: on
+      // the floor, Navigate swapped between a right and a left strafe in
+      // front of a box).
+      if (run.base.truePose().x < flipsBeforeX && std::abs(plan->commandVy) >= kSideCommand) {
+        const int side = plan->commandVy > 0.0 ? 1 : -1;
+        flips += lastSide != 0 && side != lastSide ? 1 : 0;
+        lastSide = side;
+      }
     }
     // The plan's command (I19), if it is for this course and fresh,
     // through decide() as a stick: the limiter told what the table says
@@ -400,6 +435,14 @@ struct NavRun {
     const bool moving = want.vx != 0.0 || want.vy != 0.0;
     driven += moving ? 1 : 0;
     cut += moving && (r == Reason::Cut || r == Reason::BackingOff) ? 1 : 0;
+    if (trace && moving && r != Reason::Clear) {
+      const Pose2 t = run.base.truePose();
+      const auto &l = *d.limited;
+      std::printf("            limiter %s at (%.3f, %.3f): want (%.2f, %.2f) drove (%.2f, %.2f); scale %.2f %.2f "
+                  "%.2f, T %.2f s, nearest (%.3f, %.3f)\n",
+                  Heron::Limiter::toString(r), t.x, t.y, want.vx, want.vy, d.body.vx, d.body.vy, l.scale.vx,
+                  l.scale.vy, l.scale.wz, l.horizonS, l.nearest ? l.nearest->x : 0.0, l.nearest ? l.nearest->y : 0.0);
+    }
     slowed += moving && r == Reason::Slowed ? 1 : 0;
     return d;
   }
@@ -415,6 +458,10 @@ struct NavRun {
   std::int32_t cut{0};       // ...of which the limiter cut (Cut, BackingOff)
   std::int32_t slowed{0};    // ...or only slowed, in its slow zone
   bool trace{false};         // print every plan
+  static constexpr double kSideCommand = 0.2;
+  double flipsBeforeX{-1e9};  // count side flips until here (true x)
+  std::int32_t flips{0};
+  int lastSide{0};
 };
 
 }  // namespace
@@ -437,88 +484,106 @@ int main() {
       std::int32_t driven{0};
       std::int32_t cut{0};
       std::int32_t slowed{0};
+      std::int32_t flips{0};
     };
-    std::vector<BoxRun> runs;
-    std::uint32_t seed = 100;
-    for (const double x : {1.35, 1.95}) {
-      for (const double y : {-0.10, -0.05, 0.0, 0.05, 0.10}) {
-        BoxRun b;
-        b.box = Vec2{x, y};
-        b.seed = ++seed;
-        runs.push_back(b);
-      }
-    }
-    // Independent runs, shared across the cores as scenario 2's are.
-    const char *traceRun = std::getenv("HERON_SCENARIO_TRACE1");
-    const auto drive = [traceRun](BoxRun &b, std::size_t r) {
-      Heron::NavSim::World world;
-      world.addBox(Vec2{2.5, 0.0}, 9.0, 4.0);
-      Heron::NavSim::World boxOnly;
-      boxOnly.addBox(b.box, 0.3, 0.3);
-      world.segments.insert(world.segments.end(), boxOnly.segments.begin(), boxOnly.segments.end());
-      const std::vector<Vec2> box = pointsOf(boxOnly.segments);
-      NavRun nav(std::move(world), Pose2{}, b.seed);
-      nav.trace = traceRun != nullptr && static_cast<std::size_t>(std::atoi(traceRun)) == r;
-      const Twist stick{0.3, 0.0, 0.0};
-      std::int32_t c = 0;
-      for (; c < 1500 && nav.run.base.truePose().x < 4.5; ++c) {
-        (void)nav.cycle(stick);
-        const Pose2 p = nav.run.base.truePose();
-        b.closest = std::min(b.closest, gapTo(p, box));
-        b.widest = std::max(b.widest, std::abs(p.y));
-        if (!b.yAfter && p.x >= b.box.x + 0.15 + 2.0) {
-          b.yAfter = p.y;
+    // The box runs at 0.3 m/s, and at full stick (the hardwood's max_speed,
+    // 0.42 m/s), as the floor is driven (2026-11-16).
+    for (const double speed : {0.3, bench().geometry.maxSpeed}) {
+      const bool fullSpeed = speed > 0.3;
+      std::printf("      at %.2f m/s\n", speed);
+      std::vector<BoxRun> runs;
+      // HERON_SCENARIO_SEED: another set of sensor noise, for tuning.
+      const char *seedEnv = std::getenv("HERON_SCENARIO_SEED");
+      std::uint32_t seed = 100 + (seedEnv != nullptr ? static_cast<std::uint32_t>(std::atoi(seedEnv)) : 0u);
+      for (const double x : {1.35, 1.95}) {
+        for (const double y : {-0.10, -0.05, 0.0, 0.05, 0.10}) {
+          BoxRun b;
+          b.box = Vec2{x, y};
+          b.seed = ++seed;
+          runs.push_back(b);
         }
       }
-      b.reached = nav.run.base.truePose().x >= 4.5;
-      b.seconds = 0.02 * c;
-      b.driven = nav.driven;
-      b.cut = nav.cut;
-      b.slowed = nav.slowed;
-    };
-    const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
-    std::vector<std::thread> threads;
-    for (std::size_t w = 0; w < workers; ++w) {
-      threads.emplace_back([&runs, &drive, w, workers]() {
-        for (std::size_t r = w; r < runs.size(); r += workers) {
-          drive(runs[r], r);
+      // Independent runs, shared across the cores as scenario 2's are.
+      const char *traceRun = std::getenv("HERON_SCENARIO_TRACE1");
+      const auto drive = [traceRun, speed](BoxRun &b, std::size_t r) {
+        Heron::NavSim::World world;
+        world.addBox(Vec2{2.5, 0.0}, 9.0, 4.0);
+        Heron::NavSim::World boxOnly;
+        boxOnly.addBox(b.box, 0.3, 0.3);
+        world.segments.insert(world.segments.end(), boxOnly.segments.begin(), boxOnly.segments.end());
+        const std::vector<Vec2> box = pointsOf(boxOnly.segments);
+        NavRun nav(std::move(world), Pose2{}, b.seed);
+        nav.trace = traceRun != nullptr && static_cast<std::size_t>(std::atoi(traceRun)) == r;
+        nav.flipsBeforeX = b.box.x + 0.15;  // until past the box
+        const Twist stick{speed, 0.0, 0.0};
+        std::int32_t c = 0;
+        for (; c < 1500 && nav.run.base.truePose().x < 4.5; ++c) {
+          (void)nav.cycle(stick);
+          const Pose2 p = nav.run.base.truePose();
+          b.closest = std::min(b.closest, gapTo(p, box));
+          b.widest = std::max(b.widest, std::abs(p.y));
+          if (!b.yAfter && p.x >= b.box.x + 0.15 + 2.0) {
+            b.yAfter = p.y;
+          }
         }
-      });
+        b.reached = nav.run.base.truePose().x >= 4.5;
+        b.seconds = 0.02 * c;
+        b.driven = nav.driven;
+        b.cut = nav.cut;
+        b.slowed = nav.slowed;
+        b.flips = nav.flips;
+      };
+      const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
+      std::vector<std::thread> threads;
+      for (std::size_t w = 0; w < workers; ++w) {
+        threads.emplace_back([&runs, &drive, w, workers]() {
+          for (std::size_t r = w; r < runs.size(); r += workers) {
+            drive(runs[r], r);
+          }
+        });
+      }
+      for (std::thread &t : threads) {
+        t.join();
+      }
+      for (const BoxRun &b : runs) {
+        std::printf("        box at (%.2f, %+.2f): %.1f s; closest %.0f mm; widest %.0f mm off the "
+                    "line, %.0f mm 2 m past; limiter cut %d, slowed %d of %d; side flips %d\n",
+                    b.box.x, b.box.y, b.seconds, 1000.0 * b.closest, 1000.0 * b.widest,
+                    b.yAfter ? 1000.0 * *b.yAfter : -1.0, b.cut, b.slowed, b.driven, b.flips);
+      }
+      bool reached = true;
+      bool spare = true;
+      bool spareLimit = true;
+      bool back = true;
+      bool backLimit = true;
+      bool uncut = true;
+      for (const BoxRun &b : runs) {
+        reached = reached && b.reached;
+        spare = spare && b.closest >= 0.15;
+        spareLimit = spareLimit && b.closest >= 0.10;  // 124 mm when opened
+        back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
+        backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 0.50;  // 412 mm, left diagonal measured
+        uncut = uncut && b.cut == 0;
+      }
+      check("every run reached 4.5 m along", reached);
+      open("passed the box with at least 15 cm to spare, every run", spare,
+           "at least 10 cm, every run", spareLimit,
+           "the planner's 15 cm is a preference, and on the table its sideways moves are weak "
+           "(the right diagonal makes half its sideways part, the left almost none)");
+      if (!fullSpeed) {
+        open("back within 10 cm of the line 2 m past it, every run", back,
+             "within 0.5 m of it, every run", backLimit,
+             "coming back left is weak on this floor: the left diagonal makes 0.03 m/s left and turns "
+             "(measured 2026-11-16), the left strafe moves only near full stick; passed on the left, "
+             "every run comes back within 9 cm");
+      } else {
+        // At full stick 2 m is too short: sideways the floor gives 0.1 to
+        // 0.2 m/s, and no weighting brought any run within 10 cm (tuned
+        // 2026-11-16, 30 runs).
+        check("full stick: back within 0.5 m of the line 2 m past it, every run", backLimit);
+      }
+      check("the limiter cut none of the planner's choices (I11)", uncut);
     }
-    for (std::thread &t : threads) {
-      t.join();
-    }
-    for (const BoxRun &b : runs) {
-      std::printf("        box at (%.2f, %+.2f): %.1f s; closest %.0f mm; widest %.0f mm off the "
-                  "line, %.0f mm 2 m past; limiter cut %d, slowed %d of %d\n",
-                  b.box.x, b.box.y, b.seconds, 1000.0 * b.closest, 1000.0 * b.widest,
-                  b.yAfter ? 1000.0 * *b.yAfter : -1.0, b.cut, b.slowed, b.driven);
-    }
-    bool reached = true;
-    bool spare = true;
-    bool spareLimit = true;
-    bool back = true;
-    bool backLimit = true;
-    bool uncut = true;
-    for (const BoxRun &b : runs) {
-      reached = reached && b.reached;
-      spare = spare && b.closest >= 0.15;
-      spareLimit = spareLimit && b.closest >= 0.10;  // 124 mm when opened
-      back = back && b.yAfter && std::abs(*b.yAfter) <= 0.10;
-      backLimit = backLimit && b.yAfter && std::abs(*b.yAfter) <= 0.50;  // 412 mm, left diagonal measured
-      uncut = uncut && b.cut == 0;
-    }
-    check("every run reached 4.5 m along", reached);
-    open("passed the box with at least 15 cm to spare, every run", spare,
-         "at least 10 cm, every run", spareLimit,
-         "the planner's 15 cm is a preference, and on the table its sideways moves are weak "
-         "(the right diagonal makes half its sideways part, the left almost none)");
-    open("back within 10 cm of the line 2 m past it, every run", back,
-         "within 0.5 m of it, every run", backLimit,
-         "coming back left is weak on this floor: the left diagonal makes 0.03 m/s left and turns "
-         "(measured 2026-11-16), the left strafe moves only near full stick; passed on the left, "
-         "every run comes back within 9 cm");
-    check("the limiter cut none of the planner's choices (I11)", uncut);
   }
 
   std::printf("Scenario 2: driven at a wall, 1000 random runs\n");

@@ -77,7 +77,9 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <vector>
 
 #include "heron/drive/Drive.h"
 #include "heron/geometry/Pose2.h"
@@ -322,6 +324,64 @@ class MotionWatch {
     std::optional<std::chrono::steady_clock::time_point> m_since;
 };
 
+/**
+ * "Driven and standing" (2026-11-18): the wheels told the same translation
+ * for kFor while the pose moved under stillMps gives that command as dead
+ * (Motion::DeadCommand). The table can say a command starts the robot when
+ * on today's batteries it does not: on 2026-11-16 the limiter held a right
+ * strafe at 0.5, which the table put at 0.11 m/s, for 9 s beside a box,
+ * the wheels humming. MotionWatch did not trip: the OTOS read 0.03 to
+ * 0.04 m/s standing (its phantom speed), over its 0.01, and stopping is
+ * not the cure anyway. Once dead, the planner and decide() pass over that
+ * size and below in that direction while the robot is nearly still, so a
+ * larger size or another way is chosen.
+ *
+ * The pose's movement, not the OTOS's velocity: the pose read 0.00 m/s
+ * through the 9 s. "The same translation" is within kSubstituteWidthRad
+ * and 0.05 of size of where the window began; a change starts it again.
+ * The largest size seen in the window is given. Full drive is never dead:
+ * that is a lift or a wall, MotionWatch's and the limiter's business.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class StallWatch {
+  public:
+    struct Config {
+      double stillMps{0.03};                  // the pose moved less than this
+      std::chrono::milliseconds window{1000};  // with the same translation, this long
+    };
+
+    StallWatch() noexcept;  // Config's defaults
+    explicit StallWatch(Config config) noexcept;
+
+    /**
+     * One cycle.
+     *
+     * @param driven the translation the wheels were told last cycle,
+     *        fractions; zero: nothing driven
+     * @param movedMps how fast the pose moved over the last
+     *        Planner::kMovedWindow; below 0 when not known
+     * @param now this cycle's time
+     * @return a command just found dead, once per window
+     */
+    std::optional<Motion::DeadCommand> update(const Drive::BodyVelocity &driven, double movedMps,
+                                              std::chrono::steady_clock::time_point now) noexcept;
+
+    /** Starts the window afresh. */
+    void reset() noexcept;
+
+  private:
+    Config m_config;
+    std::optional<std::chrono::steady_clock::time_point> m_since;
+    double m_directionRad{0.0};
+    double m_firstSize{0.0};
+    double m_largestSize{0.0};
+};
+
+/** Adds a dead command, merging it with one within kSubstituteWidthRad:
+ *  the larger size, at the newer direction. */
+void addDead(std::vector<Motion::DeadCommand> &dead, const Motion::DeadCommand &found);
+
 /** What Assisted needs each cycle. Pointers are borrowed for the call. */
 struct AssistedInput {
   const Limiter::Limiter *limiter{nullptr};
@@ -342,6 +402,9 @@ struct AssistedInput {
    *  decide() drives nothing the table says makes more, Clear included
    *  (the table's path only; without a table there are no substitutes). */
   std::optional<Drive::BodyVelocity> cutCeiling;
+  /** Commands seen not to start the robot (StallWatch): with the robot
+   *  nearly still, no substitute is one of them. Borrowed. */
+  std::span<const Motion::DeadCommand> dead;
 };
 
 /** Why the wheels are what they are this cycle. */

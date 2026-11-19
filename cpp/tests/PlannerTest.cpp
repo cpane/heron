@@ -296,7 +296,13 @@ int main() {
     ObstacleMap map = emptyMap();
     seeFree(map);
     seeBox(map, centre, 0.3, 0.3);
-    Planner planner(config);
+    // Design §8.2's starting weights: the defaults were tuned with the
+    // hardwood's table (2026-11-16), and with them this speeds-only plan,
+    // used by no rig with a table, slows straight at the box instead.
+    PlannerConfig starting = config;
+    starting.weights.offLine = 1.0;
+    starting.weights.change = 0.5;
+    Planner planner(starting);
     const Plan plan = planner.plan(inputFor(map, courseAlong(0.0, 0.3), Twist{0.3, 0.0, 0.0}));
     print("box ahead", plan);
     const double truth = trueClearance(plan, body, boxPoints(centre, 0.3, 0.3));
@@ -484,6 +490,31 @@ int main() {
                 plan.commandVx, plan.commandVy);
     check("box ahead: Avoiding by a command whose predicted motion goes round it, margin kept",
           plan.state == State::Avoiding && truth >= tableConfig.stopMarginM);
+
+    // Rolling at the floor's full speed at a box (2026-11-16,
+    // navigate-left10): the planner chose left at 0.6, predicted 0.04 m/s,
+    // a near-stop, kept past the window as a direction's smallest command.
+    const double reach = tableConfig.accelMps2 * tableConfig.windowS;
+    bool inWindow = true;
+    for (const double y : {-0.10, 0.0, 0.10}) {
+      for (const double x : {0.85, 1.0, 1.15}) {
+        ObstacleMap at = emptyMap();
+        seeFree(at);
+        seeBox(at, Vec2{x, y}, 0.3, 0.3);
+        Planner fast(tableConfig);
+        const Twist rolling{0.40, -0.05, 0.0};
+        const Plan p = fast.plan(inputFor(at, courseAlong(0.0, 0.42), rolling));
+        const Twist m = bench.motion->predict(p.commandVx, p.commandVy);
+        const bool ok = p.state == State::Blocked ||
+                        (std::abs(m.vx - rolling.vx) <= reach + 1e-9 && std::abs(m.vy - rolling.vy) <= reach + 1e-9);
+        if (!ok) {
+          std::printf("        box at (%.2f, %+.2f): command (%.2f, %.2f) makes (%.2f, %.2f)\n", x, y, p.commandVx,
+                      p.commandVy, m.vx, m.vy);
+        }
+        inWindow = inWindow && ok;
+      }
+    }
+    check("rolling at 0.40 m/s at a box: every command chosen within the window, no near-stop", inWindow);
   }
 
   std::printf("Nearly still: only commands that start the robot from rest (2026-11-16)\n");
@@ -540,6 +571,25 @@ int main() {
     const Twist from = table->predictFromRest(plan.commandVx, plan.commandVy);
     check("  the pose not moving: planned as still, a command that starts it",
           plan.nearlyStill && std::hypot(from.vx, from.vy) >= kStartMps);
+    // That command driven a second without moving the robot (StallWatch,
+    // 2026-11-18): dead, the planner passes over it and every size below.
+    Planner stalled(still);
+    Course left = courseAlong(kPi / 2.0, 0.05);
+    left.dead = {Heron::Motion::DeadCommand{std::atan2(plan.commandVy, plan.commandVx),
+                                            std::hypot(plan.commandVx, plan.commandVy)}};
+    PlanInput deadInput = standing;
+    deadInput.course = left;
+    const Plan instead = stalled.plan(deadInput);
+    print("the same, that command dead", instead);
+    check("  that command dead: neither it nor a smaller one near it",
+          !Heron::Motion::isDead(left.dead, instead.commandVx, instead.commandVy));
+    check("  and still something driven", instead.commandVx != 0.0 || instead.commandVy != 0.0);
+    PlanInput deadRolling = inputFor(map, left, Twist{0.0, 0.20, 0.0});
+    Planner rollingDead(still);
+    Planner rollingNone(still);
+    check("  rolling at 0.20: dead commands ignored, the same choice as with none",
+          rollingDead.plan(deadRolling).commandVy ==
+              rollingNone.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.20, 0.0})).commandVy);
   }
 
   std::printf("Time\n");

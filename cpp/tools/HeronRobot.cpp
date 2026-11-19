@@ -105,6 +105,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "heron/drive/Drive.h"
 #include "heron/lidar/Lidar.h"
@@ -339,6 +340,8 @@ int main(int argc, char **argv) {
       profile.geometry.value_or(Heron::Profile::GeometryProfile{});
   Heron::Robot::HeadingHold hold;
   Heron::Robot::MotionWatch watch;
+  Heron::Robot::StallWatch stallWatch;
+  std::vector<Heron::Motion::DeadCommand> dead;  // seen not to start it, this arming
   Heron::Robot::CutHold cutHold;
   Heron::Planner::CourseKeeper keeper;
   Heron::Robot::BlockedWatch blockedWatch;
@@ -395,14 +398,38 @@ int main(int argc, char **argv) {
         cutHold.reset();
         keeper.reset();
         blockedWatch.reset();
+        stallWatch.reset();
+        dead.clear();
       }
       lastMode = mode;
       if (sensing) {
         scan = lidar->getLatest();
         history = pose->copyHistory().first;
         const Heron::Pose::PoseSnapshot p = pose->getLatest();
+        // Driven and standing (StallWatch): last cycle's translation, the
+        // pose's movement as the planner measures it. Off in a dry run.
+        if (armed && motion && !dryRun) {
+          double moved = -1.0;
+          const Heron::Pose::PoseLookup at = history.at(now);
+          const Heron::Pose::PoseLookup before = history.at(now - Heron::Planner::kMovedWindow);
+          if (p.fresh && at.ok && before.ok) {
+            moved = std::hypot(at.pose.x - before.pose.x, at.pose.y - before.pose.y) /
+                    std::chrono::duration<double>(Heron::Planner::kMovedWindow).count();
+          }
+          if (const auto found = stallWatch.update(lastBody, moved, now)) {
+            Heron::Robot::addDead(dead, *found);
+            std::printf("-- driven %.2f at %+.0f deg for 1 s and not moving: passed over from rest\n",
+                        found->size, found->directionRad / Heron::Geometry::kDegToRad);
+          }
+        }
         if (mode == Mode::Navigate && armed) {
           course = keeper.update(Heron::Robot::toTwist(stick, geometry), p.newest.pose, p.epoch);
+          if (course && hold.holding()) {  // last cycle's: the turn the limiter is told (Planner.h)
+            course->holdHeadingRad = hold.targetRad();
+          }
+          if (course) {
+            course->dead = dead;
+          }
           planner->setCourse(course);
           coursing = true;
           plan = planner->getLatest();
@@ -411,7 +438,8 @@ int main(int argc, char **argv) {
         assisted = Heron::Robot::AssistedInput{
             limiter.get(), geometry, motion.get(),
             Heron::Limiter::LimitInput{{}, scan.get(), &history, p.fresh, p.newest.velocity, now}, std::nullopt, false,
-            std::nullopt};
+            std::nullopt, {}};
+        assisted.dead = dead;
         // Heading hold (P14): with the turn stick centred and a translation
         // asked for, its rate stands in for the stick's turn.
         const bool translating = drive.vx != 0.0 || drive.vy != 0.0;
@@ -471,6 +499,7 @@ int main(int argc, char **argv) {
         hold.reset();
         watch.reset();
         cutHold.reset();
+        stallWatch.reset();
       }
       const Heron::Robot::Decision d =
           Heron::Robot::decide(mode, armed, drive, ready ? &assisted : nullptr);

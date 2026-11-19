@@ -286,7 +286,7 @@ int main() {
   const auto assistedWith = [&](const Scan *scan) {
     return AssistedInput{&limiter, geometry, nullptr,
                          Heron::Limiter::LimitInput{Twist{}, scan, &history, true, Twist{}, t0 + 20ms}, std::nullopt, false,
-                         std::nullopt};
+                         std::nullopt, {}};
   };
 
   std::printf("Manual is heron_teleop (D5)\n");
@@ -386,7 +386,7 @@ int main() {
           bench.surface == "hardwood-1" && hw.activeSurface == "hardwood-1" &&
               near(hw.geometry->brake, 0.7, 1e-12) && near(hw.odometry->linearScalar, 0.908, 1e-12));
     const std::optional<Heron::Motion::MotionTable> table = toMotionTable(hw);
-    check("  its motion table: 32 points in 8 columns", table && table->columns() == 8);
+    check("  its motion table: 33 points in 8 columns", table && table->columns() == 8);
     check("  Assisted not refused", assistedRefusal(hw).empty());
     check("no surface: no table", !toMotionTable(bench));
     Heron::Profile::RigProfile bare = bench;
@@ -402,7 +402,7 @@ int main() {
     const auto through = [&](const Scan *scan, bool fresh) {
       return AssistedInput{&limiter, hw.geometry.value(), &*table,
                            Heron::Limiter::LimitInput{Twist{}, scan, &history, fresh, Twist{}, t0 + 20ms}, std::nullopt,
-                           false, std::nullopt};
+                           false, std::nullopt, {}};
     };
     const AssistedInput open = through(&far, true);
     Decision d = decide(Mode::Assisted, true, BodyVelocity{0.6, 0.0, 0.0}, &open);
@@ -420,6 +420,23 @@ int main() {
                 d.body.vx, d.body.vy, made.vx);
     check("wall at 0.30 m, full forward: a smaller command, still moving, making no more than allowed",
           d.body.vx > 0.0 && d.body.vx < 1.0 && made.vx <= d.limited->command.vx / kTableMargin + 0.005);
+    // That command seen not to start the robot (StallWatch): standing, it
+    // is passed over; rolling, the table's word stands.
+    const BodyVelocity substitute = d.body;
+    const std::vector<Heron::Motion::DeadCommand> deadOne{
+        Heron::Motion::DeadCommand{std::atan2(substitute.vy, substitute.vx), std::hypot(substitute.vx, substitute.vy)}};
+    AssistedInput wallDead = through(&close, true);
+    wallDead.dead = deadOne;
+    d = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &wallDead);
+    std::printf("        that command dead, standing: (%.3f, %.3f)\n", d.body.vx, d.body.vy);
+    check("  that command dead, standing: not it nor smaller near it (another, or stopped)",
+          !Heron::Motion::isDead(deadOne, d.body.vx, d.body.vy));
+    AssistedInput wallRolling = through(&close, true);
+    wallRolling.limit.measured = Twist{0.30, 0.0, 0.0};
+    const BodyVelocity rolling = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &wallRolling).body;
+    wallDead.limit.measured = wallRolling.limit.measured;
+    d = decide(Mode::Assisted, true, BodyVelocity{1.0, 0.0, 0.0}, &wallDead);
+    check("  rolling at 0.30 m/s: the same command as with none dead", same(d.body, rolling, 1e-12));
     // Check 1 (2026-11-14): stick 0.58 forward toward a box, the limiter
     // cutting. A diagonal stood in for forward (vy -0.19 of full) and the
     // rolling robot stopped 8 cm short. Now: forward-ish or stopped.
@@ -643,6 +660,64 @@ int main() {
       d = decide(Mode::Assisted, true, BodyVelocity{0.0, -1.0, 0.0}, &lifted);
       check("tripped: Assisted stops, NOT_MOVING", stopped(d.wheels) && d.why == Why::NotMoving);
       check("  NOT_MOVING as text", std::string(toString(Why::NotMoving)) == "NOT_MOVING");
+    }
+
+    std::printf("Driven and standing (StallWatch, 2026-11-18)\n");
+    {
+      const TimePoint t = t0;
+      const BodyVelocity right{0.0, -0.5, 0.0};
+      StallWatch stall;
+      std::optional<Heron::Motion::DeadCommand> found;
+      for (int i = 0; i <= 49 && !found; ++i) {
+        found = stall.update(right, 0.0, t + i * 20ms);
+      }
+      check("right at 0.5, the pose still: nothing before 1 s", !found);
+      found = stall.update(right, 0.0, t + 1000ms);
+      check("  at 1 s: right at 0.5 dead", found && near(found->size, 0.5, 1e-9) &&
+                                                 near(found->directionRad, -std::numbers::pi / 2.0, 1e-9));
+      check("  then a fresh window: nothing the next cycle", !stall.update(right, 0.0, t + 1020ms));
+      StallWatch moving;
+      bool any = false;
+      for (int i = 0; i <= 100; ++i) {
+        any = moving.update(right, 0.10, t + i * 20ms).has_value() || any;
+      }
+      check("the pose moving 0.10 m/s: never", !any);
+      StallWatch phantom;  // the 9 s: the OTOS read 0.03 to 0.04, the pose 0.00
+      for (int i = 0; i <= 100; ++i) {
+        any = phantom.update(right, 0.02, t + i * 20ms).has_value() || any;
+      }
+      check("the pose moving 0.02 m/s (under 0.03): found", any);
+      StallWatch unknown;
+      any = false;
+      for (int i = 0; i <= 100; ++i) {
+        any = unknown.update(right, -1.0, t + i * 20ms).has_value() || any;
+      }
+      check("the pose's movement not known: never", !any);
+      StallWatch full;
+      for (int i = 0; i <= 100; ++i) {
+        any = full.update(BodyVelocity{0.0, -1.0, 0.0}, 0.0, t + i * 20ms).has_value() || any;
+      }
+      check("full drive: never (a lift or a wall, not the table)", !any);
+      StallWatch changing;
+      bool early = false;
+      for (int i = 0; i <= 50; ++i) {
+        const BodyVelocity b = i < 30 ? right : BodyVelocity{0.5, 0.0, 0.0};
+        early = changing.update(b, 0.0, t + i * 20ms).has_value() || early;
+      }
+      check("right then forward within the second: a fresh window, nothing yet", !early);
+      StallWatch growing;
+      found.reset();
+      for (int i = 0; i <= 50 && !found; ++i) {
+        found = growing.update(BodyVelocity{0.0, i < 25 ? -0.50 : -0.54, 0.0}, 0.0, t + i * 20ms);
+      }
+      check("0.50 then 0.54 (within 0.05): one window, the larger given", found && near(found->size, 0.54, 1e-9));
+
+      std::vector<Heron::Motion::DeadCommand> dead;
+      addDead(dead, Heron::Motion::DeadCommand{-std::numbers::pi / 2.0, 0.5});
+      addDead(dead, Heron::Motion::DeadCommand{-80.0 * Heron::Geometry::kDegToRad, 0.4});
+      check("addDead: 10 degrees apart, one, the larger size", dead.size() == 1 && near(dead[0].size, 0.5, 1e-9));
+      addDead(dead, Heron::Motion::DeadCommand{std::numbers::pi / 2.0, 0.6});
+      check("  left as well: two", dead.size() == 2);
     }
 
     const AssistedInput stale = through(&far, false);

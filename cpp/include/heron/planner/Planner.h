@@ -49,11 +49,13 @@
 // measured to move in its direction is never a candidate, rolling or
 // still: the table lifts it to that size's motion (for the limiter), so it
 // looks as good, and on 2026-11-16 Navigate chose left at 0.1 rolling and
-// 1.0 nearly still, swinging between them round a box. A direction's
-// smallest command that moves is kept whatever the window says: from rest
-// the motors' dead band makes even the smallest command faster than the
-// window reaches (forward 0.19 m/s, against 0.18), and without it Heron
-// could never start.
+// 1.0 nearly still, swinging between them round a box. Nearly still, a
+// direction's smallest command that moves is kept whatever the window
+// says: from rest the motors' dead band makes even the smallest command
+// faster than the window reaches (forward 0.19 m/s, against 0.18), and
+// without it Heron could never start. Rolling, it is not: left at 0.6
+// makes 0.04 m/s, and kept past the window it was a near-stop the planner
+// jumped to for a cycle or two in front of a box (2026-11-16).
 // Nearly still (the OTOS's velocity, or the pose's movement over
 // kMovedWindow, under kNearlyStillMps), a command must also start
 // the robot from rest at kStartMps or more (MotionTable::predictFromRest(),
@@ -67,6 +69,10 @@
 // above a stop (0.15): at 0.05, Navigate round a box (2026-11-16) chose
 // small commands while crawling, slowed to a stop, kicked with a large
 // one, and went round in pulses; a crawl is now planned as a start.
+// Nor, nearly still, may it be one of the course's dead commands
+// (Course::dead, Motion::isDead()): sizes the loop drove for a second
+// without the robot moving, though the table said they would (StallWatch,
+// heron_robot); a larger size or another direction is chosen instead.
 // Nearly still, a direction's smallest such command is kept even when it is
 // faster than the course asks (I13's one exception, as forward's dead band
 // already makes 0.19 m/s of any stick): a slow course would otherwise
@@ -74,6 +80,22 @@
 // chosen (I19), and Navigate drives that.
 // "Straight" is any candidate whose predicted motion runs within 5 degrees
 // of the course. Without a table, as above.
+//
+// The limiter's test (limiterBrakeMps2 set): the limiter sweeps each axis
+// of a command alone, forward and sideways, for as long as it takes to
+// stop from the measured speed plus its blind time, and cuts an axis whose
+// sweep comes inside the stop margin (Limiter.h). A diagonal past a box
+// can clear it while its forward part alone does not; at 0.42 m/s that
+// sweep is about 0.37 m on the hardwood, and the box scenarios driven at
+// full stick saw the limiter cut the planner's choice in 6 runs of 10
+// (2026-11-16). So a candidate is also rejected if any axis alone, or the
+// whole, told to the limiter limiterScale faster, would come inside the
+// margin (I12's floor) within that time. The turn is the one the limiter
+// is told: holding a heading (Course::holdHeadingRad), heading hold's rate
+// plus the drift, which is the error times holdGainPerS; else the
+// candidate's own. That turn is what made the remaining cuts: the left
+// diagonal turns Heron 18 degrees, and hold swinging it back beside the
+// box swept the body's corner into it.
 //
 // The cell slack, kCellSlackM: the map is 5 cm cells, so true clearance
 // can fall short of what the field says by half a cell's diagonal for
@@ -139,13 +161,24 @@ inline constexpr double kStartMps = 0.10;
  *  (measured 0.19 m/s on 2026-11-14) only hummed. 0.4 is twice that. */
 inline constexpr double kStartSize = 0.4;
 
-/** Design §8.2's starting weights; tuned in the simulator (design §18, 3). */
+/** Design §8.2's starting weights, tuned in the simulator (design §18, 3);
+ *  offLine and change raised for full stick. At 1.0 and 0.5, the box
+ *  scenarios at 0.42 m/s ended up to 0.91 m off the line 2 m past the box
+ *  (6 runs of 30 over 0.5 m). At 2 and 2.5 (2026-11-16), within 0.47 m,
+ *  but on the floor Navigate braked to 0.1 m/s before choosing a side.
+ *  At 1.5 and 1 (2026-11-18), within 0.48 m, but with the right strafe
+ *  re-measured, 1 run in 30 at 0.3 m/s stood for good 4 cm from the box,
+ *  inside the margin. Over 1.5, offLine slows straight at a box before
+ *  turning aside (PlannerTest's "box ahead"). At 1.5 and 0.75, three seed
+ *  sets: none stuck, every run at full stick within 0.52 m (1 of 30 over
+ *  0.5), 15.2 s a run, and at 0.3 m/s within 0.13 m [the floor
+ *  unverified]. */
 struct ScoreWeights {
   double clearance{1.0};
   double way{1.0};  // the free way ahead, out to lookAheadM
   double progress{2.0};
-  double offLine{1.0};
-  double change{0.5};
+  double offLine{1.5};
+  double change{0.75};
 };
 
 /** The planner's settings, filled by heron_robot from the profile (I6). */
@@ -174,6 +207,13 @@ struct PlannerConfig {
   std::shared_ptr<const Motion::MotionTable> motion;
   double commandStepRad{15.0 * Geometry::kDegToRad};  // with a table: directions this far apart
   double commandSizeStep{0.1};                         // and sizes this far apart, up to 1
+  /** The limiter's per-axis test, applied to each candidate (header):
+   *  the brake, m/s^2, that sets the limiter's horizon; 0: off. */
+  double limiterBrakeMps2{0.0};
+  double limiterReactionS{0.25};  // its blind time: a scan's age and a revolution
+  double limiterScale{1.0};       // what it is told, against the table's prediction
+  double holdGainPerS{2.0};       // heading hold's (RobotCore.h), for the turn
+  double holdMaxRadps{0.8};       // the limiter is told while it holds
 };
 
 enum class State : std::uint8_t {

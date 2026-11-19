@@ -30,6 +30,9 @@ namespace {
 using Heron::Geometry::kDegToRad;
 using Heron::Geometry::Twist;
 using Heron::Geometry::Vec2;
+using Heron::Motion::DeadCommand;
+using Heron::Motion::isDead;
+using Heron::Motion::kSubstituteWidthRad;
 using Heron::Motion::MotionPoint;
 using Heron::Motion::MotionTable;
 
@@ -223,6 +226,36 @@ int main() {
       rightNear15 = rightNear15 && (!r || std::abs(std::atan2(r->second, r->first) - right) <= 15.0 * kDegToRad + 1e-9);
     }
     check("hardwood, right: every substitute within 15 degrees of right", rightNear15);
+
+    // 2026-11-16: the limiter held right at 0.5 (the table: 0.11 m/s) for
+    // 9 s, the robot standing. Dead, nothing at or below it stands in.
+    const auto before = hw.nearestCommand(Vec2{0.05, -0.12}, right);
+    const double size = before ? std::hypot(before->first, before->second) : 0.0;
+    const std::vector<DeadCommand> dead{DeadCommand{std::atan2(before ? before->second : -1.0,
+                                                               before ? before->first : 0.0),
+                                                    size}};
+    const auto after = hw.nearestCommand(Vec2{0.05, -0.12}, right, kSubstituteWidthRad, dead);
+    std::printf("        hardwood, want (0.05, -0.12): %.2f; that dead: %s\n", size,
+                after ? "another" : "none (stop)");
+    check("want right 0.12: a strafe", before.has_value());
+    check("  that one dead: none at its size or below, within 15 degrees of it",
+          !after || !isDead(dead, after->first, after->second));
+  }
+
+  std::printf("isDead()\n");
+  {
+    const std::vector<DeadCommand> dead{DeadCommand{-90.0 * kDegToRad, 0.5}};
+    check("right at 0.5 and 0.4: dead", isDead(dead, 0.0, -0.5) && isDead(dead, 0.0, -0.4));
+    check("right at 0.6: not", !isDead(dead, 0.0, -0.6));
+    const double a = -78.0 * kDegToRad;
+    check("12 degrees off right at 0.5: dead; 20 off: not",
+          isDead(dead, std::cos(a) * 0.5, std::sin(a) * 0.5) &&
+              !isDead(dead, std::cos(-70.0 * kDegToRad) * 0.5, std::sin(-70.0 * kDegToRad) * 0.5));
+    check("left at 0.5: not", !isDead(dead, 0.0, 0.5));
+    check("nothing commanded: not", !isDead(dead, 0.0, 0.0));
+    check("no dead commands: nothing dead", !isDead({}, 0.0, -0.5));
+    const std::vector<DeadCommand> back{DeadCommand{std::numbers::pi - 0.05, 0.6}};
+    check("across +-180: back at -177 degrees is dead", isDead(back, -0.598, -0.03));
   }
 
   std::printf("The bench rig's hardwood (design §19.2)\n");
