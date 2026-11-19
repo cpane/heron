@@ -258,9 +258,9 @@ Plan Planner::plan(const PlanInput &input) {
     if (std::abs(t.vx) + std::abs(t.vy) + std::abs(t.wz) < 1e-9) {
       return true;
     }
-    const int n = std::max(1, static_cast<int>(std::ceil(limitS / cfg.stepS - 1e-9)));
-    for (int k = 1; k <= n; ++k) {
-      const Geometry::Pose2 on = Geometry::integrate(pose, t, limitS * k / n);
+    const int limitSteps = std::max(1, static_cast<int>(std::ceil(limitS / cfg.stepS - 1e-9)));
+    for (int k = 1; k <= limitSteps; ++k) {
+      const Geometry::Pose2 on = Geometry::integrate(pose, t, limitS * k / limitSteps);
       if (clearanceAt(field, m_edge, on) - kCellSlackM < floor - kSameM) {
         return false;
       }

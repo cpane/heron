@@ -158,15 +158,18 @@ inline constexpr double kStartMps = 0.10;
 inline constexpr double kStartSize = 0.4;
 
 /** Design §8.2's starting weights, tuned in the simulator (design §18, 3);
- *  offLine and change raised for full stick (2026-11-16: from 1.0 and 0.5,
- *  the box scenarios at 0.42 m/s strayed up to 0.91 m off the line, now
- *  0.47 m, and at 0.3 m/s every run is back within 10 cm). */
+ *  offLine and change raised for full stick. At 1.0 and 0.5, the box
+ *  scenarios at 0.42 m/s ended up to 0.91 m off the line 2 m past the box
+ *  (6 runs of 30 over 0.5 m). At 2 and 2.5 (2026-11-16), within 0.47 m,
+ *  but on the floor Navigate braked to 0.1 m/s before choosing a side.
+ *  At 1.5 and 1 (2026-11-18): within 0.48 m, a run 15.8 s on average
+ *  against 17.0, and at 0.3 m/s within 0.14 m [the floor unverified]. */
 struct ScoreWeights {
   double clearance{1.0};
   double way{1.0};  // the free way ahead, out to lookAheadM
   double progress{2.0};
-  double offLine{2.0};
-  double change{2.5};
+  double offLine{1.5};
+  double change{1.0};
 };
 
 /** The planner's settings, filled by heron_robot from the profile (I6). */
