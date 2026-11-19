@@ -171,7 +171,8 @@ std::unique_ptr<Sensor> startWithRetries(Make make, const char *name, bool &star
                "  --manual-is-high  SwC High is Manual (default: Low is Manual)\n"
                "  --lines N         status lines a second, 1 to 50 (default 1)\n"
                "  --profile FILE    the rig profile (default this Pi's)\n"
-               "  --surface NAME    the floor (default the profile's [rig] surface)\n"
+               "  --surface NAME    the floor (default this Pi's, set by set_surface.sh,\n"
+               "                    else the profile's [rig] surface)\n"
                "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n"
                "  --test-otos-restart  restart the OTOS once, 5 s in, as a stuck one is\n");
   std::exit(status);
@@ -231,14 +232,22 @@ int main(int argc, char **argv) {
 
   // 1. The profile.
   Heron::Profile::RigProfile profile;
+  std::string surfaceFrom;
   try {
     profile = Heron::Profile::loadRigProfile(profilePath.empty()
                                                  ? Heron::Profile::findRigProfile()
                                                  : std::filesystem::path(profilePath));
     // The floor (design §19, P18): its numbers in place before any
-    // library's settings are filled (I22).
-    if (surfaceName.empty()) {
+    // library's settings are filled (I22). --surface, else the one this
+    // Pi was told (set_surface.sh), else the profile's.
+    if (!surfaceName.empty()) {
+      surfaceFrom = "--surface";
+    } else if (const auto chosen = Heron::Profile::readChosenSurface(Heron::Profile::heronHome() / "surface")) {
+      surfaceName = *chosen;
+      surfaceFrom = "this Pi's, ~/heron/surface";
+    } else {
       surfaceName = profile.surface;
+      surfaceFrom = "the profile's default";
     }
     if (!surfaceName.empty()) {
       profile = Heron::Profile::onSurface(profile, surfaceName);
@@ -248,8 +257,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::printf("Profile: %s (rig %s)\n", profile.source.c_str(), profile.name.c_str());
-  std::printf("Surface: %s\n", profile.activeSurface.empty() ? "none (the profile's own numbers)"
-                                                              : profile.activeSurface.c_str());
+  if (profile.activeSurface.empty()) {
+    std::printf("Surface: none (the profile's own numbers)\n");
+  } else {
+    std::printf("Surface: %s (%s)\n", profile.activeSurface.c_str(), surfaceFrom.c_str());
+  }
   std::string unavailable = Heron::Robot::assistedRefusal(profile);
   std::printf("SwC: Low %s, middle ASSISTED, High %s\n",
               Heron::Robot::toString(Heron::Robot::modeFromSwitch(Heron::Remote::Switch3::Low, manualIsHigh)),

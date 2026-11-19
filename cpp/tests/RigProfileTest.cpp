@@ -462,6 +462,18 @@ int main() {
     }
     check("a rig file with two names is refused", twoNames);
 
+    check("no surface file: no floor chosen, the profile's stands", !readChosenSurface(dir / "surface"));
+    writeFile(dir / "surface", "rubber-1\n");
+    check("the surface file names the floor", readChosenSurface(dir / "surface") == "rubber-1");
+    writeFile(dir / "surface", "rubber 1\n");
+    bool badSurface = false;
+    try {
+      (void)readChosenSurface(dir / "surface");
+    } catch (const std::runtime_error &e) {
+      badSurface = contains(e.what(), "must hold one surface name") && contains(e.what(), "set_surface.sh");
+    }
+    check("a surface file that is not one name is refused, saying how to set it", badSurface);
+
     std::filesystem::remove_all(dir);
   }
 

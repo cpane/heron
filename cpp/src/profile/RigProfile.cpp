@@ -772,6 +772,23 @@ std::string readRigName(const std::filesystem::path &file) {
   return std::string(name);
 }
 
+std::optional<std::string> readChosenSurface(const std::filesystem::path &file) {
+  std::ifstream in(file);
+  if (!in) {
+    return std::nullopt;
+  }
+  std::ostringstream text;
+  text << in.rdbuf();
+  const std::string_view name = trim(text.str());
+  if (!isValidRigName(name)) {
+    throw std::runtime_error("Heron::Profile::readChosenSurface() : " + file.string() +
+                             " must hold one surface name; set it from the host with: "
+                             "scripts/set_surface.sh <user>@<pi> <surface>, or clear it with "
+                             "scripts/set_surface.sh <user>@<pi> --default");
+  }
+  return std::string(name);
+}
+
 std::filesystem::path heronHome() {
   const char *home = std::getenv("HOME");
   if (home == nullptr || *home == '\0') {

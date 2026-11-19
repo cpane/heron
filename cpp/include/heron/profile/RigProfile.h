@@ -143,6 +143,18 @@
 //   const auto profile = Heron::Profile::loadRigProfile(Heron::Profile::findRigProfile());
 //   //  reads ~/heron/rig ("bench"), loads ~/heron/profiles/bench.conf
 //
+// Which floor this Pi is on
+// -------------------------
+// The profile's [rig] surface is the floor its rig usually runs on. A Pi
+// can be told another, until told otherwise, by scripts/set_surface.sh,
+// which writes its name to ~/heron/surface: the robot taken from the
+// hardwood to the Maker Faire's rubber floor and back, with no change to
+// the profile and no deploy, and the boot service, which starts
+// heron_robot with no arguments, follows it. readChosenSurface() reads it:
+//
+//   const auto chosen = Heron::Profile::readChosenSurface(Heron::Profile::heronHome() / "surface");
+//   const RigProfile on = onSurface(profile, chosen.value_or(profile.surface));
+//
 // Errors
 // ------
 // Every problem throws std::runtime_error, whose message names the file and,
@@ -345,6 +357,18 @@ struct RigProfile {
  *         valid name; the message says how to set it
  */
 [[nodiscard]] std::string readRigName(const std::filesystem::path &file);
+
+/**
+ * Reads the floor a Pi was told it is on, written by scripts/set_surface.sh.
+ *
+ * @param file Normally ~/heron/surface
+ * @return The surface's name; no value when the file is missing, so the
+ *         profile's [rig] surface stands
+ * @throws std::runtime_error if the file is there but does not hold one
+ *         valid name (isValidRigName()'s rule); the message says how to
+ *         set it
+ */
+[[nodiscard]] std::optional<std::string> readChosenSurface(const std::filesystem::path &file);
 
 /**
  * @return ~/heron, where deployment puts Heron's files on a Pi
