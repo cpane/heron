@@ -386,7 +386,7 @@ int main() {
           bench.surface == "hardwood-1" && hw.activeSurface == "hardwood-1" &&
               near(hw.geometry->brake, 0.7, 1e-12) && near(hw.odometry->linearScalar, 0.908, 1e-12));
     const std::optional<Heron::Motion::MotionTable> table = toMotionTable(hw);
-    check("  its motion table: 32 points in 8 columns", table && table->columns() == 8);
+    check("  its motion table: 33 points in 8 columns", table && table->columns() == 8);
     check("  Assisted not refused", assistedRefusal(hw).empty());
     check("no surface: no table", !toMotionTable(bench));
     Heron::Profile::RigProfile bare = bench;
