@@ -166,14 +166,19 @@ inline constexpr double kStartSize = 0.4;
  *  scenarios at 0.42 m/s ended up to 0.91 m off the line 2 m past the box
  *  (6 runs of 30 over 0.5 m). At 2 and 2.5 (2026-11-16), within 0.47 m,
  *  but on the floor Navigate braked to 0.1 m/s before choosing a side.
- *  At 1.5 and 1 (2026-11-18): within 0.48 m, a run 15.8 s on average
- *  against 17.0, and at 0.3 m/s within 0.14 m [the floor unverified]. */
+ *  At 1.5 and 1 (2026-11-18), within 0.48 m, but with the right strafe
+ *  re-measured, 1 run in 30 at 0.3 m/s stood for good 4 cm from the box,
+ *  inside the margin. Over 1.5, offLine slows straight at a box before
+ *  turning aside (PlannerTest's "box ahead"). At 1.5 and 0.75, three seed
+ *  sets: none stuck, every run at full stick within 0.52 m (1 of 30 over
+ *  0.5), 15.2 s a run, and at 0.3 m/s within 0.13 m [the floor
+ *  unverified]. */
 struct ScoreWeights {
   double clearance{1.0};
   double way{1.0};  // the free way ahead, out to lookAheadM
   double progress{2.0};
   double offLine{1.5};
-  double change{1.0};
+  double change{0.75};
 };
 
 /** The planner's settings, filled by heron_robot from the profile (I6). */
