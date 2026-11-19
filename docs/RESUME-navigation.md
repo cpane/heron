@@ -177,6 +177,12 @@ navigation, so SwC to Manual always takes over.
   weights 1.5 and 0.75, the right strafe re-measured, `StallWatch`.
   Both box runs went round and resumed course.
 
+- **The rubber floor is measured at the Faire** (Chris, 2026-11-18): no
+  rubber to practise on beforehand. Prepared instead: a floor chosen per
+  Pi without a deploy (`scripts/set_surface.sh`, `~/heron/surface`,
+  read by `heron_robot` after `--surface` and before the profile's
+  default), the checklist, the log-to-table tool, and `rubber-1.conf`.
+
 ## Picking up
 
 0. **Before the Faire, in this order** (each needs the robot on; Chris
@@ -226,7 +232,7 @@ navigation, so SwC to Manual always takes over.
         with the new strafe).
       - The right strafe re-measured from rest on fresh batteries
         (`captures/right-2026-11-18.log`): 0.12, 0.14, 0.17, 0.23 m/s
-        at 0.4, 0.5, 0.6, 0.77, turning right about 10°/s; 0.4 now
+        at 0.4, 0.5, 0.6, 0.8, turning right about 10°/s; 0.4 now
         starts it (the 11-14 points: 0.06 at 0.4).
       - `StallWatch` (`RobotCore.h`): the wheels driven with one
         translation for 1 s, the pose moving under 0.03 m/s, makes that
@@ -326,12 +332,16 @@ navigation, so SwC to Manual always takes over.
       spot checks (dead band, OTOS, LiDAR yaw) against robot 1's
       numbers. Its bring-up is motor's and builder's work; Navigate needs
       only the profile.
-   5. **The rubber floor** (a mat or tiles beforehand): the OTOS's
-      tracking (a false `NOT_MOVING` would stop the robot mid-demo),
-      stopping distances, a few table points, and Navigate back to the
-      line. The from-rest constants (`kStartSize`, `kStartMps`,
-      `kNearlyStillMps`) were set on the hardwood with run-down cells:
-      check a start from rest there too.
+   5. **The rubber floor, at the Faire** (no rubber beforehand,
+      decided 2026-11-18): **`docs/navigation-faire-checklist.md`**, in
+      its order: switch the floor (`scripts/set_surface.sh <user>@<pi>
+      rubber-1`), the OTOS on rubber first (if it does not track, the
+      demo is Manual), the table runs, `python/tools/motion_points.py`
+      to turn the log into `p<n>` lines, then Navigate from rest and
+      round a box. `profiles/surfaces/bench-mecanum/rubber-1.conf` is
+      today the hardwood's numbers, marked not measured. Before leaving:
+      a network both the Mac and the Pi join (the Pi knows only the home
+      Wi-Fi; a phone hotspot added at home, Chris's sudo) [unverified].
    6. **A rehearsal:** both robots, a full battery, power cycles, picked
       up and put down, all three modes.
 
