@@ -571,6 +571,25 @@ int main() {
     const Twist from = table->predictFromRest(plan.commandVx, plan.commandVy);
     check("  the pose not moving: planned as still, a command that starts it",
           plan.nearlyStill && std::hypot(from.vx, from.vy) >= kStartMps);
+    // That command driven a second without moving the robot (StallWatch,
+    // 2026-11-18): dead, the planner passes over it and every size below.
+    Planner stalled(still);
+    Course left = courseAlong(kPi / 2.0, 0.05);
+    left.dead = {Heron::Motion::DeadCommand{std::atan2(plan.commandVy, plan.commandVx),
+                                            std::hypot(plan.commandVx, plan.commandVy)}};
+    PlanInput deadInput = standing;
+    deadInput.course = left;
+    const Plan instead = stalled.plan(deadInput);
+    print("the same, that command dead", instead);
+    check("  that command dead: neither it nor a smaller one near it",
+          !Heron::Motion::isDead(left.dead, instead.commandVx, instead.commandVy));
+    check("  and still something driven", instead.commandVx != 0.0 || instead.commandVy != 0.0);
+    PlanInput deadRolling = inputFor(map, left, Twist{0.0, 0.20, 0.0});
+    Planner rollingDead(still);
+    Planner rollingNone(still);
+    check("  rolling at 0.20: dead commands ignored, the same choice as with none",
+          rollingDead.plan(deadRolling).commandVy ==
+              rollingNone.plan(inputFor(map, courseAlong(kPi / 2.0, 0.05), Twist{0.0, 0.20, 0.0})).commandVy);
   }
 
   std::printf("Time\n");

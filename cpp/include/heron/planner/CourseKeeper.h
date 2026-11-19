@@ -53,8 +53,10 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "heron/geometry/Pose2.h"
+#include "heron/motion/MotionTable.h"
 
 namespace Heron::Planner {
 
@@ -70,6 +72,9 @@ struct Course {
    *  CourseKeeper): the planner works out the turn the limiter is told
    *  from it (Planner.h, "The limiter's test"). None: not holding. */
   std::optional<double> holdHeadingRad;
+  /** Commands seen not to start the robot, filled by the loop
+   *  (StallWatch): nearly still, the planner passes over them. */
+  std::vector<Motion::DeadCommand> dead;
 };
 
 struct CourseConfig {

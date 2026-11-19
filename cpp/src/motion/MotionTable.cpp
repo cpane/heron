@@ -210,7 +210,8 @@ std::optional<std::pair<double, double>> MotionTable::commandFor(double directio
 }
 
 std::optional<std::pair<double, double>> MotionTable::nearestCommand(Geometry::Vec2 want, double aroundRad,
-                                                                     double withinRad) const {
+                                                                     double withinRad,
+                                                                     std::span<const DeadCommand> dead) const {
   if (std::hypot(want.x, want.y) < 1e-3) {
     return std::nullopt;
   }
@@ -225,7 +226,8 @@ std::optional<std::pair<double, double>> MotionTable::nearestCommand(Geometry::V
       const double cx = std::cos(direction) * s;
       const double cy = std::sin(direction) * s;
       const Geometry::Twist t = predict(cx, cy);
-      if (std::hypot(t.vx, t.vy) < 0.01 || !within(t.vx, want.x) || !within(t.vy, want.y)) {
+      if (std::hypot(t.vx, t.vy) < 0.01 || !within(t.vx, want.x) || !within(t.vy, want.y) ||
+          isDead(dead, cx, cy)) {
         continue;
       }
       const double miss = std::hypot(t.vx - want.x, t.vy - want.y);
@@ -236,6 +238,21 @@ std::optional<std::pair<double, double>> MotionTable::nearestCommand(Geometry::V
     }
   }
   return best;
+}
+
+bool isDead(std::span<const DeadCommand> dead, double vxFraction, double vyFraction) noexcept {
+  const double size = std::hypot(vxFraction, vyFraction);
+  if (size < 1e-9) {
+    return false;
+  }
+  const double direction = std::atan2(vyFraction, vxFraction);
+  for (const DeadCommand &d : dead) {
+    const double off = std::abs(std::remainder(direction - d.directionRad, 2.0 * std::numbers::pi));
+    if (off <= kSubstituteWidthRad + 1e-9 && size <= d.size + 1e-9) {
+      return true;
+    }
+  }
+  return false;
 }
 
 double MotionTable::leastSpeed(double directionRad) const {

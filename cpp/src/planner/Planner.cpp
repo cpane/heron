@@ -172,7 +172,8 @@ Plan Planner::plan(const PlanInput &input) {
         if (speed < kStillMps || startSpeed < kStillMps) {
           continue;
         }
-        if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps)) {
+        if (nearlyStill && (size < kStartSize - 1e-9 || startSpeed < kStartMps ||
+                            Motion::isDead(course.dead, cx, cy))) {
           continue;  // must start a still robot (header)
         }
         // The smallest gets past the window only nearly still, where the

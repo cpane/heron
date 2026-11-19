@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <vector>
 
@@ -275,6 +276,55 @@ void MotionWatch::reset() noexcept {
   m_since.reset();
 }
 
+StallWatch::StallWatch() noexcept : StallWatch(Config{}) {}
+
+StallWatch::StallWatch(Config config) noexcept : m_config(config) {}
+
+std::optional<Motion::DeadCommand> StallWatch::update(const Drive::BodyVelocity &driven, double movedMps,
+                                                      std::chrono::steady_clock::time_point now) noexcept {
+  const double size = std::hypot(driven.vx, driven.vy);
+  if (size < 1e-9 || size >= 1.0 - 1e-9 || movedMps < 0.0 || movedMps >= m_config.stillMps) {
+    m_since.reset();
+    return std::nullopt;
+  }
+  const double direction = std::atan2(driven.vy, driven.vx);
+  if (m_since) {
+    const double off = std::abs(std::remainder(direction - m_directionRad, 2.0 * std::numbers::pi));
+    if (off > Motion::kSubstituteWidthRad || std::abs(size - m_firstSize) > 0.05 + 1e-9) {
+      m_since.reset();  // another command: its own window
+    }
+  }
+  if (!m_since) {
+    m_since = now;
+    m_directionRad = direction;
+    m_firstSize = size;
+    m_largestSize = size;
+    return std::nullopt;
+  }
+  m_largestSize = std::max(m_largestSize, size);
+  if (now - *m_since < m_config.window) {
+    return std::nullopt;
+  }
+  m_since.reset();
+  return Motion::DeadCommand{m_directionRad, m_largestSize};
+}
+
+void StallWatch::reset() noexcept {
+  m_since.reset();
+}
+
+void addDead(std::vector<Motion::DeadCommand> &dead, const Motion::DeadCommand &found) {
+  for (Motion::DeadCommand &d : dead) {
+    const double off = std::abs(std::remainder(found.directionRad - d.directionRad, 2.0 * std::numbers::pi));
+    if (off <= Motion::kSubstituteWidthRad + 1e-9) {
+      d.directionRad = found.directionRad;
+      d.size = std::max(d.size, found.size);
+      return;
+    }
+  }
+  dead.push_back(found);
+}
+
 const char *toString(Why why) noexcept {
   switch (why) {
     case Why::Disarmed:
@@ -396,9 +446,13 @@ Decision decide(Mode mode, bool armed, const Drive::BodyVelocity &stick,
       // near the stick's direction stand in, so none swerves the robot
       // (check 1, 2026-11-14).
       decision.body.wz = stick.wz * limited.scale.wz;
+      // Nearly still, not a command seen not to start it (StallWatch).
+      const bool nearlyStill =
+          std::hypot(assisted->limit.measured.vx, assisted->limit.measured.vy) < Planner::kNearlyStillMps;
       const auto command = table.nearestCommand(
           Geometry::Vec2{limited.command.vx / kTableMargin, limited.command.vy / kTableMargin},
-          std::atan2(stick.vy, stick.vx));
+          std::atan2(stick.vy, stick.vx), Motion::kSubstituteWidthRad,
+          nearlyStill ? assisted->dead : std::span<const Motion::DeadCommand>{});
       if (command) {
         Limiter::LimitInput again = assisted->limit;
         again.command = told(command->first, command->second, turnRate * limited.scale.wz);

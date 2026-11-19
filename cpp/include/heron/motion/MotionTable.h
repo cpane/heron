@@ -62,6 +62,7 @@
 #define HERON_MOTION_MOTION_TABLE_H
 
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -84,6 +85,24 @@ inline constexpr double kStallMps = 0.02;
 
 /** nearestCommand() looks this far either side of the direction it is given. */
 inline constexpr double kSubstituteWidthRad = 15.0 * Geometry::kDegToRad;
+
+/**
+ * A command seen not to start the robot, though the table says it should:
+ * heron_robot's StallWatch adds one when the wheels were driven with it and
+ * the pose did not move for a second. On 2026-11-16 the table, measured two
+ * days and a set of batteries before, put a right strafe at 0.5 at
+ * 0.11 m/s; driven by the limiter beside a box, the robot stood for 9 s.
+ * A dead command covers every size up to its own within
+ * kSubstituteWidthRad of its direction, from rest only (isDead()).
+ */
+struct DeadCommand {
+  double directionRad{0.0};  // command space, robot frame
+  double size{0.0};          // the largest size seen not to start it
+};
+
+/** @return whether the command (fractions) is at or below a dead one's
+ *          size within kSubstituteWidthRad of its direction */
+[[nodiscard]] bool isDead(std::span<const DeadCommand> dead, double vxFraction, double vyFraction) noexcept;
 
 /**
  * The measured motion table for one floor.
@@ -138,11 +157,14 @@ class MotionTable {
      *
      * @param aroundRad the direction to stay near, command space: the stick's
      * @param withinRad how far either side of it to look
+     * @param dead commands to pass over (isDead()): the caller gives them
+     *        only with the robot nearly still
      * @return the vx and vy fractions; no value when no command near
      *         aroundRad moves the robot within want (the caller stops)
      */
     [[nodiscard]] std::optional<std::pair<double, double>> nearestCommand(
-        Geometry::Vec2 want, double aroundRad, double withinRad = kSubstituteWidthRad) const;
+        Geometry::Vec2 want, double aroundRad, double withinRad = kSubstituteWidthRad,
+        std::span<const DeadCommand> dead = {}) const;
 
     /** The least speed a command along directionRad moves the robot at,
      *  stalls lifted; 0 where no point either side moved. */

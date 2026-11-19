@@ -211,7 +211,7 @@ struct Run {
     const Heron::Robot::AssistedInput assisted{
         &limiter, bench().geometry, bench().motion.get(),
         LimitInput{Twist{}, scan ? &*scan : nullptr, &history, true, newest.velocity, now}, std::nullopt, false,
-        std::nullopt};
+        std::nullopt, {}};
     Heron::Robot::AssistedInput in = assisted;
     const bool translating = stick.vx != 0.0 || stick.vy != 0.0;
     const double stickTurn = Heron::Robot::toTwist(BodyVelocity{0.0, 0.0, stick.wz}, bench().geometry).wz;

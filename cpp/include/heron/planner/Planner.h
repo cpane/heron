@@ -69,6 +69,10 @@
 // above a stop (0.15): at 0.05, Navigate round a box (2026-11-16) chose
 // small commands while crawling, slowed to a stop, kicked with a large
 // one, and went round in pulses; a crawl is now planned as a start.
+// Nor, nearly still, may it be one of the course's dead commands
+// (Course::dead, Motion::isDead()): sizes the loop drove for a second
+// without the robot moving, though the table said they would (StallWatch,
+// heron_robot); a larger size or another direction is chosen instead.
 // Nearly still, a direction's smallest such command is kept even when it is
 // faster than the course asks (I13's one exception, as forward's dead band
 // already makes 0.19 m/s of any stick): a slow course would otherwise
