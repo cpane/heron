@@ -83,3 +83,15 @@ turns `heron-teleop@<user>` off, and the two units conflict.
 `builder/wheel_check.sh` checks and stops only `heron-teleop@<user>`, so
 with the robot service running it would find the Arduino busy. Worth a
 check of either service, and a line in the guide, once builders use it.
+
+### From dioptra, 2026-11-19: Dioptra is to become the builder's main tool
+
+[decided, nothing built] Chris decided on a GUI application on the host,
+Dioptra, as the builder's main way to set up, configure, calibrate and
+watch robots, so builders no longer run scripts by hand. When Dioptra
+covers a task, that builder script becomes the terminal fallback; the
+guide will be rewritten around the app. Dioptra follows this
+workstream's rules for builder-facing work. The candidates in "Picking
+up" (setting up a new Pi end to end, the service on and off, a status
+check) are among its first tasks; weigh building them here first.
+`RESUME-dioptra.md`.
