@@ -216,7 +216,12 @@ supply = AA cells on EXT_PWR
   `profiles/surfaces/<drive>/<name>.conf`, one surface a file; a rig sees
   its drive's library after its own surfaces. The bench rig: drive
   `bench-mecanum`, surface `hardwood-1`. Measuring one:
-  [`rig-calibration.md`](rig-calibration.md) §8.8.
+  [`rig-calibration.md`](rig-calibration.md) §8.8. **Which floor a Pi
+  is on** (since 2026-11-18): `heron_robot --surface <name>` for one
+  run; else `~/heron/surface`, set by `scripts/set_surface.sh <user>@<pi>
+  <name>` (cleared with `--default`), which the boot service follows;
+  else `[rig] surface`. Switching floors needs no profile change and no
+  deploy; `heron_robot` prints the floor and where it came from.
 - **Per-motor dead band.** The bench measured 61 to 92 across motors and
   directions. One value for all (step 3's `kMinDuty`, 100) makes the easier
   motors run fast at low commands; eight values let each start at its own

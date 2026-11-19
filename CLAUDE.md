@@ -286,6 +286,7 @@ scripts/deploy_cpp.sh      <user>@<pi> <binary> [args]
 scripts/build_firmware.sh                               # Arduino firmware, in a container
 scripts/flash_firmware.sh  <user>@<pi>         # avrdude on the Pi
 scripts/set_rig.sh         <user>@<pi> <rig>   # once per Pi: which profile
+scripts/set_surface.sh     <user>@<pi> <surface>|--default  # which floor it is on
 scripts/teleop_autostart.sh <user>@<pi> on|off|status  # heron_teleop at boot
 scripts/robot_autostart.sh  <user>@<pi> on|off|status  # heron_robot at boot, in its place
 scripts/fetch_captures.sh  <user>@<pi>         # pull captures back
