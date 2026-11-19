@@ -1,10 +1,12 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-16 (late): full-stick tuning half done on
+Last updated 2026-11-18: full-stick tuning done on
 `feature/navigation-planner-side-commit` (unpushed, deployed to the bench
-rig): the limiter's test in the planner works on the floor (no cuts
-passing a box), the new score weights do not (late braking, and once a
-9 s deadlock); next, "Picking up" 0.0. Started 2026-11-04. **Every navigation library
+rig): round the box at full stick, centred and 10 cm left, both on
+course again, no cuts, no deadlock; the right strafe re-measured, a
+guard against commands that do not start the robot (`StallWatch`), score
+weights offLine 1.5, change 0.75; next, push and merge, then "Picking
+up" 0.0's Faire list. Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -168,11 +170,18 @@ navigation, so SwC to Manual always takes over.
   batteries move the slow end most; the robot gets fresh cells at the
   Faire, on a schedule, and the from-rest margins stay.
 
+## Decided (2026-11-18)
+
+- **Full-stick tuning finished** (Chris's go-ahead for the four steps;
+  Claude chose the weights in simulation; Chris drove the check): score
+  weights 1.5 and 0.75, the right strafe re-measured, `StallWatch`.
+  Both box runs went round and resumed course.
+
 ## Picking up
 
 0. **Before the Faire, in this order** (each needs the robot on; Chris
    drives):
-   0. **A box run with the fresh-battery table** (deployed with the
+   0. **Done 2026-11-18: a box run with the fresh-battery table** (deployed with the
       measured-size rule, not yet driven): Navigate round a box on the
       hardwood, throttle full, stick forward, fresh motor batteries, and
       **room**: in simulation it swings 0.4 to 0.6 m out and is back on
@@ -205,21 +214,35 @@ navigation, so SwC to Manual always takes over.
       run **stuck for about 9 s** (log lines 885–981): a right strafe at
       0.5, the limiter SLOWED, the robot not moving (0.03 m/s, the
       phantom); `MotionWatch` did not trip, the table predicting
-      0.11 m/s against its 0.10. **Tomorrow, in order:**
-      1. Put `ScoreWeights` back to offLine 1.0, change 0.5 (the late
-         commitment is the likely cause [unverified]); keep the
-         near-stop fix and the limiter's test. Rerun the box scenarios at
-         both speeds, and see what the old weights do at 0.42 with the
-         limiter's test in (not yet tried together).
-      2. Re-measure the right strafe from rest on these batteries, as the
-         left was: throttle 0.4, 0.5, 0.6, 0.8, stick fully right, 3 to
-         4 s each (`heron_robot --lines 10`, Manual, tee to
-         `~/heron/captures/right-2026-11-17.log`); replace p15 to p19.
-      3. A guard against the deadlock: commanded and not moving for about
-         1 s, the planner drops that size in that direction and steps up
-         (or `MotionWatch` trips with a margin over the table, not at
-         it). At the Faire this is the robot that sits and hums.
-      4. The two box runs again, full stick, room past the box.
+      0.11 m/s against its 0.10. **Fixed and driven 2026-11-18**
+      (`navigate-2026-11-18.log`, Chris driving, fresh batteries, both
+      box runs in one log; "both runs the robot went around the
+      obstacle and resumed course"):
+      - Weights back from 2 and 2.5, but not to 1 and 0.5: over 1.5,
+        offLine itself slows straight at a box (PlannerTest's "box
+        ahead"), and 1 and 0.5 left 5 to 6 simulated full-stick runs
+        in 30 over 0.5 m off the line. **1.5 and 0.75** (Planner.h
+        says why; 1.5 and 1 stood one run in 30 inside the margin
+        with the new strafe).
+      - The right strafe re-measured from rest on fresh batteries
+        (`captures/right-2026-11-18.log`): 0.12, 0.14, 0.17, 0.23 m/s
+        at 0.4, 0.5, 0.6, 0.77, turning right about 10°/s; 0.4 now
+        starts it (the 11-14 points: 0.06 at 0.4).
+      - `StallWatch` (`RobotCore.h`): the wheels driven with one
+        translation for 1 s, the pose moving under 0.03 m/s, makes that
+        command dead until disarmed or the mode changes; nearly still,
+        the planner's candidates and the limiter's substitute pass over
+        it and smaller ones within 15°. Not seen to trigger on the
+        floor yet [unverified there; robot_test and planner_test].
+      - On the floor, both runs (log lines 358–471, 882–998): 0.45 m/s
+        to the box, a side chosen about 0.6 m out at 0.35 m/s (the
+        night before: braking to 0.1 at 0.45 m), right round it; beside
+        it about 1 s at 0.07 to 0.15 m/s, the limiter SLOWED, then on
+        at 0.35 to 0.40; back left with (+0.87 +0.50) for 4 to 5 s.
+        No `limiter CUT`, no deadlock, never BLOCKED while driven, no
+        dead command found. Still AVOIDING when the stick was let go:
+        the left diagonal makes 0.00 to 0.05 m/s sideways, so the
+        return to the line is slow (Chris saw it resume course).
    1. **The OTOS after a lift.** Picked up while `heron_robot` ran
       (2026-11-16, Chris confirmed), the heading swung 50° with TILT,
       then TRACKING stayed on with speeds about −3 m/s, the pose not
@@ -830,6 +853,19 @@ Settled 2026-11-04: the bench rig carries navigation.
 - **The scenarios leave out `MotionWatch`:** the simulated OTOS is
   never lifted, and pressed against a wall it might trip where the
   floor has not shown it does [unverified].
+- **Standing for good inside the margin** (2026-11-18, simulation
+  only): with the re-measured strafe and weights 1.5 and 1, one box run
+  in 30 at 0.3 m/s turned back toward the box at 6 cm, went BLOCKED,
+  coasted to 4 cm and never moved again: inside the margin, the floor
+  is the clearance now, and every command on this floor turns the robot,
+  so the planner's limiter test passes none (28 of 64 rejected by it,
+  33 by the path). The weights make it rare, not impossible;
+  `StallWatch` does not cover it (BLOCKED drives nothing). Not seen on
+  the floor [unverified].
+- **The return to the line is slow at full stick** (2026-11-18): the
+  left diagonal the planner returns with makes almost no sideways
+  motion on the hardwood; seen on the floor, never back to FOLLOWING
+  within about 5 s past the box [ours, two runs].
 - **The simulated no-returns are random; real ones cluster** (runs of
   4.4 to 5.2 samples on average, up to 70). A test that depends on clustering
   needs a recording (§3).
