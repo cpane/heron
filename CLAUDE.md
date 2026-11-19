@@ -13,7 +13,10 @@ workstream, scripts and a guide for people who build and drive a Heron
 without changing code, started 2026-11-02. The navigation workstream,
 obstacle avoidance from the LiDAR and the OTOS, started 2026-11-04 with
 its design; its libraries up to the local planner are built and tested
-in simulation, and wait on the robot program (`heron_robot`).
+in simulation, and wait on the robot program (`heron_robot`). The
+Dioptra workstream, a GUI application on the host and the builder's main
+tool for setting up, configuring, calibrating and watching robots,
+started 2026-11-19 with its requirements.
 
 ## Workstreams
 
@@ -222,6 +225,24 @@ Navigation-only facts:
 - Our own code, not ROS 2 and Nav2, on this hardware (design D4).
 - Most of phase N1 is other workstreams' work (design §15): record it in
   theirs, not here.
+
+### Dioptra — the builder's application on the host (active)
+
+Read before doing Dioptra work:
+
+- **`docs/RESUME-dioptra.md`** — its scope, what it depends on, and what
+  is next.
+
+Dioptra-only facts:
+
+- Named after the surveying instrument of Hero (Hērōn) of Alexandria,
+  after whom Heron is named.
+- It is where builder work is going: when it covers a task, the builder
+  scripts are the terminal fallback for it.
+- It runs on the host and adds no robot code: a capability the robot
+  lacks is a change in its owning workstream first. Until Dioptra has
+  its own tested way to do a task, `scripts/` is the source of truth for
+  it.
 
 ## Development model
 
