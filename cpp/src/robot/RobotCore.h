@@ -629,6 +629,43 @@ class OtosRecovery {
     const char *m_why{""};
 };
 
+/**
+ * When to try the LiDAR again after it would not start (2026-11-19): at
+ * boot, heron_robot's three start attempts all failed, and Assisted and
+ * Navigate stayed unavailable until the program was restarted by hand. On
+ * the bench rig the A1M8 lost about every other request while its motor
+ * ran (all of them answered with it stopped), so a start, several requests
+ * in a row, rarely got through; reseating the cable between its adapter
+ * board and the sensor cured it (RESUME-navigation.md).
+ *
+ * After a failure the next try is kFirst later, and each failure after
+ * that doubles the wait, up to kLongest: a LiDAR that recovers is soon
+ * found, and one that never does costs a start every kLongest. The tries
+ * run off the loop, so the heartbeat never pauses.
+ *
+ * Thread Safety: Not thread-safe; one control loop owns it.
+ */
+class LidarRetry {
+  public:
+    static constexpr std::chrono::seconds kFirst{5};
+    static constexpr std::chrono::seconds kLongest{30};
+
+    /** A try failed (or the start-up's did): the next is wait() from now. */
+    void failed(std::chrono::steady_clock::time_point now) noexcept;
+
+    /** @return whether a try is due: after a failure, once its wait is up */
+    [[nodiscard]] bool due(std::chrono::steady_clock::time_point now) const noexcept {
+      return m_next && now >= *m_next;
+    }
+
+    /** @return the wait from the last failure to the next try */
+    [[nodiscard]] std::chrono::seconds lastWait() const noexcept { return m_lastWait; }
+
+  private:
+    std::optional<std::chrono::steady_clock::time_point> m_next;
+    std::chrono::seconds m_lastWait{0};
+};
+
 }  // namespace Heron::Robot
 
 #endif  // HERON_ROBOT_ROBOT_CORE_H

@@ -595,6 +595,11 @@ bool OtosRecovery::update(const Input &in, std::chrono::steady_clock::time_point
   return true;
 }
 
+void LidarRetry::failed(std::chrono::steady_clock::time_point now) noexcept {
+  m_lastWait = m_lastWait.count() == 0 ? kFirst : std::min(m_lastWait * 2, kLongest);
+  m_next = now + m_lastWait;
+}
+
 bool CutHold::along(const Drive::BodyVelocity &stick) const noexcept {
   return (stick.vx != 0.0 || stick.vy != 0.0) &&
          std::abs(Geometry::wrapAngle(std::atan2(stick.vy, stick.vx) - m_directionRad)) <=
