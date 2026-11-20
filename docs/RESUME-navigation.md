@@ -1,12 +1,14 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-18: full-stick tuning done on
-`feature/navigation-planner-side-commit` (unpushed, deployed to the bench
-rig): round the box at full stick, centred and 10 cm left, both on
-course again, no cuts, no deadlock; the right strafe re-measured, a
-guard against commands that do not start the robot (`StallWatch`), score
-weights offLine 1.5, change 0.75; next, push and merge, then "Picking
-up" 0.0's Faire list. Started 2026-11-04. **Every navigation library
+Last updated 2026-11-19: the bench rig's LiDAR failed every start at
+boot (requests lost while its motor ran; reseating the cable between
+its adapter board and the sensor cured it), and `heron_robot` now
+tries a failed LiDAR again in the background (`LidarRetry`) and no
+longer crashes on a missing one, on `feature/navigation-lidar-retry`
+(unpushed, deployed to the bench rig, the boot service on). All three
+modes driven after the reseat. Next: "Picking up" 0's Faire list
+(robot 2's profile, the hotspot). 2026-11-18: full-stick tuning done
+and merged (#84). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
 whose profile sections are now measured on the bench rig.**
@@ -311,6 +313,45 @@ navigation, so SwC to Manual always takes over.
       Next: if it sticks again, another USB cable; then the second unit,
       if there is one; LiDAR's dedicated 5 V feed is its own plan. The
       start-up retry recovered a refused Express twice that day.
+      **Again on 2026-11-19, every start, and found** [ours]: the boot
+      service was off (turned on again: `robot_autostart.sh ... on`);
+      on, every start failed all three tries (`cannot start scan mode
+      1`, `no answer to GET_INFO`), through a service restart, a USB
+      replug at both ends and a full power cycle, so the robot was
+      Manual only. `get_throttled` 0x0. With the service stopped:
+      `lidar_info` answered 1 run in 3; the reset banner came back whole
+      3 of 3; and the same request 8 times running (a throwaway script,
+      not kept) was answered **about every other time with the LiDAR's
+      motor running, and 48 of 48 with it stopped** (DTR asserted),
+      twice each. Its answers arrive whole: requests are lost on the way
+      in, while the motor runs, as LiDAR's E4 found on 11-08. **Reseating
+      the short cable between the adapter board and the sensor's base**
+      (both ends, power off) cured it: the next boot started the LiDAR
+      first time, and Chris drove Manual, Assisted (cut 0.45 m short of
+      the obstacle at full stick) and Navigate (off at once, round the
+      obstacle) [one boot; not re-measured with the script since]. The
+      `dwc_otg ... Timed out` warning came with two of the failed starts,
+      not the power-cycled one: not the cause. That cable to be secured
+      for the Faire (Chris).
+      **`heron_robot` made to ride it out, 2026-11-19**
+      (`feature/navigation-lidar-retry`): a LiDAR that fails its three
+      tries is tried again off the loop, 5 s later, then 10, 20 and every
+      30 s (`LidarRetry`, `RobotCore.h`; `robot_test`), and taken on once
+      the sticks are centred, so Assisted or Navigate never sets off on a
+      stick held while unavailable. Without a LiDAR the loop reads none,
+      so centred sticks stand in for still for the OTOS's restart (with
+      the dead one kept, the status said `view moving` and the stuck OTOS
+      was never restarted, as seen that morning). New `--lidar DEVICE`.
+      **A missing port crashed it**: with no `/dev/rplidar` (its USB out)
+      `Lidar::start()`'s failed-start teardown segfaults in the SDK's
+      `setMotorSpeed()`, so the boot service would have crash-looped with
+      no Manual either; `heron_robot` now checks the port exists before
+      each try (LiDAR's Inbox has the crash). **Checked on the Pi**
+      (`--dry-run --lidar /tmp/heron-lidar`, the link made 28 s in):
+      "no device" at start-up and at 5 and 15 s, then started at 35 s,
+      "Assisted: ready", "Navigate: ready", 277 scans into the map
+      [ours]. The real failure (a port there, the start refused) goes
+      down the same path and is not yet seen to recover on the robot.
    3. **Boot into `heron_robot`** in place of `heron_teleop`: a service
       like `heron-teleop@.service`, and the autostart script taking
       which program. Builder's and motor's scripts are involved; check

@@ -1026,3 +1026,35 @@ correct; afterwards answers were hit and miss again. A replug with both
 ends of the LiDAR's cable reseated recovered it at once. Navigation's
 reading: the sensor is alive and a link is losing bytes (a marginal
 plug or cable, the 5 V, or the Pi 3's USB); not established.
+
+### From navigation, 2026-11-19: requests lost while the motor runs, cured by reseating the board-to-sensor cable
+
+[ours] Bench rig, unit A, firmware 1.29, `get_throttled` 0x0. Every
+`heron_robot` start failed (`cannot start scan mode 1`, `no answer to
+GET_INFO`), through a USB replug at both ends and a power cycle. With
+nothing else on the port, one request sent 8 times running, 50 ms
+apart, 1 s timeout, GET_INFO, GET_HEALTH and GET_SAMPLERATE in turn:
+**about every other one answered with the motor running (DTR
+de-asserted), 48 of 48 with it stopped (DTR asserted)**, twice each;
+answers that came were whole, and RESET's 64-byte banner came back
+whole 3 of 3. So requests are lost on the way in, only while the motor
+runs, as your E4 found on 11-08. Reseating the short cable between the
+adapter board and the sensor's base (both ends, power off) cured it:
+the LiDAR started first time on the next boot [one boot; the request
+test not repeated since]. Fits your E7 hypothesis (a disturbed
+board-to-sensor connector) [still not proven]. Write-up:
+`RESUME-navigation.md`, "Picking up" 0.2.
+
+### From navigation, 2026-11-19: Lidar::start() segfaults when the port does not exist
+
+[ours, reproduced] `heron_robot` with its LiDAR port pointing nowhere
+(`--lidar /tmp/heron-lidar`, a missing path; the same as `/dev/rplidar`
+gone with its USB out): `connect()` succeeds (as `cpp-build.md` says),
+GET_INFO fails, and `failStart()` → `teardown()` →
+`m_driver->setMotorSpeed(0)` segfaults inside the SDK
+(`sl_lidar_driver.cpp:993`, gdb backtrace on the Pi). `lidar_info`
+on a missing port does not crash. Navigation guards it in
+`heron_robot` (the port must exist before each try); the library
+itself is unchanged and yours to fix, e.g. not touching the motor in
+teardown when the channel never opened.
+

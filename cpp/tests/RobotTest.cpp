@@ -891,6 +891,24 @@ int main() {
     check("a turn or TILT while the LiDAR sees motion: never", !any);
   }
 
+  std::printf("The LiDAR tried again after a failed start (2026-11-19)\n");
+  {
+    LidarRetry r;
+    check("nothing failed: never due", !r.due(t0) && !r.due(t0 + 3600s));
+    r.failed(t0);
+    check("failed at start-up: due 5 s later, not before", !r.due(t0 + 4999ms) && r.due(t0 + 5s));
+    std::vector<long long> waits;
+    auto t = t0 + 5s;
+    for (int i = 0; i < 5; ++i) {
+      r.failed(t);
+      waits.push_back(r.lastWait().count());
+      t += r.lastWait();
+    }
+    check("each failure doubles the wait, up to 30 s: 10 20 30 30 30",
+          waits == std::vector<long long>{10, 20, 30, 30, 30});
+    check("  due when the wait is up", r.due(t) && !r.due(t - 1ms));
+  }
+
   std::printf("Disarmed\n");
   {
     const AssistedInput open = assistedWith(&far);
