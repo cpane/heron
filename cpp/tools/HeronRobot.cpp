@@ -80,7 +80,10 @@
 // Each sensor's start is tried up to three times, 2 s apart (both fail now
 // and then and pass on the next start). One that still fails is reported and leaves Assisted and Navigate
 // unavailable: Manual still works, and the other two stop rather than
-// falling back to Manual.
+// falling back to Manual. A LiDAR that failed is then tried again in the
+// background, 5 s later and then every 10, 20, 30 s (LidarRetry), and taken
+// on once the sticks are centred: "-- the LiDAR ..." lines say so, and
+// Assisted and Navigate come up without a restart.
 // An OTOS whose pose stays not fresh for 2 s (stuck after a lift), with the
 // sticks centred, is restarted in the background; "-- OTOS restart" lines
 // say so. A LiDAR that stops while running leaves its scans going stale, and the
@@ -104,6 +107,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -138,6 +142,23 @@ constexpr std::chrono::milliseconds kPeriod(20);  // 50 Hz, the protocol's rate
 constexpr int kStartAttempts = 3;
 constexpr std::chrono::seconds kStartRetryWait(2);
 
+/** @return why the LiDAR cannot be tried at all, or empty. A port that is
+ *  not there (the USB cable out) must not reach Lidar::start(): the SDK's
+ *  connect() "succeeds" on it, and the failed start's teardown then crashes
+ *  in the SDK's setMotorSpeed() (2026-11-19, a segfault; LiDAR's Inbox). */
+std::string lidarMissing(const Heron::Lidar::LidarConfig &config) {
+  std::error_code ec;
+  return std::filesystem::exists(config.port, ec) ? std::string() : "no device at " + config.port;
+}
+
+/** One background try at the LiDAR (LidarRetry): the sensor, running if
+ *  started, else stopped, with why. */
+struct LidarTry {
+  std::unique_ptr<Heron::Lidar::Lidar> lidar;
+  bool started{false};
+  std::string error;
+};
+
 /** Makes a sensor and starts it, up to kStartAttempts times, a fresh
  *  instance each time (restarting one is not yet proven for the LiDAR:
  *  RESUME-lidar.md §9), waiting between; says so on each failure.
@@ -166,7 +187,8 @@ std::unique_ptr<Sensor> startWithRetries(Make make, const char *name, bool &star
 [[noreturn]] void usage(int status) {
   std::fprintf(status == 0 ? stdout : stderr,
                "Usage: heron_robot [--dry-run] [--manual-is-high] [--lines N] [--profile FILE]\n"
-               "                   [--surface NAME] [--remote DEVICE] [--test-otos-restart]\n"
+               "                   [--surface NAME] [--remote DEVICE] [--lidar DEVICE]\n"
+               "                   [--test-otos-restart]\n"
                "  --dry-run         everything but the motors; print the wheels\n"
                "  --manual-is-high  SwC High is Manual (default: Low is Manual)\n"
                "  --lines N         status lines a second, 1 to 50 (default 1)\n"
@@ -174,6 +196,7 @@ std::unique_ptr<Sensor> startWithRetries(Make make, const char *name, bool &star
                "  --surface NAME    the floor (default this Pi's, set by set_surface.sh,\n"
                "                    else the profile's [rig] surface)\n"
                "  --remote DEVICE   the iBUS receiver's port (default /dev/serial0)\n"
+               "  --lidar DEVICE    the LiDAR's port (default /dev/rplidar)\n"
                "  --test-otos-restart  restart the OTOS once, 5 s in, as a stuck one is\n");
   std::exit(status);
 }
@@ -191,6 +214,7 @@ int main(int argc, char **argv) {
   int linesPerSecond = 1;
   std::string profilePath;
   std::string surfaceName;
+  std::string lidarPort = Heron::Lidar::LidarConfig{}.port;
   Heron::Remote::ReceiverConfig remoteConfig;  // /dev/serial0, stale after 100 ms
   // SwA on CH7, as heron_teleop: 1000 up (disarmed) and the transmitter's
   // failsafe value, so disarming and radio loss read the same.
@@ -214,9 +238,12 @@ int main(int argc, char **argv) {
         usage(2);
       }
       linesPerSecond = static_cast<int>(n);
-    } else if ((arg == "--profile" || arg == "--remote" || arg == "--surface") && i + 1 < argc) {
-      (arg == "--profile" ? profilePath : arg == "--surface" ? surfaceName : remoteConfig.serial.device) =
-          argv[++i];
+    } else if ((arg == "--profile" || arg == "--remote" || arg == "--surface" || arg == "--lidar") &&
+               i + 1 < argc) {
+      (arg == "--profile"   ? profilePath
+       : arg == "--surface" ? surfaceName
+       : arg == "--lidar"   ? lidarPort
+                            : remoteConfig.serial.device) = argv[++i];
     } else {
       std::fprintf(stderr, "ERROR: unexpected argument '%s'\n", arg.c_str());
       usage(2);
@@ -297,22 +324,44 @@ int main(int argc, char **argv) {
 
   // 4. The LiDAR.
   std::unique_ptr<Heron::Lidar::Lidar> lidar;
+  Heron::Lidar::LidarConfig lidarConfig;
+  if (profile.lidar) {
+    lidarConfig = Heron::Robot::toLidarConfig(*profile.lidar);
+  }
+  lidarConfig.port = lidarPort;
   if (unavailable.empty()) {
     std::printf("Starting the LiDAR...\n");
+    unavailable = lidarMissing(lidarConfig);
+    if (!unavailable.empty()) {
+      unavailable = "LiDAR: " + unavailable;
+    }
+  }
+  if (unavailable.empty()) {
     bool started = false;
     lidar = startWithRetries<Heron::Lidar::Lidar>(
-        [&profile] { return std::make_unique<Heron::Lidar::Lidar>(Heron::Robot::toLidarConfig(*profile.lidar)); },
+        [&lidarConfig] { return std::make_unique<Heron::Lidar::Lidar>(lidarConfig); },
         "the LiDAR", started);
     if (!started) {
       unavailable = "LiDAR: " + (lidar ? lidar->getHealth().lastError : std::string("stopped"));
     }
   }
 
+  // A LiDAR that would not start is tried again from the loop (LidarRetry);
+  // one that is not there at all, or an OTOS that failed, is not.
+  Heron::Robot::LidarRetry lidarRetry;
+  const bool lidarRetrying = unavailable.rfind("LiDAR: ", 0) == 0;
+  if (lidarRetrying) {
+    lidar.reset();  // stopped: the loop reads no LiDAR until one starts
+    lidarRetry.failed(steady_clock::now());
+  }
+
   std::unique_ptr<Heron::Limiter::Limiter> limiter;
   std::shared_ptr<const Heron::Motion::MotionTable> motion;
   std::unique_ptr<Heron::Perception::Perception> perception;
   std::unique_ptr<Heron::Planner::LocalPlanner> planner;
-  if (unavailable.empty()) {
+  // Assisted's limiter, Navigate's map and planner: at start-up, or once a
+  // LiDAR tried again has started.
+  const auto startNavigation = [&] {
     limiter = std::make_unique<Heron::Limiter::Limiter>(Heron::Robot::toLimiterConfig(profile));
     if (auto table = Heron::Robot::toMotionTable(profile)) {  // checked by assistedRefusal()
       motion = std::make_shared<const Heron::Motion::MotionTable>(std::move(*table));
@@ -328,9 +377,16 @@ int main(int argc, char **argv) {
     (void)perception->start();
     (void)planner->start();
     std::printf("Navigate: ready\n");
+  };
+  if (unavailable.empty()) {
+    startNavigation();
   } else {
     std::printf("Assisted and Navigate: UNAVAILABLE (%s). Manual works; the others stop.\n",
                 unavailable.c_str());
+    if (lidarRetrying) {
+      std::printf("The LiDAR is tried again in the background, from %lld s.\n",
+                  static_cast<long long>(Heron::Robot::LidarRetry::kFirst.count()));
+    }
   }
 
   // 5. The motors.
@@ -360,6 +416,8 @@ int main(int argc, char **argv) {
   Heron::Robot::OtosRecovery otosRecovery;
   Heron::Robot::LidarStill lidarStill;  // for OtosRecovery: still by the LiDAR
   std::future<bool> otosRestart;  // valid while a restart runs, off the loop
+  std::future<LidarTry> lidarStart;  // valid while a LiDAR try runs, off the loop
+  std::unique_ptr<Heron::Lidar::Lidar> lidarWaiting;  // started; taken on with the sticks centred
   bool coursing = false;                // a course was last given to the planner
   Mode lastMode = Mode::Manual;         // last cycle's, to start afresh on a change
   Heron::Drive::BodyVelocity lastBody;  // what the wheels were told last cycle
@@ -392,6 +450,50 @@ int main(int argc, char **argv) {
       const double throttle = Heron::Drive::readThrottle(r.frame, sticks);
       const bool armed = gate.update(r.isOk(), throttle);
       const Heron::Drive::BodyVelocity stick = Heron::Drive::sticksToVelocity(r.frame, sticks);
+      const bool sticksCentred = stick.vx == 0.0 && stick.vy == 0.0 && stick.wz == 0.0;
+
+      // The LiDAR that would not start, tried again off the loop
+      // (LidarRetry). Taken on only with the sticks centred, so Assisted or
+      // Navigate never sets off on a stick already held while unavailable.
+      if (lidarStart.valid() && lidarStart.wait_for(seconds(0)) == std::future_status::ready) {
+        LidarTry tried = lidarStart.get();
+        if (tried.started) {
+          lidarWaiting = std::move(tried.lidar);
+          std::printf("-- the LiDAR started, tried again%s\n",
+                      sticksCentred ? "" : ": Assisted and Navigate once the sticks are centred");
+        } else {
+          lidarRetry.failed(now);
+          unavailable = "LiDAR: " + tried.error;
+          std::printf("-- the LiDAR did not start, tried again: %s; next try in %lld s\n", tried.error.c_str(),
+                      static_cast<long long>(lidarRetry.lastWait().count()));
+        }
+      }
+      if (lidarWaiting && sticksCentred) {
+        lidar = std::move(lidarWaiting);
+        startNavigation();
+        unavailable.clear();
+      }
+      if (!lidar && !lidarWaiting && !lidarStart.valid() && lidarRetry.due(now)) {
+        lidarStart = std::async(std::launch::async, [&lidarConfig] {
+          LidarTry t;
+          t.error = lidarMissing(lidarConfig);
+          if (!t.error.empty()) {
+            return t;
+          }
+          try {
+            t.lidar = std::make_unique<Heron::Lidar::Lidar>(lidarConfig);
+            t.started = t.lidar->start();
+            if (!t.started) {
+              t.error = t.lidar->getHealth().lastError;
+              t.lidar->stop();
+            }
+          } catch (const std::exception &e) {
+            t.started = false;
+            t.error = e.what();
+          }
+          return t;
+        });
+      }
 
       // Assisted's and Navigate's inputs, read only there: Manual reads
       // nothing new.
@@ -488,7 +590,7 @@ int main(int argc, char **argv) {
         in.poseFresh = p.fresh;
         in.tilt = p.tiltWarning;
         in.turnRadps = p.newest.velocity.wz;
-        in.sticksCentred = stick.vx == 0.0 && stick.vy == 0.0 && stick.wz == 0.0;
+        in.sticksCentred = sticksCentred;
         // No LiDAR: centred sticks stand in for still, as before.
         in.still = lidar ? lidarStill.update(lidar->getLatest()) : true;
         const bool forced = forcedRestartAt && now >= *forcedRestartAt;
@@ -642,6 +744,15 @@ int main(int argc, char **argv) {
     perception->stop();
     std::printf("Map: %" PRIu64 " scans added, %" PRIu64 " skipped, %" PRIu64 " resets\n", h.scansAdded,
                 h.scansSkipped, h.mapResets);
+  }
+  if (lidarStart.valid()) {
+    LidarTry tried = lidarStart.get();  // the try owns its LiDAR until it ends
+    if (tried.lidar) {
+      tried.lidar->stop();
+    }
+  }
+  if (lidarWaiting) {
+    lidarWaiting->stop();
   }
   if (lidar) {
     lidar->stop();
