@@ -94,10 +94,19 @@ over can destroy the sensor.
    socket, plug the LiDAR in alone and run
    `udevadm info -q path -n /dev/ttyUSB0`: the path contains `1-1.N`.
    Label both sockets.
-7. **Mount the odometry sensor** rigid and level, within 3°, sensor face
+7. **Mecanum wheels in an X.** There are left- and right-handed wheels:
+   looking down on the robot, the rollers on top of the four wheels must
+   form an X, as on the bench rig. Mounted the other way (an O), the
+   robot drives forward and back correctly but spins when told to slide
+   sideways; `builder/wheel_check.sh` cannot see it, since it checks
+   each wheel's direction on the block. Mini robot 2 was built that way
+   first: a strafe read 1.3 to 3.3 rad/s of turn and almost no sideways
+   speed (2026-11-21) [ours]. Swap the front and back wheels on each
+   side to fix it; the motors and their wiring stay.
+8. **Mount the odometry sensor** rigid and level, within 3°, sensor face
    down, 10–27 mm above the floor. It must not tip or rise as the robot
    moves.
-8. **Power on** with a good supply, and run the checks below.
+9. **Power on** with a good supply, and run the checks below.
 
 ## Checks after wiring
 
@@ -124,12 +133,20 @@ scripts/deploy_cpp.sh <user>@<pi> lidar_adapter 20
 ## Transmitter set-up
 
 On the FS-i6X. The robot stops through the arm switch, so this is needed
-before it can drive safely (details in `docs/RESUME-remote.md`):
+before it can drive safely (details in `docs/RESUME-remote.md`). Each
+robot has its own transmitter and receiver, so do this on every
+transmitter; the failsafe is stored in the receiver, so set it again for
+every receiver, even with a transmitter already set up:
 
 - **10 channels:** System setup › Aux switches, switches on, channel count
   10.
 - **Switches on channels:** Functions setup › Aux channels: CH7 SwA, CH8
   SwB, CH9 SwC, CH10 SwD.
+- **The right stick's up-down must read low for up** (forward): check
+  with `ibus_reader monitor`. Mini robot 2's new transmitter read it the
+  other way at its defaults, and Functions setup › Reverse, CH2, fixed it
+  (2026-11-20) [ours]. Robot 1's transmitter was not checked
+  [unverified: which of the two is the default].
 - **Failsafe:** System setup › RX setup › Failsafe: CH7 −100% (SwA up,
   disarmed) and CH3 −100%; every other channel Off. Hold CANCEL to save.
   These settings have been lost once, so check them after any model change.
