@@ -34,6 +34,7 @@ row, even pins on the board's outer edge.
 
    USB:    RPLIDAR A1M8 via its USB adapter board   → /dev/rplidar, port 1-1.4
            Arduino motor controller, 4 motors        → /dev/arduino, port 1-1.2
+           (ports for a Pi 3B; a 3B+'s are in step 6)
    The two USB adapters are identical (CP2102, serial 0001), so each is
    named by the USB socket it is in. Label the two sockets.
    Power:  5 V supply into the Pi's micro-USB port
@@ -88,7 +89,8 @@ over can destroy the sensor.
    touches pin 1 or 3.
 6. **LiDAR and Arduino.** They must go in specific USB sockets: their
    adapters are identical, so the Pi tells them apart by socket (LiDAR
-   1-1.4, Arduino 1-1.2; the rules are in `target/udev/`). To find a
+   1-1.4, Arduino 1-1.2 on a Pi 3B; LiDAR 1-1.3, Arduino 1-1.1.2 on a
+   3B+; the rules are in `target/udev/<model>/`). To find a
    socket, plug the LiDAR in alone and run
    `udevadm info -q path -n /dev/ttyUSB0`: the path contains `1-1.N`.
    Label both sockets.

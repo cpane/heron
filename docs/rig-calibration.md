@@ -21,7 +21,7 @@ rediscovery. Its results are in `profiles/bench.conf` and
 | Need | How |
 |---|---|
 | The Pi provisioned | `scripts/provision_pi.sh <user>@<pi>`. It names the Pi `heron-<mac>`, so several rigs share a network |
-| The Arduino in USB port 1-1.2 | Only that port is named `/dev/arduino` (`target/udev/`) |
+| The Arduino in USB port 1-1.2 (1-1.1.2 on a Pi 3B+) | Only that port is named `/dev/arduino` (`target/udev/`) |
 | The firmware for the rig's platform | `scripts/build_firmware.sh`, then `scripts/flash_firmware.sh <user>@<pi>` (default `uno-l293d`) |
 | The C++ built | `scripts/build_cpp.sh` |
 | The Pi on a supply that holds 5 V | `vcgencmd get_throttled` with no current under-voltage (bit 0 clear). The robot's power block failed this on the bench rig ([`rig-profiles.md`](rig-profiles.md) §1, "Powering the Pi"). With the LiDAR on, that is not enough: §8.1 |
@@ -260,7 +260,7 @@ As §1, and also:
 
 | Need | How |
 |---|---|
-| The LiDAR fixed rigidly, so it cannot twist | In USB port 1-1.4: only that port is named `/dev/rplidar` |
+| The LiDAR fixed rigidly, so it cannot twist | In USB port 1-1.4 (1-1.3 on a Pi 3B+): only that port is named `/dev/rplidar` |
 | The OTOS flat and level to within 3°, 10 to 27 mm above the floor, its yellow tape removed | On **3.3 V**, never 5 V ([`odometry-otos-reference.md`](odometry-otos-reference.md) §6) |
 | A supply that holds 5 V under the LiDAR's motor | AC, or a supply checked with `python/probes/lidar_07_requests.py`, motor running ([`rig-profiles.md`](rig-profiles.md) §1). The power block straight into the Pi fails: the LiDAR goes silent for seconds while `get_throttled` stays clear. Through a PD trigger and a 5.2 V buck it passes (2026-11-10) |
 

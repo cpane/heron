@@ -73,8 +73,9 @@ LiDAR-only facts:
 - **Use `/dev/rplidar`, never `/dev/ttyUSB0`** — `ttyUSB` numbering is
   enumeration order. The LiDAR and the Arduino use identical CP2102 bridges
   (10c4:ea60, serial 0001), so the udev rules in `target/udev/` match the
-  **USB port**: LiDAR in 1-1.4, Arduino (`/dev/arduino`) in 1-1.2. A device
-  in another port gets no name.
+  **USB port**: LiDAR in 1-1.4, Arduino (`/dev/arduino`) in 1-1.2 on a Pi
+  3B; 1-1.3 and 1-1.1.2 on a 3B+. Provisioning installs the Pi's model's
+  rules. A device in another port gets no name.
 - `python/heron/lidar/protocol.py` and `express.py` are written as C++
   transliteration targets: no I/O, integer fixed point, explicit shifts. Keep
   them that way.
@@ -148,7 +149,7 @@ Read before doing motor work:
 
 Motor-only facts:
 
-- The Arduino is `/dev/arduino`, named by USB port 1-1.2 because its CP2102
+- The Arduino is `/dev/arduino`, named by USB port 1-1.2 (1-1.1.2 on a 3B+) because its CP2102
   is identical to the LiDAR's (`target/udev/`).
 - Motor order 1 front-left, 2 front-right, 3 back-right, 4 back-left;
   positive drives the robot forward. A wrong-way motor is fixed in wiring
@@ -266,8 +267,8 @@ from scripts in this repository.
 
 ## Hardware
 
-A Raspberry Pi 3B per rig (the bench rig, the mini robot, later the
-full-size robot). Provisioning names each one `heron-` and the last three
+A Raspberry Pi 3B or 3B+ per rig (the bench rig, a 3B, is mini robot 1;
+mini robot 2, rig `mini-2`, is a 3B+; later the full-size robot). Provisioning names each one `heron-` and the last three
 bytes of its wired MAC address (`heron-9d9324`), so several can share a
 network. Commands write its address as `<pi>`: use the wired link (`eth0`),
 not the Wi-Fi one, which is what its mDNS name (`heron-<suffix>.local`)
