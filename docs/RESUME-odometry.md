@@ -226,3 +226,15 @@ round about 11°/s. A restart of the program, the robot still, cured it.
 The start-up's gyro calibration is the likely cause [unverified].
 Navigation now restarts only when the LiDAR says still, and retries
 when the OTOS reads TILT or a turn standing.
+
+### From navigation, 2026-11-20: 12 restarts in a minute on robot 2
+
+[ours, mini robot 2's journal] The OTOS on robot 2 failed its first
+start at boot (scalars read back 0x00 0x00) and passed the retry, as on
+the bench rig. Then, while it drove in Manual for about a minute,
+`heron_robot` restarted it 12 times: 9 for TILT or a turn read standing
+still, 3 for no fresh pose for 2 s. Its mecanum wheels were mounted
+wrongly, so every strafe was a hard spin (up to 3.3 rad/s) [likely the
+cause of the TILT readings, unverified]; the stale poses are not
+explained. Not yet seen again with the wheels fixed. Its mounting
+height on robot 2 was not measured.

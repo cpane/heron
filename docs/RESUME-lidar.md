@@ -1058,3 +1058,15 @@ on a missing port does not crash. Navigation guards it in
 itself is unchanged and yours to fix, e.g. not touching the motor in
 teardown when the channel never opened.
 
+### From navigation, 2026-11-20: robot 2's scans stopped while it drove
+
+[ours, one occurrence; mini robot 2's journal] About 15 s into robot 2's
+first drive in Manual, `heron_robot`'s scans stopped arriving and never
+came back (`scan` age over 130 s); no USB disconnect in the kernel log,
+`/dev/rplidar` still present, `throttled=0x0`. Restarting the service
+brought scans back, and they kept coming through the next drives (scan
+age 16 to 157 ms). The robot was spinning hard at the time, its mecanum
+wheels mounted wrongly (up to 3.3 rad/s), and its first drive had reset
+the Pi. Whether the LiDAR stopped spinning was not seen [unverified].
+Like the 2026-11-16 entry, the library gave no error: the scan only
+went stale.
