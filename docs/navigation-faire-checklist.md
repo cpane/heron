@@ -120,7 +120,8 @@ Anything wrong: Manual still works, and is the demo.
 
 ## 6. Robot 2
 
-Its own rig profile (RESUME-navigation, "Picking up" 0.4), then
+Its own rig profile (`mini-2`, RESUME-navigation, "Picking up" 0.4),
+its own transmitter (`docs/wiring.md`, "Transmitter set-up"), then
 `scripts/set_surface.sh <user>@<pi2> rubber-1` and step 5. Both robots
 share the drive, so its table is robot 1's [unverified: two builds can
 differ; step 5 is the check].

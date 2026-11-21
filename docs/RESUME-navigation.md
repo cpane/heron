@@ -1,13 +1,14 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-19: the bench rig's LiDAR failed every start at
-boot (requests lost while its motor ran; reseating the cable between
-its adapter board and the sensor cured it), and `heron_robot` now
-tries a failed LiDAR again in the background (`LidarRetry`) and no
-longer crashes on a missing one, on `feature/navigation-lidar-retry`
-(unpushed, deployed to the bench rig, the boot service on). All three
-modes driven after the reseat. Next: "Picking up" 0's Faire list
-(robot 2's profile, the hotspot). 2026-11-18: full-stick tuning done
+Last updated 2026-11-21: mini robot 2 (rig `mini-2`, a Pi 3B+) is
+provisioned and runs `heron_robot` at boot, on `chore/mini-2`; Manual
+drives, and strafing spun it because its mecanum wheels were in an O
+(being swapped). "Picking up" 0.4 has where it stands. 2026-11-19: the
+bench rig's LiDAR failed every start at boot (requests lost while its
+motor ran; reseating the cable cured it), and `heron_robot` now tries
+a failed LiDAR again in the background (`LidarRetry`, merged #88).
+Next: robot 2's floor check, then the hotspot and the Faire's rubber
+("Picking up" 0.5). 2026-11-18: full-stick tuning done
 and merged (#84). Started 2026-11-04. **Every navigation library
 is built and passes in simulation on the Mac and the Pi, the limiter
 (N4) and the planner (N5) included; what is left is `heron_robot`,
@@ -372,7 +373,26 @@ navigation, so SwC to Manual always takes over.
    4. **Mini robot 2:** a copy of `bench.conf` as its own profile, then
       spot checks (dead band, OTOS, LiDAR yaw) against robot 1's
       numbers. Its bring-up is motor's and builder's work; Navigate needs
-      only the profile.
+      only the profile. **Done 2026-11-20 and -21, on `chore/mini-2`**
+      [ours]: a Pi 3B+, so provisioning now installs udev rules by
+      model; `profiles/mini-2.conf` (a copy, marked not measured);
+      firmware flashed; its own transmitter set up and the receiver's
+      failsafe checked (CH7 to 1000 when switched off);
+      `wheel_check.sh` passed; the journal now kept on the SD card;
+      the boot service on. Found on the floor:
+      - Its first drive reset the Pi (no log survived; the jumper is
+        off, the motors on their own battery) [cause unverified]. Not
+        seen again since.
+      - In that drive the LiDAR's scans stopped (no USB error) and the
+        OTOS restarted 12 times; a service restart brought the scans
+        back. LiDAR and odometry have Inbox entries.
+      - Strafing spun the robot: the mecanum wheels were in an O
+        (`docs/wiring.md`, build step 7). Chris is swapping front and
+        back on each side.
+      **Next:** with the wheels in an X, Manual forward, strafe both
+      ways and turn, and the log read for speed against the table
+      (`motion_points.py` if it differs); then Assisted at a box and
+      Navigate round it. Watch the scan age and the OTOS restarts.
    5. **The rubber floor, at the Faire** (no rubber beforehand,
       decided 2026-11-18): **`docs/navigation-faire-checklist.md`**, in
       its order: switch the floor (`scripts/set_surface.sh <user>@<pi>
