@@ -1,0 +1,17 @@
+# SLAMTEC RPLIDAR A1M8, on a Raspberry Pi 3B+.
+#
+# The same rule as ../pi-3b/99-heron-rplidar.rules, which tells the whole
+# story: the LiDAR's and the Arduino's USB bridges are identical CP2102s
+# (10c4:ea60, serial "0001"), so each is named by the USB port it is in.
+# Only the port numbers differ. A 3B+ has a USB hub at 1-1 with the
+# Ethernet adapter (1-1.1.1) behind a second hub at 1-1.1, so its four
+# sockets are 1-1.1.2, 1-1.1.3, 1-1.2 and 1-1.3:
+#
+#   KERNELS "1-1.3"     the LiDAR (this file)
+#   KERNELS "1-1.1.2"   the Arduino (99-heron-arduino.rules)
+#
+# Found on mini robot 2 (rig mini-2), 2026-11-20: the device answering the
+# LiDAR's GET_INFO was at 1-1.3, the other at 1-1.1.2. Which physical
+# socket each number is has not been checked [unverified]. Provisioning
+# installs this folder's rules on a 3B+ only (target/provision/base.sh).
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", KERNELS=="1-1.3", SYMLINK+="rplidar", MODE="0660", GROUP="dialout"

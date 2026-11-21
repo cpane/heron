@@ -297,9 +297,26 @@ if [[ ! -d "${UDEV_RULES_DIR}" ]]; then
     exit 1
 fi
 
+# The rules name the LiDAR and the Arduino by USB port, and the port numbers
+# depend on the Pi's model: a 3B+ has a hub of its own in front of two of
+# its sockets. Each model has its own folder, with the same file names, so
+# a Pi gets only its model's rules and an old set is overwritten.
+PI_MODEL="$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || true)"
+case "${PI_MODEL}" in
+    "Raspberry Pi 3 Model B Plus"*) UDEV_MODEL_DIR="${UDEV_RULES_DIR}/pi-3b-plus" ;;
+    "Raspberry Pi 3 Model B"*)      UDEV_MODEL_DIR="${UDEV_RULES_DIR}/pi-3b" ;;
+    *)
+        echo "ERROR: no udev rules for this Pi: '${PI_MODEL}'."
+        echo "Add a folder to target/udev/ with its USB port numbers (see the"
+        echo "rule files' comments for how to find them)."
+        exit 1
+        ;;
+esac
+echo "  ${PI_MODEL}: ${UDEV_MODEL_DIR#"${TARGET_ROOT}/"}"
+
 # install overwrites in place, so re-provisioning is a no-op when the rules
 # have not changed.
-install -m 0644 "${UDEV_RULES_DIR}"/*.rules /etc/udev/rules.d/
+install -m 0644 "${UDEV_MODEL_DIR}"/*.rules /etc/udev/rules.d/
 
 udevadm control --reload-rules
 

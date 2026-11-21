@@ -721,7 +721,7 @@ int main(int argc, char **argv) {
     if (e.code() == std::errc::no_such_file_or_directory) {
       std::fprintf(stderr,
                    "  %s does not exist. On the Pi the Arduino must be in USB port 1-1.2\n"
-                   "  for the udev rule to name it (target/udev/99-heron-arduino.rules).\n",
+                   "  for the udev rule to name it (target/udev/<model>/99-heron-arduino.rules).\n",
                    options.port.device.c_str());
     } else if (e.code() == std::errc::permission_denied) {
       std::fprintf(stderr,
