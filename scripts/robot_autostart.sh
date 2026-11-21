@@ -95,7 +95,9 @@ if [[ "${ACTION}" == "on" ]]; then
 
     # heron_teleop off first (it would hold the Arduino), then enable and
     # restart rather than enable --now: restart starts it if it is stopped
-    # and picks up a newly deployed binary if it is running.
+    # and picks up a newly deployed binary if it is running. sync before the
+    # start: the robot drives within seconds, and a power cut then left an
+    # empty unit file, which systemd reads as masked (mini-2, 2026-11-20).
     scp -q "${LOCAL_UNIT}" "${TARGET}:${REMOTE_STAGE}"
     # -t so sudo can prompt for the password.
     ssh -t "${TARGET}" "sudo install -m 0644 '${REMOTE_STAGE}' '/etc/systemd/system/${UNIT_TEMPLATE}' \
@@ -103,6 +105,7 @@ if [[ "${ACTION}" == "on" ]]; then
         && sudo systemctl daemon-reload \
         && { sudo systemctl disable --now '${TELEOP_UNIT}' 2>/dev/null || true; } \
         && sudo systemctl enable '${UNIT}' \
+        && sync \
         && sudo systemctl restart '${UNIT}'"
     echo
     echo "On: heron_robot starts at every boot, and has started now;"
