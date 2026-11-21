@@ -27,7 +27,7 @@
 # run:
 #   udevadm info -a -n /dev/ttyUSB0 | grep KERNELS
 # On a Pi 3B, 1-1.1 is the Ethernet adapter and 1-1.2 to 1-1.5 the four
-# USB sockets.
+# USB sockets. A Pi 3B+ numbers them differently: ../pi-3b-plus/.
 #
 # All keys sit on the same parent device (the USB device at 1-1.4), as udev
 # requires within one rule.

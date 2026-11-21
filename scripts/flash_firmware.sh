@@ -3,7 +3,7 @@
 # Flash the motor firmware onto the Arduino, through the Pi.
 #
 # The firmware counterpart of deploy_cpp.sh. The Arduino is plugged into the
-# Pi (USB port 1-1.2, named /dev/arduino by the udev rule), on the bench as on
+# Pi (USB port 1-1.2, or 1-1.1.2 on a Pi 3B+, named /dev/arduino by the udev rule), on the bench as on
 # the robot, so flashing goes the same way as deploying: copy the build
 # output to the Pi over SSH, then run the tool there. The tool is avrdude,
 # installed by provisioning; the Pi never builds anything.
@@ -89,7 +89,7 @@ fi
 if ! ssh "${TARGET}" "test -e ${DEVICE}"; then
     echo "ERROR: ${DEVICE} does not exist on the Pi."
     echo "  Is the Arduino plugged into USB port 1-1.2? Only that port gets the name"
-    echo "  (target/udev/99-heron-arduino.rules)."
+    echo "  (target/udev/<model>/99-heron-arduino.rules)."
     exit 1
 fi
 

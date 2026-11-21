@@ -349,7 +349,7 @@ a DTR-controlled unit, which the SDK models as `MotorCtrlSupportDtr`.
     fresh while holding data up to the stall's length old. The adapter drops
     them (`lidar-cpp-design.md` §6).
 11. **`/dev/ttyUSB0` is not stable.** Use `/dev/rplidar` (see
-    `target/udev/99-heron-rplidar.rules`). The LiDAR's protocol-level serial
+    `target/udev/<model>/99-heron-rplidar.rules`). The LiDAR's protocol-level serial
     is invisible to udev; the CP2102's USB serial descriptor is the generic
     `"0001"`.
 12. **A poorly seated micro-USB at the adapter board loses requests, and

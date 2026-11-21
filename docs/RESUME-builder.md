@@ -95,3 +95,24 @@ workstream's rules for builder-facing work. The candidates in "Picking
 up" (setting up a new Pi end to end, the service on and off, a status
 check) are among its first tasks; weigh building them here first.
 `RESUME-dioptra.md`.
+
+### From navigation, 2026-11-21: what bringing up a second robot found
+
+[ours, mini robot 2, on `chore/mini-2`] Steps a builder hit that the
+scripts and guide do not cover yet:
+- **A Pi 3B+** numbers its USB sockets differently (LiDAR 1-1.3,
+  Arduino 1-1.1.2); provisioning now installs the rules for the Pi's
+  model (`target/udev/<model>/`).
+- **A clock weeks behind** on a network that blocks NTP: apt refuses
+  package lists dated in the future. Set by hand before provisioning
+  (`sudo date -u -s ...`).
+- **A new transmitter** needs the full set-up, and every receiver its
+  failsafe (`docs/wiring.md`, "Transmitter set-up"). Until then SwA does
+  not disarm: `wheel_check.sh` waited a minute for DISARMED and failed,
+  which caught it.
+- **Mecanum wheels in an O instead of an X** pass `wheel_check.sh` (each
+  wheel turns the right way on the block) but spin the robot when it
+  should slide (`docs/wiring.md`, build step 7). A floor check of a
+  strafe would catch it.
+- **A power cut right after `robot_autostart.sh on`** left an empty unit
+  file, read as masked; the script now syncs before starting.

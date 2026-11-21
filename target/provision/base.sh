@@ -212,6 +212,29 @@ apt-get install -y \
     avrdude
 
 #
+# A journal that survives a reset
+#
+
+# Raspberry Pi OS keeps the journal in memory only (Storage=volatile, in
+# /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf), which
+# spares the SD card but loses everything at a power cut. A robot that
+# resets while driving must leave a trace: mini robot 2 lost power on
+# its first drive (2026-11-20) and nothing before the reset survived.
+# This file overrides that one; the cap keeps the journal small.
+echo
+echo "Keeping the journal on the SD card (persistent, at most 64 MB)..."
+install -d -m 0755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/90-heron-persistent.conf <<'JOURNAL'
+# Written by Heron's provisioning (target/provision/base.sh).
+[Journal]
+Storage=persistent
+SystemMaxUse=64M
+JOURNAL
+install -d -m 2755 -g systemd-journal /var/log/journal
+systemctl restart systemd-journald
+journalctl --flush
+
+#
 # Hostname
 #
 
@@ -297,9 +320,26 @@ if [[ ! -d "${UDEV_RULES_DIR}" ]]; then
     exit 1
 fi
 
+# The rules name the LiDAR and the Arduino by USB port, and the port numbers
+# depend on the Pi's model: a 3B+ has a hub of its own in front of two of
+# its sockets. Each model has its own folder, with the same file names, so
+# a Pi gets only its model's rules and an old set is overwritten.
+PI_MODEL="$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || true)"
+case "${PI_MODEL}" in
+    "Raspberry Pi 3 Model B Plus"*) UDEV_MODEL_DIR="${UDEV_RULES_DIR}/pi-3b-plus" ;;
+    "Raspberry Pi 3 Model B"*)      UDEV_MODEL_DIR="${UDEV_RULES_DIR}/pi-3b" ;;
+    *)
+        echo "ERROR: no udev rules for this Pi: '${PI_MODEL}'."
+        echo "Add a folder to target/udev/ with its USB port numbers (see the"
+        echo "rule files' comments for how to find them)."
+        exit 1
+        ;;
+esac
+echo "  ${PI_MODEL}: ${UDEV_MODEL_DIR#"${TARGET_ROOT}/"}"
+
 # install overwrites in place, so re-provisioning is a no-op when the rules
 # have not changed.
-install -m 0644 "${UDEV_RULES_DIR}"/*.rules /etc/udev/rules.d/
+install -m 0644 "${UDEV_MODEL_DIR}"/*.rules /etc/udev/rules.d/
 
 udevadm control --reload-rules
 

@@ -95,4 +95,20 @@ Facts other workstreams found that belong here, waiting to be checked and
 folded into this workstream's docs when it resumes (`CLAUDE.md`,
 "Workstreams"). Newest last; delete an entry once folded in.
 
-Nothing waiting.
+### From navigation, 2026-11-20: a second transmitter, and the failsafe per receiver
+
+[ours, mini robot 2] Robot 2 has its own FS-i6X and FS-iA6B: the two
+robots are driven at the same time by separate people. At the new
+transmitter's defaults, CH7 to CH10 read 1500 (no switch assigned), so
+SwA could not disarm it, and the right stick's up-down (CH2) read high
+for up, the opposite of `forwardReadsLow`. Fixed on the transmitter: 10
+channels, Aux channels CH7 SwA to CH10 SwD, Reverse CH2, then the
+failsafe in RX setup. `ibus_reader record` then read SwA 1000/2000, SwC
+1000/1500/2000 and CH2 1003 for up. `failsafe-test` with the
+transmitter switched off: frames kept coming at 129.9 Hz and CH7 went
+2000 → 1000 after about 1 s, as on robot 1 (§5); CH3 stayed at 1557,
+so its −100% failsafe probably did not save [unverified]. Whether robot
+1's transmitter has CH2 reversed was not checked. The setup is now in
+`docs/wiring.md`, "Transmitter set-up", as needed for every
+transmitter and every receiver; this resume file's "Transmitter
+configuration" still describes one.

@@ -18,7 +18,7 @@ Two levels, which `HERON_PLATFORM` mixes up today:
 
 | Platform | Rigs |
 |---|---|
-| `uno-l293d`: Uno, HW-130 L293D shield, yellow DC motors | `bench` (a small robot with mecanum wheels, since 2026-11-03; first measured with no wheels), `mini` (3D-printed robot, big wheels), a second controller if built |
+| `uno-l293d`: Uno, HW-130 L293D shield, yellow DC motors | `bench` (a small robot with mecanum wheels, since 2026-11-03; first measured with no wheels), `mini-2` (mini robot 2, identical to the bench rig, a Pi 3B+; started from a copy of its profile, 2026-11-20), `mini` (3D-printed robot, big wheels), a second controller if built |
 | Full-size: driver not chosen | the 4-ft robot |
 
 The bench and the mini have identical parts and run identical firmware, but

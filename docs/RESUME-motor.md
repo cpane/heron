@@ -493,3 +493,11 @@ weak directions, where two wheels oppose, lose the most. Navigation now
 measures its tables on fresh cells; a battery voltage reading
 (Status, "no divider fitted") would show when to swap.
 
+### From navigation, 2026-11-21: mecanum wheels in an O spin the robot when it strafes
+
+[ours, mini robot 2] The mixing (`Drive.cpp`) assumes the rollers form
+an X seen from above. Robot 2's wheels were first mounted in an O: a
+full strafe in Manual set the wheels to −0.99 +0.99 −0.99 +0.99, as it
+should, and the robot turned at 1.3 rad/s with −0.06 m/s sideways;
+another read −3.33 rad/s. Forward was right (0.43 m/s). The fix is the
+wheels, not the code: now in `docs/wiring.md`, build step 7.

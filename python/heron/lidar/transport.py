@@ -19,7 +19,7 @@ from .recording import RawReader, RawWriter
 #: The RPLIDAR A1 talks 115200 8N1. (The A2/A3 use 256000.)
 DEFAULT_BAUD = 115200
 
-#: Preferred device path. Created by target/udev/99-heron-rplidar.rules.
+#: Preferred device path. Created by target/udev/<model>/99-heron-rplidar.rules.
 #: /dev/ttyUSB0 is assigned in enumeration order and is not stable once a
 #: second USB serial device is attached.
 DEFAULT_PORT = "/dev/rplidar"

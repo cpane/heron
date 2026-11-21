@@ -19,7 +19,7 @@ built and checked on the bench (2026-10-25). The wire format is in
 | Part | Detail |
 |---|---|
 | Board | Keyestudio Uno R3-compatible, ATmega328P: 16 MHz, 32 KB flash, 2 KB RAM. One hardware serial port, which is the Pi link, so debug output travels in Status |
-| USB bridge | Silicon Labs CP2102, 10c4:ea60, serial `0001`: identical to the LiDAR's adapter, so `/dev/arduino` is named by USB port, 1-1.2 (`target/udev/`) |
+| USB bridge | Silicon Labs CP2102, 10c4:ea60, serial `0001`: identical to the LiDAR's adapter, so `/dev/arduino` is named by USB port, 1-1.2 (1-1.1.2 on a Pi 3B+; `target/udev/`) |
 | Motor driver | L293D Motor Driver Shield (HW-130), a clone of Adafruit's original Motor Shield: two L293D chips for 4 DC motors, directions through a 74HC595 shift register |
 | Motors | Plain two-wire DC motors, **no encoders**: the bench runs open loop |
 
