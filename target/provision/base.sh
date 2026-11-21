@@ -212,6 +212,29 @@ apt-get install -y \
     avrdude
 
 #
+# A journal that survives a reset
+#
+
+# Raspberry Pi OS keeps the journal in memory only (Storage=volatile, in
+# /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf), which
+# spares the SD card but loses everything at a power cut. A robot that
+# resets while driving must leave a trace: mini robot 2 lost power on
+# its first drive (2026-11-20) and nothing before the reset survived.
+# This file overrides that one; the cap keeps the journal small.
+echo
+echo "Keeping the journal on the SD card (persistent, at most 64 MB)..."
+install -d -m 0755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/90-heron-persistent.conf <<'JOURNAL'
+# Written by Heron's provisioning (target/provision/base.sh).
+[Journal]
+Storage=persistent
+SystemMaxUse=64M
+JOURNAL
+install -d -m 2755 -g systemd-journal /var/log/journal
+systemctl restart systemd-journald
+journalctl --flush
+
+#
 # Hostname
 #
 
