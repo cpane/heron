@@ -10,4 +10,12 @@
 #   KERNELS "1-1.4"   the LiDAR
 #
 # Code must open /dev/arduino, never /dev/ttyUSB*.
+#
+# A replacement board may have a different USB bridge: the bench rig's
+# Keyestudio Uno failed on 2026-11-22 (its bridge answered, its ATmega328P
+# never did, not even to the bootloader) and the board put in its place
+# has a CH340 (1a86:7523). Its line names the same port. The CH340 is not
+# the LiDAR's bridge, so it cannot claim /dev/rplidar; only the port tells
+# the boards on this robot apart from the LiDAR, as before.
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", KERNELS=="1-1.2", SYMLINK+="arduino", MODE="0660", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", KERNELS=="1-1.2", SYMLINK+="arduino", MODE="0660", GROUP="dialout"
