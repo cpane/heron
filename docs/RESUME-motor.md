@@ -501,3 +501,28 @@ full strafe in Manual set the wheels to −0.99 +0.99 −0.99 +0.99, as it
 should, and the robot turned at 1.3 rad/s with −0.06 m/s sideways;
 another read −3.33 rad/s. Forward was right (0.43 m/s). The fix is the
 wheels, not the code: now in `docs/wiring.md`, build step 7.
+
+### From navigation, 2026-11-22: robot 1's Arduino failed; a CH340 board replaced it
+
+[ours, robot 1 (the bench rig)] After the Faire, robot 1 stopped
+driving: its Keyestudio Uno's CP2102 still enumerated (10c4:ea60 in
+1-1.2), but the ATmega328P never answered the bootloader (no avrdude
+sync at 115200), with the shield on or off; the board's ON LED lit. Its
+replacement is an Uno-type board with a CH340 bridge (1a86:7523, in
+1-1.2), which the udev rules now also name `/dev/arduino` on both Pi
+models (#90). `flash_firmware.sh` worked unchanged (signature
+0x1e950f, 5510 bytes verified); with the shield on, `heron_robot` read
+`motors OK`, `resets 0`, and `wheel_check.sh` passed in Manual. What
+killed the old board is unknown [unverified]. `docs/motor-design.md`
+and `wiring.md` name the board as the Keyestudio Uno: a CH340 board
+works too.
+
+### From navigation, 2026-11-22: robot 1's teleop unit file is empty
+
+[ours, robot 1; the cause unverified] `/etc/systemd/system/heron-teleop@.service`
+on robot 1 is 0 bytes, so systemd reads teleop as masked
+(`systemctl is-enabled` says `masked`). Harmless while `heron_robot`
+is the boot service, but `teleop_autostart.sh on` would have to install
+it again. Robot 2's empty units came from a power cut just after
+install, and `robot_autostart.sh` now runs `sync` after enabling (#89);
+`teleop_autostart.sh` (line 95 on) has no `sync` yet.
