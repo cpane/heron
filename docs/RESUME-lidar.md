@@ -1070,3 +1070,16 @@ wheels mounted wrongly (up to 3.3 rad/s), and its first drive had reset
 the Pi. Whether the LiDAR stopped spinning was not seen [unverified].
 Like the 2026-11-16 entry, the library gave no error: the scan only
 went stale.
+
+### From navigation, 2026-11-22: robot 1's LiDAR took 6 minutes to start, with a supply dip at boot
+
+[ours, two boots of robot 1; the cause unverified] With the cable
+reseated on 2026-11-19, robot 1 booted twice on 2026-11-22. At the
+first (19:34) the LiDAR started at once. At the second (20:55) all
+three of `heron_robot`'s start attempts failed (one "no answer to
+GET_INFO", two "cannot start scan mode 1"), the background retry failed
+four more times, and it started at 21:01:27, about six minutes later.
+A service restart at 21:08 started it at the first try. Both boots
+logged `Undervoltage detected!` for 2 to 4 s while the LiDAR was
+starting (`throttled=0x50000` after the first). Whether the dip, the
+cable, or neither causes the failed starts is not known.

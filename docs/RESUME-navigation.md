@@ -1,7 +1,10 @@
 # Navigation workstream — resume point
 
-Last updated 2026-11-21: mini robot 2 (rig `mini-2`, a Pi 3B+) is
-provisioned and runs `heron_robot` at boot, on `chore/mini-2`; Manual
+Last updated 2026-11-22: the Faire is over, attended with robot 2
+(Chris); its results are not recorded here yet. Robot 1's Arduino
+failed and a CH340 board replaced it (#90); it passes the wheel
+check and runs `heron_robot` at boot ("Picking up" 0.4). 2026-11-21:
+mini robot 2 (rig `mini-2`, a Pi 3B+) is provisioned and runs `heron_robot` at boot, on `chore/mini-2`; Manual
 drives, and strafing spun it because its mecanum wheels were in an O
 (being swapped). "Picking up" 0.4 has where it stands. 2026-11-19: the
 bench rig's LiDAR failed every start at boot (requests lost while its
@@ -393,6 +396,14 @@ navigation, so SwC to Manual always takes over.
       ways and turn, and the log read for speed against the table
       (`motion_points.py` if it differs); then Assisted at a box and
       Navigate round it. Watch the scan age and the OTOS restarts.
+      **Robot 1, 2026-11-22** [ours]: its Keyestudio Uno died (the
+      bridge enumerated, the ATmega never answered the bootloader). A
+      CH340 Uno-type board replaced it: the udev rules name it
+      `/dev/arduino` too (#90), the firmware flashed, `wheel_check.sh`
+      passed, Assisted came up, and `heron_robot` started at boot.
+      Not yet driven on the floor. One boot's LiDAR took six minutes to
+      start (LiDAR has an Inbox entry). Motor has two entries: the
+      board, and robot 1's empty teleop unit file.
    5. **The rubber floor, at the Faire** (no rubber beforehand,
       decided 2026-11-18): **`docs/navigation-faire-checklist.md`**, in
       its order: switch the floor (`scripts/set_surface.sh <user>@<pi>
